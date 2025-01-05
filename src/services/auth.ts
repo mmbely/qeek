@@ -53,3 +53,24 @@ const saveUserToDatabase = async (user: CustomUser) => {
     throw error;
   }
 };
+
+export const createUserRecord = async (user: any, companyId: string) => {
+  if (user) {
+    const userRef = ref(database, `users/${user.uid}`);
+    await set(userRef, {
+      email: user.email,
+      companyId: companyId,
+      // Add any other relevant user data here
+    });
+  }
+};
+
+export const signUp = async (email: string, password: string, companyId: string) => {
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  await createUserRecord(userCredential.user, companyId);
+};
+
+export const login = async (email: string, password: string, companyId: string) => {
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  await createUserRecord(userCredential.user, companyId);
+};

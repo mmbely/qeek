@@ -25,6 +25,7 @@ export default function SlackInterface() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [isDirectMessageModalOpen, setIsDirectMessageModalOpen] = useState(false);
+  const [lastMessageTimestamp, setLastMessageTimestamp] = useState<number | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -36,8 +37,16 @@ export default function SlackInterface() {
         if (Object.keys(fetchedUsers).length === 0) {
           console.log("No users found for company:", companyId);
         } else {
-          setUsers(fetchedUsers);
-          console.log("Users loaded in SlackInterface:", fetchedUsers);
+          // Create a new object with unique users
+          const uniqueUsers = Object.entries(fetchedUsers).reduce((acc, [key, value]) => {
+            if (!acc[key]) {
+              acc[key] = value;
+            }
+            return acc;
+          }, {} as {[key: string]: CustomUser});
+          
+          setUsers(uniqueUsers);
+          console.log("Users loaded in SlackInterface:", uniqueUsers);
         }
       } catch (error) {
         console.error("Failed to fetch users:", error);
@@ -46,12 +55,35 @@ export default function SlackInterface() {
 
     loadUsers();
 
-    const unsubscribe = fetchMessages(currentChannel, (newMessage) => {
-      setMessages(prevMessages => [...prevMessages, newMessage]);
-    });
+    // Clear messages and setup new listener
+    setMessages([]);
+    setLastMessageTimestamp(null);
+    
+    let unsubscribe: () => void;
+    const setupListener = async () => {
+      // Clean up previous listener if it exists
+      if (unsubscribe) {
+        unsubscribe();
+      }
+      
+      unsubscribe = fetchMessages(currentChannel, (newMessage) => {
+        setMessages(prevMessages => {
+          // Check if message already exists to prevent duplicates
+          if (!prevMessages.some(msg => msg.id === newMessage.id)) {
+            return [...prevMessages, newMessage];
+          }
+          return prevMessages;
+        });
+        setLastMessageTimestamp(newMessage.timestamp);
+      }, lastMessageTimestamp);
+    };
+
+    setupListener();
 
     return () => {
-      unsubscribe();
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, [currentChannel, user]);
 
@@ -96,6 +128,17 @@ export default function SlackInterface() {
     setIsDarkMode(!isDarkMode)
     document.documentElement.classList.toggle('dark')
   }
+
+  const handleFetchUsers = async () => {
+    try {
+      const companyId = (user as CustomUser).companyId || 'default';
+      const fetchedUsers = await fetchUsers(companyId);
+      console.log("Fetched users:", fetchedUsers);
+      setUsers(fetchedUsers);
+    } catch (error) {
+      console.error("Failed to fetch users:", error);
+    }
+  };
 
   return (
     <div className={`flex h-screen ${isDarkMode ? 'dark' : ''}`}>
@@ -177,7 +220,20 @@ export default function SlackInterface() {
             </button>
             <Hash className="h-6 w-6 mr-2 text-gray-500 dark:text-gray-400" />
             <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-              {currentChannel}
+              {currentChannel.startsWith('dm_') ? (
+                (() => {
+                  const userIds = currentChannel.replace('dm_', '').split('_');
+                  // If both IDs are the same, it's a self-message
+                  if (userIds[0] === userIds[1]) {
+                    return `Note to self`;
+                  }
+                  const otherUserId = userIds.find(id => id !== user?.uid);
+                  const otherUser = otherUserId ? users[otherUserId] : null;
+                  return otherUser?.displayName || `DM with ${otherUserId}`;
+                })()
+              ) : (
+                currentChannel
+              )}
             </h2>
           </div>
         </div>
@@ -189,8 +245,12 @@ export default function SlackInterface() {
               <div className="flex items-start">
                 <div className="flex-1">
                   <div className="flex items-center mb-1">
-                    <span className="font-bold text-gray-900 dark:text-white mr-2">{message.userId}</span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">{new Date(message.timestamp).toLocaleTimeString()}</span>
+                    <span className="font-bold text-gray-900 dark:text-white mr-2">
+                      {users[message.userId]?.displayName || message.userId}
+                    </span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                      {new Date(message.timestamp).toLocaleTimeString()}
+                    </span>
                   </div>
                   <p className="text-gray-800 dark:text-gray-200">{message.content}</p>
                 </div>
@@ -206,7 +266,18 @@ export default function SlackInterface() {
               type="text"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder={`Message #${currentChannel}`}
+              placeholder={`Message ${currentChannel.startsWith('dm_') ? (
+                (() => {
+                  const userIds = currentChannel.replace('dm_', '').split('_');
+                  // If both IDs are the same, it's a self-message
+                  if (userIds[0] === userIds[1]) {
+                    return 'yourself';
+                  }
+                  const otherUserId = userIds.find(id => id !== user?.uid);
+                  const otherUser = otherUserId ? users[otherUserId] : null;
+                  return otherUser?.displayName || `user ${otherUserId}`;
+                })()
+              ) : `#${currentChannel}`}`}
               className="flex-1 mr-2 p-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button type="submit" className="p-2 rounded-md bg-blue-500 text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
@@ -231,6 +302,7 @@ export default function SlackInterface() {
           </div>
         </div>
       )}
+
     </div>
   )
 }

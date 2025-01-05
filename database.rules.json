@@ -1,0 +1,40 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth != null",
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "channels": {
+      ".read": "auth != null",
+      "$channelId": {
+        "messages": {
+          ".read": "auth != null",
+          "$messageId": {
+            ".write": "newData.child('senderId').val() === auth.uid",
+            "reactions": {
+              ".read": "auth != null",
+              "$reaction": {
+                "$userId": {
+                  ".write": "$userId === auth.uid"
+                }
+              }
+            }
+          }
+        },
+        "typing": {
+          ".read": "auth != null",
+          "$userId": {
+            ".write": "$userId === auth.uid"
+          }
+        },
+        "members": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    }
+  }
+}

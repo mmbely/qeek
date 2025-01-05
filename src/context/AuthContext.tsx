@@ -7,7 +7,8 @@ import {
   GoogleAuthProvider,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signOut
+  signOut,
+  updateProfile
 } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import { registerUser, loginUser, logoutUser } from '../services/auth';
@@ -19,6 +20,7 @@ const googleProvider = new GoogleAuthProvider();
 
 interface AuthContextProps {
   user: CustomUser | null;
+  setUser: React.Dispatch<React.SetStateAction<CustomUser | null>>;
   login: (email: string, password: string) => Promise<UserCredential>;
   register: (email: string, password: string) => Promise<UserCredential>;
   logout: () => Promise<void>;
@@ -34,7 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       console.log("Auth state changed. User:", user);
-      setUser(user);
+      setUser(user as CustomUser);
       setLoading(false);
     });
     return unsubscribe;
@@ -61,8 +63,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const googleSignIn = async () => {
-    const userCredential = await signInWithPopup(auth, googleProvider);
-    await saveUserToDatabase(userCredential.user);
+    const provider = new GoogleAuthProvider();
+    const userCredential = await signInWithPopup(auth, provider);
+    await saveUserToDatabase(userCredential.user as CustomUser);
     return userCredential;
   };
 
@@ -77,7 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, googleSignIn }}>
+    <AuthContext.Provider value={{ user, setUser, login, register, logout, googleSignIn }}>
       {!loading && children}
     </AuthContext.Provider>
   );

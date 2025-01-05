@@ -1,6 +1,7 @@
 {
   "projects": {
-    "qeek": "qap-ai"
+    "qeek": "qap-ai",
+    "default": "qap-ai"
   },
   "targets": {},
   "etags": {}

@@ -9,8 +9,23 @@ const Register: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const { register, googleSignIn } = useAuth();
   const navigate = useNavigate();
+
+  const validatePassword = (password: string) => {
+    const minLength = 8;
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumbers = /\d/.test(password);
+    const hasNonalphas = /\W/.test(password);
+    if (password.length < minLength) {
+      return "Password must be at least 8 characters long.";
+    } else if (!(hasUpperCase && hasLowerCase && hasNumbers && hasNonalphas)) {
+      return "Password must contain an uppercase letter, lowercase letter, number, and special character.";
+    }
+    return "";
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,6 +36,11 @@ const Register: React.FC = () => {
     }
     if (password !== confirmPassword) {
       setError('Passwords do not match');
+      return;
+    }
+    const passwordValidationError = validatePassword(password);
+    if (passwordValidationError) {
+      setPasswordError(passwordValidationError);
       return;
     }
     try {

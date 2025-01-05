@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database";
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -13,10 +14,11 @@ const firebaseConfig = {
 };
 
 // Add this check to prevent initialization with undefined values
-if (!firebaseConfig.apiKey) {
-  throw new Error('Firebase configuration is missing. Check your .env file.');
+if (!process.env.REACT_APP_FIREBASE_API_KEY) {
+  throw new Error('Firebase API key is missing. Check your .env file.');
 }
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const database = getDatabase(app);
+export const functions = getFunctions(app);
