@@ -8,3 +8,8 @@ opt-out of single project mode add/set the singleProjectMode: false property in
 the firebase.json emulators config. 
 16:59:30.531 [NamespaceSystem-akka.actor.default-dispatcher-9] INFO com.firebase.core.namespace.NamespaceActor - qap-ai successfully activated FBKV (SurveyIdle(0)) wait: 3ms, init: 0ms
 22:13:22.056 [NamespaceSystem-blocking-namespace-operation-dispatcher-25] INFO com.firebase.core.namespace.StateManager - Namespace qap-ai-default-rtdb status Active to Active
+08:07:23.066 [Thread-0] INFO com.firebase.server.forge.App$ - Attempting graceful shutdown.
+08:07:23.377 [NamespaceSystem-akka.actor.default-dispatcher-33] INFO com.firebase.core.namespace.Terminator$Terminator - 2 actors left to terminate: qap-ai, qap-ai-default-rtdb
+08:07:23.390 [NamespaceSystem-akka.actor.default-dispatcher-33] INFO com.firebase.core.namespace.NamespaceActor - stopped namespace actor for qap-ai
+08:07:23.390 [NamespaceSystem-akka.actor.default-dispatcher-30] INFO com.firebase.core.namespace.NamespaceActor - stopped namespace actor for qap-ai-default-rtdb
+08:07:23.413 [Thread-0] INFO com.firebase.server.forge.App$ - Graceful shutdown complete.

@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import SlackInterface from './components/SlackInterface';
+import SlackInterfaceSwitcher from './components/SlackInterfaceSwitcher';
 import './App.css';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './services/firebase'; // Updated import path
@@ -56,7 +56,7 @@ function App() {
           } />
           <Route path="/" element={
             <ProtectedRoute>
-              <SlackInterface />
+              <SlackInterfaceSwitcher />
             </ProtectedRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
