@@ -282,8 +282,38 @@ export default function SlackInterface() {
                       </span>
                     </div>
                     <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3">
-                      <p className="text-sm text-gray-900 dark:text-gray-100 break-words text-left">
-                        {message.content}
+                      <p className="text-sm text-gray-900 dark:text-gray-100 break-words text-left whitespace-pre-wrap">
+                        {message.content.split('\n').map((line, i) => {
+                          // Handle code blocks
+                          if (line.startsWith('```') && line.endsWith('```') && line.length > 3) {
+                            return (
+                              <pre key={i} className="bg-gray-200 dark:bg-gray-700 p-2 rounded my-1 overflow-x-auto">
+                                <code>{line.slice(3, -3)}</code>
+                              </pre>
+                            );
+                          }
+                          // Handle inline code
+                          const parts = line.split('`');
+                          return (
+                            <span key={i}>
+                              {parts.map((part, j) => 
+                                j % 2 === 1 ? (
+                                  <code key={j} className="bg-gray-200 dark:bg-gray-700 px-1 rounded">
+                                    {part}
+                                  </code>
+                                ) : (
+                                  <span key={j}>
+                                    {part
+                                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                                      .replace(/~~(.*?)~~/g, '<del>$1</del>')}
+                                  </span>
+                                )
+                              )}
+                              <br />
+                            </span>
+                          );
+                        })}
                       </p>
                     </div>
                   </div>
