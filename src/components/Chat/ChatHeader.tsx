@@ -1,17 +1,35 @@
 import React from 'react';
+import { theme, commonStyles, typography, layout, animations } from '../../styles';
 
 interface ChatHeaderProps {
   title: string;
   subtitle: string;
+  className?: string;
+  actions?: React.ReactNode;
 }
 
-export default function ChatHeader({ title, subtitle }: ChatHeaderProps) {
+export default function ChatHeader({ 
+  title, 
+  subtitle, 
+  className = '',
+  actions
+}: ChatHeaderProps) {
   return (
-    <div className="border-b border-gray-200 dark:border-gray-700 p-4">
-      <div className="flex flex-col">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
+    <header className={`
+      ${commonStyles.header.wrapper}
+      ${className}
+    `}>
+      <div className={commonStyles.header.container}>
+        <div className={commonStyles.header.titleWrapper}>
+          <h2 className={commonStyles.header.title}>{title}</h2>
+          <p className={commonStyles.header.subtitle}>{subtitle}</p>
+        </div>
+        {actions && (
+          <div className={commonStyles.header.actions}>
+            {actions}
+          </div>
+        )}
       </div>
-    </div>
+    </header>
   );
 }

@@ -9,6 +9,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import TicketModal from './TicketModal';
 import { Plus, AlertCircle } from 'lucide-react';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
+import ChatHeader from '../Chat/ChatHeader';
 
 type BoardStatus = Exclude<Ticket['status'], 'BACKLOG'>;
 
@@ -143,21 +144,23 @@ export function TicketBoard() {
   };
 
   return (
-    <div className={`${layout.container.fluid} py-6`}>
-      {/* Header */}
-      <div className={`${layout.flex.between} mb-8`}>
-        <h1 className={typography.h1}>Development Board</h1>
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className={`
-            ${commonStyles.button.base} 
-            ${commonStyles.button.primary}
-          `}
-        >
-          <Plus className="w-4 h-4" />
-          Create Ticket
-        </button>
-      </div>
+    <div className={`${layout.container.fluid} flex flex-col h-full`}>
+      <ChatHeader
+        title="Development Board"
+        subtitle="Manage your team's tickets"
+        actions={
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className={`
+              ${commonStyles.button.base} 
+              ${commonStyles.button.primary}
+            `}
+          >
+            <Plus className="w-4 h-4" />
+            Create Ticket
+          </button>
+        }
+      />
 
       {/* Board */}
       <DragDropContext onDragEnd={onDragEnd}>

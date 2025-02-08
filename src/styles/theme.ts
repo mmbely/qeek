@@ -112,12 +112,46 @@ export const commonStyles = {
     border border-gray-200 dark:border-gray-700
     rounded-xl shadow-lg
   `,
-  sidebar: `
-    bg-[#1e2132] text-gray-100
-    border-r border-gray-700
-  `,
-  header: `
-    bg-white dark:bg-[#1e2132]
-    border-b border-gray-200 dark:border-gray-700
-  `,
+  sidebar: {
+    nav: {
+      item: `
+        flex items-center px-4 py-2 rounded-xl
+        transition-colors duration-200
+        font-medium
+      `,
+      active: `
+        bg-[#2b2f44] text-gray-100
+      `,
+      inactive: `
+        text-gray-400 hover:text-gray-100 hover:bg-[#2b2f44]
+      `,
+    },
+  },
+  header: {
+    wrapper: `
+      sticky top-0 z-10
+      bg-white dark:bg-[#1e2132]
+      border-b border-gray-200 dark:border-gray-700
+      backdrop-blur-sm bg-white/80 dark:bg-[#1e2132]/80
+    `,
+    container: `
+      flex items-center justify-between
+      px-6 py-4
+    `,
+    titleWrapper: `
+      flex flex-col
+    `,
+    title: `
+      text-lg font-semibold
+      text-gray-900 dark:text-gray-100
+    `,
+    subtitle: `
+      text-sm
+      text-gray-500 dark:text-gray-400
+      mt-0.5
+    `,
+    actions: `
+      flex items-center gap-3
+    `
+  },
 };

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Send, Smile } from 'lucide-react';
 import EmojiPicker from './EmojiPicker';
+import { theme, commonStyles, typography, layout, animations } from '../../styles';
 
 interface MessageInputProps {
   message: string;
   setMessage: (message: string) => void;
   handleSendMessage: (e: React.FormEvent) => void;
+  className?: string;
 }
 
 // Import or define the EmojiData interface
@@ -19,7 +21,12 @@ interface EmojiData {
   emoticon?: string;
 }
 
-export default function MessageInput({ message, setMessage, handleSendMessage }: MessageInputProps) {
+export default function MessageInput({ 
+  message, 
+  setMessage, 
+  handleSendMessage,
+  className = ''
+}: MessageInputProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const handleEmojiSelect = (emoji: EmojiData) => {
@@ -29,41 +36,83 @@ export default function MessageInput({ message, setMessage, handleSendMessage }:
   };
 
   return (
-    <div className="border-t border-gray-200 dark:border-gray-700 p-4">
+    <div className={className}>
       <div className="relative">
+        {/* Emoji Picker */}
         {showEmojiPicker && (
-          <EmojiPicker 
-            onEmojiSelect={handleEmojiSelect}
-            theme="dark"
-          />
+          <div className={`
+            absolute bottom-full right-0 mb-2
+            ${animations.transition.normal}
+          `}>
+            <EmojiPicker 
+              onEmojiSelect={handleEmojiSelect}
+              theme="dark"
+            />
+          </div>
         )}
-        <form onSubmit={handleSendMessage} className="flex space-x-2">
-          <div className="relative flex-1 flex items-center">
+
+        {/* Message Form */}
+        <form 
+          onSubmit={handleSendMessage}
+          className={layout.flex.between}
+        >
+          <div className={`
+            relative flex-1 mr-3
+            ${animations.transition.normal}
+          `}>
+            {/* Emoji Button */}
             <button
               type="button"
-              onClick={() => {
-                console.log('Toggling emoji picker');
-                setShowEmojiPicker(!showEmojiPicker);
-              }}
-              className="absolute left-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className={`
+                ${commonStyles.button.base}
+                ${commonStyles.button.secondary}
+                !p-2 absolute left-2 top-1/2 -translate-y-1/2
+                rounded-full
+              `}
             >
-              <Smile className="h-5 w-5" />
+              <Smile className={`
+                w-5 h-5
+                ${showEmojiPicker 
+                  ? 'text-blue-500 dark:text-blue-400' 
+                  : 'text-gray-400 dark:text-gray-500'
+                }
+              `} />
             </button>
-            
+
+            {/* Message Input */}
             <input
               type="text"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Type a message..."
-              className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 pl-10 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`
+                ${commonStyles.input}
+                pl-12 pr-4 py-3
+                text-base
+              `}
             />
           </div>
-          
+
+          {/* Send Button */}
           <button
             type="submit"
-            className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            disabled={!message.trim()}
+            className={`
+              ${commonStyles.button.base}
+              ${commonStyles.button.primary}
+              !p-3
+              disabled:opacity-50 disabled:cursor-not-allowed
+              ${animations.transition.normal}
+            `}
           >
-            <Send className="h-5 w-5" />
+            <Send className={`
+              w-5 h-5
+              ${message.trim() 
+                ? 'text-white' 
+                : 'text-gray-300 dark:text-gray-600'
+              }
+            `} />
           </button>
         </form>
       </div>

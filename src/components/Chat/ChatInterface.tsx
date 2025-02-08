@@ -7,6 +7,7 @@ import { Message } from '../../types/message';
 import ChatHeader from './ChatHeader';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
+import { theme, commonStyles, typography, layout, animations } from '../../styles';
 
 export default function ChatInterface() {
   const { userId } = useParams();
@@ -100,23 +101,41 @@ export default function ChatInterface() {
   const subtitle = userId ? (otherUser?.email || 'Loading...') : 'Public channel';
 
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div className={`
+      ${commonStyles.card}
+      flex-1 flex flex-col h-full
+      overflow-hidden
+    `}>
       <ChatHeader 
         title={userId ? `Chat with ${otherUserName}` : 'General Chat'}
         subtitle={subtitle}
+        className={`
+          ${layout.flex.between}
+          p-4 border-b border-gray-200 dark:border-gray-700
+        `}
       />
-      <div className="flex-1 overflow-y-auto">
+      
+      <div className={`
+        flex-1 overflow-y-auto
+        bg-gray-50 dark:bg-gray-800/50
+      `}>
         <MessageList 
           messages={messages}
           isLoading={isLoading}
           currentUser={user}
           users={users}
+          className="p-4 space-y-4"
         />
       </div>
+
       <MessageInput 
         message={message}
         setMessage={setMessage}
         handleSendMessage={handleSendMessage}
+        className={`
+          ${commonStyles.card}
+          p-4 border-t border-gray-200 dark:border-gray-700
+        `}
       />
     </div>
   );

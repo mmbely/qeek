@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Plus, AlertCircle } from 'lucide-react';
 import TicketModal from './TicketModal';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
+import ChatHeader from '../Chat/ChatHeader';
 
 interface TicketListProps {
   showHeader?: boolean;
@@ -50,11 +51,11 @@ export function TicketList({ showHeader = true }: TicketListProps) {
   }, [user]);
 
   return (
-    <div className={`${layout.container.fluid} py-6`}>
-      {/* Header */}
-      {showHeader && (
-        <div className={`${layout.flex.between} mb-8`}>
-          <h1 className={typography.h1}>Backlog</h1>
+    <div className={`${layout.container.fluid} flex flex-col h-full`}>
+      <ChatHeader
+        title="Backlog"
+        subtitle="Manage your upcoming tickets"
+        actions={
           <button
             onClick={() => setIsCreateModalOpen(true)}
             className={`
@@ -65,8 +66,8 @@ export function TicketList({ showHeader = true }: TicketListProps) {
             <Plus className="w-4 h-4" />
             Create Ticket
           </button>
-        </div>
-      )}
+        }
+      />
 
       {/* Tickets List */}
       <div className="space-y-4">
