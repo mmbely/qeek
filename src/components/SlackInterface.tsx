@@ -29,6 +29,9 @@ export default function SlackInterface() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [isDirectMessageModalOpen, setIsDirectMessageModalOpen] = useState(false);
+  const [isCreateChannelModalOpen, setIsCreateChannelModalOpen] = useState(false);
+  const [newChannelName, setNewChannelName] = useState('');
+  const [channelError, setChannelError] = useState('');
   const [lastMessageTimestamp, setLastMessageTimestamp] = useState<number | null>(null);
 
   useEffect(() => {
@@ -163,12 +166,20 @@ export default function SlackInterface() {
           <div className="p-4">
             <h2 className="text-lg font-semibold mb-2 flex items-center justify-between text-gray-100">
               Channels
-              <button 
-                className="text-gray-400 hover:text-white hover:bg-gray-700 p-1 rounded transition-colors"
-                onClick={() => setIsDirectMessageModalOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-              </button>
+              <div className="flex gap-1">
+                <button 
+                  className="text-gray-400 hover:text-white hover:bg-gray-700 p-1 rounded transition-colors"
+                  onClick={() => setIsCreateChannelModalOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+                <button 
+                  className="text-gray-400 hover:text-white hover:bg-gray-700 p-1 rounded transition-colors"
+                  onClick={() => setIsDirectMessageModalOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
             </h2>
             <ul>
               {channels.map((channel) => (
