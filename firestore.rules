@@ -1,7 +1,13 @@
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /tickets/{ticketId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Add a match for any other collections you might need
     match /{document=**} {
-      allow read, write: if false;  // Deny all access by default
+      allow read, write: if request.auth != null;
     }
   }
 }

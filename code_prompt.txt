@@ -159,9 +159,12 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import SlackInterface from './components/SlackInterface';
+import { TicketForm, TicketEdit } from './components/Tickets';
+import TicketList from './components/Tickets/TicketList';
+import TicketBoard from './components/Tickets/TicketBoard';
 import './App.css';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './services/firebase'; // Updated import path
+import { auth } from './services/firebase';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
@@ -213,7 +216,12 @@ function App() {
             <ProtectedRoute>
               <SlackInterface />
             </ProtectedRoute>
-          } />
+          }>
+            <Route path="tickets" element={<TicketList />} />
+            <Route path="tickets/board" element={<TicketBoard />} />
+            <Route path="tickets/new" element={<TicketForm />} />
+            <Route path="tickets/:id" element={<TicketEdit />} />
+          </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
@@ -284,10 +292,15 @@ testFetchUsers();
 
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Outlet } from 'react-router-dom'
 import { fetchUsers, fetchMessages, sendMessage } from '../services/chat'
-import { Hash, Plus, Send, Menu, Sun, Moon } from "lucide-react"
+import { Hash, Plus, Send, Menu, Sun, Moon, Smile, Ticket } from "lucide-react"
+import { ScrollArea } from "./ui/scroll-area"
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
+import data from '@emoji-mart/data'
+import Picker from '@emoji-mart/react'
 import { CustomUser } from '../types/user'
+import { Link } from 'react-router-dom'
 
 interface Message {
   id: string;
@@ -309,6 +322,9 @@ export default function SlackInterface() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [isDirectMessageModalOpen, setIsDirectMessageModalOpen] = useState(false);
+  const [isCreateChannelModalOpen, setIsCreateChannelModalOpen] = useState(false);
+  const [newChannelName, setNewChannelName] = useState('');
+  const [channelError, setChannelError] = useState('');
   const [lastMessageTimestamp, setLastMessageTimestamp] = useState<number | null>(null);
 
   useEffect(() => {
@@ -321,26 +337,55 @@ export default function SlackInterface() {
         if (Object.keys(fetchedUsers).length === 0) {
           console.log("No users found for company:", companyId);
         } else {
-          setUsers(fetchedUsers);
-          console.log("Users loaded in SlackInterface:", fetchedUsers);
+          // Create a new object with unique users
+          const uniqueUsers = Object.entries(fetchedUsers).reduce((acc, [key, value]) => {
+            if (!acc[key]) {
+              acc[key] = value;
+            }
+            return acc;
+          }, {} as {[key: string]: CustomUser});
+          
+          setUsers(uniqueUsers);
+          console.log("Users loaded in SlackInterface:", uniqueUsers);
         }
       } catch (error) {
         console.error("Failed to fetch users:", error);
-        // You might want to set an error state here and display it to the user
       }
     };
 
     loadUsers();
 
-    const unsubscribe = fetchMessages(currentChannel, (newMessage) => {
-      setMessages(prevMessages => [...prevMessages, newMessage]);
-      setLastMessageTimestamp(newMessage.timestamp);
-    }, lastMessageTimestamp);
+    // Clear messages and setup new listener
+    setMessages([]);
+    setLastMessageTimestamp(null);
+    
+    let unsubscribe: () => void;
+    const setupListener = async () => {
+      // Clean up previous listener if it exists
+      if (unsubscribe) {
+        unsubscribe();
+      }
+      
+      unsubscribe = fetchMessages(currentChannel, (newMessage) => {
+        setMessages(prevMessages => {
+          // Check if message already exists to prevent duplicates
+          if (!prevMessages.some(msg => msg.id === newMessage.id)) {
+            return [...prevMessages, newMessage];
+          }
+          return prevMessages;
+        });
+        setLastMessageTimestamp(newMessage.timestamp);
+      }, lastMessageTimestamp);
+    };
+
+    setupListener();
 
     return () => {
-      unsubscribe();
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
-  }, [currentChannel, user, lastMessageTimestamp]);
+  }, [currentChannel, user]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -398,31 +443,49 @@ export default function SlackInterface() {
   return (
     <div className={`flex h-screen ${isDarkMode ? 'dark' : ''}`}>
       {/* Sidebar */}
-      <div className={`w-64 bg-gray-900 text-gray-300 flex-col ${isMobileMenuOpen ? 'flex' : 'hidden'} md:flex`}>
+      <div className={`w-64 bg-gray-800 dark:bg-gray-900 text-gray-300 flex-col ${isMobileMenuOpen ? 'flex' : 'hidden'} md:flex`}>
         <div className="p-4 border-b border-gray-700 flex items-center justify-between">
           <div className="flex items-center">
             <img src="/qeek-logo.png" alt="QEK Logo" className="h-8 w-auto mr-2" />
           </div>
-          <button onClick={toggleDarkMode} className="text-gray-300 hover:text-white">
+          <button 
+            onClick={toggleDarkMode} 
+            className="text-gray-300 hover:text-white p-2 rounded-full hover:bg-gray-700 transition-colors"
+          >
             {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </button>
         </div>
-        <div className="overflow-y-auto flex-grow">
+        <ScrollArea className="flex-grow">
           <div className="p-4">
             <h2 className="text-lg font-semibold mb-2 flex items-center justify-between text-gray-100">
               Channels
-              <button className="text-gray-400 hover:text-white hover:bg-gray-700 p-1 rounded">
-                <Plus className="h-4 w-4" />
-              </button>
+              <div className="flex gap-1">
+                <button 
+                  className="text-gray-400 hover:text-white hover:bg-gray-700 p-1 rounded transition-colors"
+                  onClick={() => setIsCreateChannelModalOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+                <button 
+                  className="text-gray-400 hover:text-white hover:bg-gray-700 p-1 rounded transition-colors"
+                  onClick={() => setIsDirectMessageModalOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
             </h2>
             <ul>
               {channels.map((channel) => (
                 <li key={channel} className="mb-1">
                   <button 
-                    className={`w-full text-left px-2 py-1 rounded ${currentChannel === channel ? 'bg-gray-700 text-white' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg flex items-center transition-all ${
+                      currentChannel === channel 
+                        ? 'bg-gray-700 text-white' 
+                        : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                    }`}
                     onClick={() => setCurrentChannel(channel)}
                   >
-                    <Hash className="inline h-4 w-4 mr-2" />
+                    <Hash className="h-4 w-4 mr-2" />
                     {channel}
                   </button>
                 </li>
@@ -431,7 +494,7 @@ export default function SlackInterface() {
             <h2 className="text-lg font-semibold mt-6 mb-2 flex items-center justify-between text-gray-100">
               Direct Messages
               <button 
-                className="text-gray-400 hover:text-white hover:bg-gray-700 p-1 rounded"
+                className="text-gray-400 hover:text-white hover:bg-gray-700 p-1 rounded transition-colors"
                 onClick={() => setIsDirectMessageModalOpen(true)}
               >
                 <Plus className="h-4 w-4" />
@@ -441,25 +504,45 @@ export default function SlackInterface() {
               {Object.entries(users).map(([userId, userData]) => (
                 <li key={userId} className="mb-1">
                   <button 
-                    className="w-full text-left px-2 py-1 rounded text-gray-300 hover:text-white hover:bg-gray-700"
+                    className="w-full text-left px-3 py-2 rounded-lg flex items-center hover:bg-gray-700 transition-colors group"
                     onClick={() => handleStartDirectMessage(userId)}
                   >
-                    <div className="flex items-center">
+                    <div className="relative mr-2">
                       <img 
                         src={userData.photoURL || '/placeholder.svg?height=40&width=40'} 
                         alt={userData.displayName || 'User'} 
-                        className="w-6 h-6 rounded-full mr-2" 
+                        className="w-6 h-6 rounded-full"
                       />
-                      {userData.displayName}
+                      <div className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border border-gray-800"></div>
                     </div>
+                    <span className="text-gray-300 group-hover:text-white transition-colors">
+                      {userData.displayName}
+                    </span>
                   </button>
                 </li>
               ))}
             </ul>
+            <h2 className="text-lg font-semibold mb-2 flex items-center justify-between text-gray-100">
+              Tools
+            </h2>
+            <ul>
+              <li className="mb-1">
+                <Link
+                  to="/tickets"
+                  className="w-full text-left px-3 py-2 rounded-lg flex items-center transition-all text-gray-300 hover:text-white hover:bg-gray-700"
+                >
+                  <Ticket className="h-4 w-4 mr-2" />
+                  Tickets
+                </Link>
+              </li>
+            </ul>
           </div>
-        </div>  
+        </ScrollArea>
         <div className="p-4 border-t border-gray-700">
-          <button onClick={handleLogout} className="w-full text-left px-2 py-1 rounded text-red-500 hover:text-red-400 hover:bg-gray-700">
+          <button 
+            onClick={handleLogout} 
+            className="w-full text-left px-3 py-2 rounded-lg text-red-500 hover:text-red-400 hover:bg-gray-700 transition-colors"
+          >
             Sign out
           </button>
         </div>
@@ -467,51 +550,7 @@ export default function SlackInterface() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col bg-white dark:bg-gray-800">
-        {/* Channel Header */}
-        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
-          <div className="flex items-center">
-            <button className="mr-2 md:hidden" onClick={toggleMobileMenu}>
-              <Menu className="h-6 w-6" />
-            </button>
-            <Hash className="h-6 w-6 mr-2 text-gray-500 dark:text-gray-400" />
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-              {currentChannel}
-            </h2>
-          </div>
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {messages.map((message) => (
-            <div key={message.id} className="mb-4">
-              <div className="flex items-start">
-                <div className="flex-1">
-                  <div className="flex items-center mb-1">
-                    <span className="font-bold text-gray-900 dark:text-white mr-2">{message.userId}</span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">{new Date(message.timestamp).toLocaleTimeString()}</span>
-                  </div>
-                  <p className="text-gray-800 dark:text-gray-200">{message.content}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Message Input */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-          <form onSubmit={handleSendMessage} className="flex items-center">
-            <input
-              type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder={`Message #${currentChannel}`}
-              className="flex-1 mr-2 p-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button type="submit" className="p-2 rounded-md bg-blue-500 text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-              <Send className="h-5 w-5" />
-            </button>
-          </form>
-        </div>
+        <Outlet />
       </div>
 
       {/* Direct Message Modal */}
@@ -530,16 +569,676 @@ export default function SlackInterface() {
         </div>
       )}
 
-      {/* Add this button somewhere in your component's JSX */}
-      <button 
-        onClick={handleFetchUsers}
-        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-      >
-        Fetch Users
-      </button>
     </div>
   )
 }
+
+
+--- File: ./src/components/SlackInterfaceV2.tsx ---
+
+import React, { useState, useEffect, useRef, ChangeEvent } from 'react'
+
+interface User {
+  id: string;
+  displayName: string;
+  photoURL: string;
+  email: string;
+  companyId: string;
+  online?: boolean;
+}
+
+interface Message {
+  id: number;
+  user: string;
+  content: string;
+  time: string;
+  avatar: string;
+  reactions: string[];
+  replies: { user: string; content: string; time: string }[];
+  isPinned: boolean;
+  mentions: string[];
+  files: { name: string; url: string }[];
+  isRead: boolean;
+}
+
+interface Reply {
+  user: string;
+  content: string;
+  time: string;
+}
+
+interface File {
+  name: string;
+  url: string;
+}
+import { Button } from "./ui/button"
+import { Input } from "./ui/input"
+import { ScrollArea } from "./ui/scroll-area"
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip"
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu"
+import { Command, CommandInput, CommandItem, CommandList } from "./ui/command"
+import { Textarea } from "./ui/textarea"
+import { ChevronDown, Hash, Plus, Send, Users, Menu, Bell, Settings, Sun, Moon, Smile, Paperclip, Edit2, Pin, AtSign, Search } from "lucide-react"
+
+export default function SlackInterface() {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [currentChannel, setCurrentChannel] = useState('general')
+  const [message, setMessage] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [isDarkMode, setIsDarkMode] = useState(false)
+  const [isTyping, setIsTyping] = useState(false)
+  const [isJumpToOpen, setIsJumpToOpen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const channels = ['general', 'random', 'announcements', 'project-a', 'project-b']
+  const [users, setUsers] = useState<{[key: string]: User}>({})
+  const [loadingUsers, setLoadingUsers] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch('/api/users')
+        if (!response.ok) {
+          throw new Error('Failed to fetch users')
+        }
+        const data = await response.json()
+        console.log('Fetched users:', data) // Debugging
+        // Convert array to object with user IDs as keys
+        const usersMap = data.reduce((acc: {[key: string]: User}, user: User) => {
+          acc[user.id] = user
+          return acc
+        }, {})
+        console.log('Users map:', usersMap) // Debugging
+        setUsers(usersMap)
+      } catch (err: any) {
+        setError(err?.message || 'Failed to fetch users')
+      } finally {
+        setLoadingUsers(false)
+      }
+    }
+
+    fetchUsers()
+  }, [])
+
+  const allUsers = ['You', ...Object.values(users).map(user => user.displayName)]
+  
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: 1,
+      user: 'Alice Smith',
+      content: 'Hey team, how\'s the project coming along?',
+      time: '10:30 AM',
+      avatar: '/placeholder.svg?height=40&width=40',
+      reactions: [] as string[],
+      replies: [] as Reply[],
+      isPinned: false,
+      mentions: [] as string[],
+      files: [] as File[],
+      isRead: true
+    },
+    {
+      id: 2,
+      user: 'Bob Johnson',
+      content: 'We\'re making good progress. Just finished the first milestone.',
+      time: '10:32 AM',
+      avatar: '/placeholder.svg?height=40&width=40',
+      reactions: [] as string[],
+      replies: [] as Reply[],
+      isPinned: false,
+      mentions: [] as string[],
+      files: [] as File[],
+      isRead: true
+    },
+    {
+      id: 3,
+      user: 'Charlie Brown',
+      content: 'Great job everyone! Let\'s keep up the momentum.',
+      time: '10:35 AM',
+      avatar: '/placeholder.svg?height=40&width=40',
+      reactions: [] as string[],
+      replies: [] as Reply[],
+      isPinned: false,
+      mentions: [] as string[],
+      files: [] as File[],
+      isRead: true
+    },
+    {
+      id: 4,
+      user: 'Diana Prince',
+      content: 'I\'ve uploaded the latest designs to the shared folder.',
+      time: '10:40 AM',
+      avatar: '/placeholder.svg?height=40&width=40',
+      reactions: [] as string[],
+      replies: [] as Reply[],
+      isPinned: false,
+      mentions: [] as string[],
+      files: [{ name: 'design.pdf', url: '#' }] as File[],
+      isRead: true
+    },
+    {
+      id: 5,
+      user: 'Alice Smith',
+      content: 'Awesome, I\'ll take a look at them right away.',
+      time: '10:42 AM',
+      avatar: '/placeholder.svg?height=40&width=40',
+      reactions: [] as string[],
+      replies: [] as Reply[],
+      isPinned: false,
+      mentions: [] as string[],
+      files: [] as File[],
+      isRead: false
+    }
+  ])
+
+  const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen)
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (message.trim()) {
+      const newMessage = {
+        id: messages.length + 1,
+        user: 'You',
+        content: message,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        avatar: '/placeholder.svg?height=40&width=40',
+        reactions: [],
+        replies: [],
+        isPinned: false,
+        mentions: message.match(/@(\w+)/g) || [],
+        files: [],
+        isRead: true,
+      }
+      setMessages([...messages, newMessage])
+      setMessage('')
+      setIsTyping(false)
+    }
+  }
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSearching(true)
+    console.log(`Searching for: ${searchQuery}`)
+    // Implement actual search logic here
+  }
+
+  const filteredMessages = isSearching
+    ? messages.filter(msg => 
+        msg.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        msg.user.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : messages
+
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode)
+    document.documentElement.classList.toggle('dark')
+  }
+
+  const addReaction = (messageId: number, emoji: string) => {
+    setMessages(messages.map(msg => 
+      msg.id === messageId 
+        ? { ...msg, reactions: [...msg.reactions, emoji] }
+        : msg
+    ))
+  }
+
+  const addReply = (messageId: number, reply: string) => {
+    setMessages(messages.map(msg => 
+      msg.id === messageId 
+        ? { ...msg, replies: [...msg.replies, { user: 'You', content: reply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }] }
+        : msg
+    ))
+  }
+
+  const editMessage = (messageId: number, newContent: string) => {
+    setMessages(messages.map(msg =>
+      msg.id === messageId
+        ? { ...msg, content: newContent }
+        : msg
+    ))
+  }
+
+  const togglePinMessage = (messageId: number) => {
+    setMessages(messages.map(msg =>
+      msg.id === messageId
+        ? { ...msg, isPinned: !msg.isPinned }
+        : msg
+    ))
+  }
+
+  const handleFileUpload = (messageId: number | null, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      if (messageId) {
+        // Attach file to existing message
+        setMessages(messages.map(msg =>
+          msg.id === messageId
+            ? { ...msg, files: [...msg.files, { name: file.name, url: URL.createObjectURL(file) }] }
+            : msg
+        ))
+      } else {
+        // Create new message with file
+        const newMessage = {
+          id: messages.length + 1,
+          user: 'You',
+          content: `Uploaded file: ${file.name}`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          avatar: '/placeholder.svg?height=40&width=40',
+          reactions: [],
+          replies: [],
+          isPinned: false,
+          mentions: [],
+          files: [{ name: file.name, url: URL.createObjectURL(file) }],
+          isRead: true,
+        }
+        setMessages([...messages, newMessage])
+      }
+    }
+  }
+
+  useEffect(() => {
+    const typingTimer = setTimeout(() => {
+      setIsTyping(message.length > 0)
+    }, 1000)
+
+    return () => clearTimeout(typingTimer)
+  }, [message])
+
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setIsJumpToOpen(true)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [])
+
+  const formatMessage = (content: string) => {
+    return content
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/`(.*?)`/g, '<code>$1</code>')
+      .replace(/@(\w+)/g, '<span class="mention">@$1</span>')
+  }
+
+  return (
+    <div className={`flex h-screen ${isDarkMode ? 'dark' : ''}`}>
+      {/* Sidebar */}
+      <div className={`w-64 bg-gray-800 dark:bg-gray-900 text-gray-300 flex-col ${isMobileMenuOpen ? 'flex' : 'hidden'} md:flex`}>
+        <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+          <h1 className="text-xl font-bold text-white">Acme Inc</h1>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-gray-300 hover:text-white">
+                <Settings className="h-5 w-5" />
+                <span className="sr-only">Settings</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56">
+              <div className="space-y-1">
+                <Button variant="ghost" className="w-full justify-start">Profile</Button>
+                <Button variant="ghost" className="w-full justify-start">Preferences</Button>
+                <Button variant="ghost" className="w-full justify-start" onClick={toggleDarkMode}>
+                  {isDarkMode ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+                  {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+                </Button>
+                <Button variant="ghost" className="w-full justify-start text-red-500 hover:text-red-600">Sign out</Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+        <ScrollArea className="flex-grow">
+          <div className="p-4">
+            <h2 className="text-lg font-semibold mb-2 flex items-center justify-between text-gray-100">
+              Channels
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-4 w-4 text-gray-400 hover:text-white hover:bg-gray-700">
+                    <Plus className="h-4 w-4" />
+                    <span className="sr-only">Add Channel</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create a new channel</DialogTitle>
+                  </DialogHeader>
+                  <Input placeholder="Enter channel name" />
+                  <Button>Create Channel</Button>
+                </DialogContent>
+              </Dialog>
+            </h2>
+            <ul>
+              {channels.map((channel) => (
+                <li key={channel} className="mb-1">
+                  <Button 
+                    variant="ghost" 
+                    className={`w-full justify-start hover:bg-gray-700 ${currentChannel === channel ? 'bg-gray-700 text-white' : 'text-gray-300 hover:text-white'}`}
+                    onClick={() => setCurrentChannel(channel)}
+                  >
+                    <Hash className="h-4 w-4 mr-2" />
+                    {channel}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <h2 className="text-lg font-semibold mt-6 mb-2 flex items-center justify-between text-gray-100">
+              Direct Messages
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-4 w-4 text-gray-400 hover:text-white hover:bg-gray-700">
+                    <Plus className="h-4 w-4" />
+                    <span className="sr-only">Add Direct Message</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Start a new conversation</DialogTitle>
+                  </DialogHeader>
+                  <Input placeholder="Enter username" />
+                  <Button>Start Conversation</Button>
+                </DialogContent>
+              </Dialog>
+            </h2>
+            <ul>
+              {Object.values(users).map((user: User) => (
+                <li key={user.id} className="mb-1">
+                  <Button variant="ghost" className="w-full justify-start text-gray-300 hover:text-white hover:bg-gray-700">
+                    <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
+                    {user.displayName}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </ScrollArea>
+      </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col bg-white dark:bg-gray-800">
+        {/* Channel Header */}
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
+          <div className="flex items-center">
+            <Button variant="ghost" size="icon" className="mr-2 md:hidden" onClick={toggleMobileMenu}>
+              <Menu className="h-6 w-6" />
+              <span className="sr-only">Toggle menu</span>
+            </Button>
+            <Hash className="h-6 w-6 mr-2 text-gray-500 dark:text-gray-400" />
+            <h2 className="text-xl font-semibold text-gray-800 dark:text-white">{currentChannel}</h2>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button variant="outline" size="sm" onClick={() => setIsJumpToOpen(true)}>
+              Jump to... (Ctrl+K)
+            </Button>
+            <form onSubmit={handleSearch} className="relative">
+              <Input
+                type="search"
+                placeholder="Search messages"
+                className="pr-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <Button type="submit" variant="ghost" size="sm" className="absolute right-0 top-0 h-full">
+                <Search className="h-4 w-4" />
+              
+              </Button>
+            </form>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="text-gray-500 dark:text-gray-400">
+                    <Bell className="h-5 w-5" />
+                    <span className="sr-only">Notifications</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Channel notifications</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" className="text-gray-500 dark:text-gray-400">
+                    <Users className="h-5 w-5 mr-2" />
+                    24
+                    <ChevronDown className="h-4 w-4 ml-2" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>View channel members</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <ScrollArea className="flex-1 p-4">
+          {filteredMessages.map((message) => (
+            <div key={message.id} className={`mb-4 ${message.isPinned ? 'bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded' : ''}`}>
+              <div className="flex items-start">
+                <Avatar className="w-10 h-10 mr-3">
+                  <AvatarImage src={message.avatar} alt={message.user} />
+                  <AvatarFallback>{message.user.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <div className="flex items-center">
+                    <span className="font-semibold mr-2 text-gray-800 dark:text-white">{message.user}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{message.time}</span>
+                    {!message.isRead && <span className="ml-2 text-xs bg-blue-500 text-white px-2 py-1 rounded-full">New</span>}
+                  </div>
+                  <p className="text-gray-800 dark:text-gray-200" dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }}></p>
+                  {message.files.length > 0 && (
+                    <div className="mt-2">
+                      {message.files.map((file, index) => (
+                        <a key={index} href={file.url} className="text-blue-500 hover:underline block" target="_blank" rel="noopener noreferrer">
+                          📎 {file.name}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center mt-2 space-x-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <Smile className="h-4 w-4 mr-1" />
+                          Add Reaction
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        {['👍', '❤️', '😂', '🎉', '🤔'].map(emoji => (
+                          <DropdownMenuItem key={emoji} onClick={() => addReaction(message.id, emoji)}>
+                            {emoji}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      const reply = prompt('Enter your reply:')
+                      if (reply) addReply(message.id, reply)
+                    }}>
+                      Reply
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      const newContent = prompt('Edit message:', message.content)
+                      if (newContent) editMessage(message.id, newContent)
+                    }}>
+                      <Edit2 className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => togglePinMessage(message.id)}>
+                      <Pin className="h-4 w-4 mr-1" />
+                      {message.isPinned ? 'Unpin' : 'Pin'}
+                    </Button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()}>
+                            <Paperclip className="h-4 w-4 mr-1" />
+                            Attach File
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Attach a file to this message</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      onChange={(e) => handleFileUpload(message.id, e)}
+                    />
+                  </div>
+                  {message.reactions.length > 0 && (
+                    <div className="flex items-center mt-2 space-x-1">
+                      {message.reactions.map((reaction, index) => (
+                        <span key={index} className="bg-gray-100 dark:bg-gray-700 rounded-full px-2 py-1 text-sm">
+                          {reaction}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {message.replies.length > 0 && (
+                    <div className="mt-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
+                      {message.replies.map((reply, index) => (
+                        <div key={index} className="mt-2">
+                          <span className="font-semibold text-sm text-gray-700 dark:text-gray-300">{reply.user}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">{reply.time}</span>
+                          <p className="text-sm text-gray-800 dark:text-gray-200">{reply.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </ScrollArea>
+
+        {/* Message Input */}
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+          {isTyping && <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Someone is typing...</div>}
+          <form onSubmit={handleSendMessage} className="flex items-center">
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder={`Message #${currentChannel}`}
+              className="flex-1 mr-2 min-h-[60px]"
+            />
+            <div className="flex flex-col space-y-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button type="submit" size="icon" disabled={!message.trim()}>
+                      <Send className="h-4 w-4" />
+                      <span className="sr-only">Send message</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Send message</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button type="button" size="icon" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                      <Paperclip className="h-4 w-4" />
+                      <span className="sr-only">Attach file</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Attach a file</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Jump To Dialog */}
+      <Dialog open={isJumpToOpen} onOpenChange={setIsJumpToOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Jump to</DialogTitle>
+          </DialogHeader>
+          <Command>
+            <CommandInput placeholder="Type a command or search..." />
+            <CommandList>
+              <CommandItem onSelect={() => {
+                setIsJumpToOpen(false)
+                // Handle channel selection
+              }}>
+                <Hash className="mr-2 h-4 w-4" />
+                <span>Channels</span>
+              </CommandItem>
+              {channels.map((channel) => (
+                <CommandItem key={channel} onSelect={() => {
+                  setCurrentChannel(channel)
+                  setIsJumpToOpen(false)
+                }}>
+                  <Hash className="mr-2 h-4 w-4" />
+                  <span>{channel}</span>
+                </CommandItem>
+              ))}
+              <CommandItem onSelect={() => {
+                setIsJumpToOpen(false)
+                // Handle direct message selection
+              }}>
+                <AtSign className="mr-2 h-4 w-4" />
+                <span>Direct Messages</span>
+              </CommandItem>
+              {Object.values(users).map((user: User) => (
+                <CommandItem key={user.id} onSelect={() => {
+                  // Handle direct message selection
+                  setIsJumpToOpen(false)
+                }}>
+                  <AtSign className="mr-2 h-4 w-4" />
+                  <span>{user.displayName}</span>
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+
+--- File: ./src/components/SlackInterfaceSwitcher.tsx ---
+
+import React, { useState } from 'react';
+import SlackInterface from './SlackInterface';
+import SlackInterfaceV2 from './SlackInterfaceV2';
+
+const SlackInterfaceSwitcher: React.FC = () => {
+  const [isV1, setIsV1] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsV1(!isV1)}
+        className="fixed bottom-4 right-4 z-50 p-3 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition-colors"
+        title="Switch Interface"
+      >
+        {isV1 ? 'V2' : 'V1'}
+      </button>
+      {isV1 ? <SlackInterfaceV2 /> : <SlackInterface />}
+    </div>
+  );
+};
+
+export default SlackInterfaceSwitcher;
 
 
 --- File: ./src/components/Auth/Login.tsx ---
@@ -815,39 +1514,1159 @@ const Register: React.FC = () => {
 export default Register;
 
 
+--- File: ./src/components/Tickets/TicketForm.tsx ---
+
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ticketService } from '../../services/ticketService';
+import { useAuth } from '../../context/AuthContext';
+import { addDoc, collection } from 'firebase/firestore';
+import { db } from '../../services/firebase';
+import { Plus } from 'lucide-react';
+
+export default function TicketForm() {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('LOW');
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log('Form submitted'); // Debug log
+    
+    if (!user) {
+      console.error('No user found');
+      alert('You must be logged in to create a ticket');
+      return;
+    }
+
+    if (!title.trim()) {
+      console.error('Title is required');
+      alert('Title is required');
+      return;
+    }
+
+    try {
+      console.log('Creating ticket...', { title, description, priority });
+      
+      const newTicket = {
+        title,
+        description,
+        priority,
+        status: 'BACKLOG' as const,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        assigneeId: user.uid
+      };
+
+      await addDoc(collection(db, 'tickets'), newTicket);
+      navigate('/tickets');
+    } catch (error) {
+      console.error('Error creating ticket:', error);
+      alert('Failed to create ticket. Please try again.');
+    }
+  };
+
+  return (
+    <div className="flex-1 bg-white dark:bg-gray-800">
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <div className="p-4">
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Create New Ticket</h1>
+        </div>
+      </div>
+      
+      <div className="max-w-3xl mx-auto p-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+              Title
+            </label>
+            <input
+              type="text"
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
+            />
+          </div>
+          <div>
+            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+              Description
+            </label>
+            <textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+              className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
+            />
+          </div>
+          <div>
+            <label htmlFor="priority" className="block text-sm font-medium text-gray-700">
+              Priority
+            </label>
+            <select
+              id="priority"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as 'LOW' | 'MEDIUM' | 'HIGH')}
+              className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
+            >
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+            </select>
+          </div>
+          <div className="flex justify-end space-x-2 pt-4">
+            <button
+              type="button"
+              onClick={() => {
+                console.log('Cancel clicked');
+                navigate('/tickets');
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              onClick={() => console.log('Submit button clicked')}
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+            >
+              Create Ticket
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+--- File: ./src/components/Tickets/TicketEdit.tsx ---
+
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ticketService } from '../../services/ticketService';
+import { Ticket } from '../../types/ticket';
+import { db } from '../../services/firebase';
+
+export default function TicketEdit() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadTicket = async () => {
+      if (id) {
+        const ticketData = await ticketService.getTicket(id);
+        setTicket(ticketData);
+      }
+      setLoading(false);
+    };
+    loadTicket();
+  }, [id]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (ticket && id) {
+      await ticketService.updateTicket(id, ticket);
+      navigate('/tickets');
+    }
+  };
+
+  if (loading) {
+    return <div className="flex-1 p-4">Loading...</div>;
+  }
+
+  if (!ticket) {
+    return <div className="flex-1 p-4">Ticket not found</div>;
+  }
+
+  return (
+    <div className="flex-1 bg-white dark:bg-gray-800">
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <div className="p-4">
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Edit Ticket</h1>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+              Title
+            </label>
+            <input
+              type="text"
+              id="title"
+              value={ticket.title}
+              onChange={(e) => setTicket({ ...ticket, title: e.target.value })}
+              required
+              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2"
+            />
+          </div>
+          <div>
+            <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+              Description
+            </label>
+            <textarea
+              id="description"
+              value={ticket.description}
+              onChange={(e) => setTicket({ ...ticket, description: e.target.value })}
+              rows={4}
+              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2"
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="status" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                Status
+              </label>
+              <select
+                id="status"
+                value={ticket.status}
+                onChange={(e) => setTicket({ ...ticket, status: e.target.value as Ticket['status'] })}
+                className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2"
+              >
+                <option value="BACKLOG">Backlog</option>
+                <option value="SELECTED_FOR_DEV">Selected for Dev</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="READY_FOR_TESTING">Ready for Testing</option>
+                <option value="DEPLOYED">Deployed</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="priority" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                Priority
+              </label>
+              <select
+                id="priority"
+                value={ticket.priority}
+                onChange={(e) => setTicket({ ...ticket, priority: e.target.value as Ticket['priority'] })}
+                className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2"
+              >
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end space-x-2 pt-4">
+            <button
+              type="button"
+              onClick={() => navigate('/tickets')}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+            >
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+--- File: ./src/components/Tickets/TicketViewSwitch.tsx ---
+
+import React from 'react';
+import { List, LayoutGrid } from 'lucide-react';
+
+type ViewSwitchProps = {
+  view: 'list' | 'board';
+  onViewChange: (view: 'list' | 'board') => void;
+};
+
+export default function TicketViewSwitch({ view, onViewChange }: ViewSwitchProps) {
+  return (
+    <div className="flex items-center space-x-2">
+      <button
+        onClick={() => onViewChange('list')}
+        className={`p-2 rounded-md ${
+          view === 'list'
+            ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-100'
+            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+        }`}
+      >
+        <List className="h-5 w-5" />
+      </button>
+      <button
+        onClick={() => onViewChange('board')}
+        className={`p-2 rounded-md ${
+          view === 'board'
+            ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-100'
+            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+        }`}
+      >
+        <LayoutGrid className="h-5 w-5" />
+      </button>
+    </div>
+  );
+}
+
+--- File: ./src/components/Tickets/index.ts ---
+
+export { default as TicketList } from './TicketList';
+export { default as TicketForm } from './TicketForm';
+export { default as TicketEdit } from './TicketEdit';
+
+--- File: ./src/components/Tickets/TicketBoard.tsx ---
+
+import React, { useState, useEffect } from 'react';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../services/firebase';
+import { Ticket } from '../../types/ticket';
+import { Link } from 'react-router-dom';
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import { Plus } from 'lucide-react';
+import { ticketService } from '../../services/ticketService';
+
+type TicketColumn = {
+  title: string;
+  tickets: Ticket[];
+};
+
+type BoardStatus = Exclude<Ticket['status'], 'BACKLOG'>;
+
+type ColumnType = {
+  [K in BoardStatus]: TicketColumn;
+};
+
+export default function TicketBoard() {
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [columns, setColumns] = useState<ColumnType>({
+    SELECTED_FOR_DEV: { title: 'Selected for Dev', tickets: [] },
+    IN_PROGRESS: { title: 'In Progress', tickets: [] },
+    READY_FOR_TESTING: { title: 'Ready for Testing', tickets: [] },
+    DEPLOYED: { title: 'Deployed', tickets: [] },
+  });
+
+  useEffect(() => {
+    const q = query(collection(db, 'tickets'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const ticketsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Ticket[];
+      setTickets(ticketsData);
+      
+      const newColumns = { ...columns };
+      
+      ticketsData
+        .filter(ticket => ticket.status !== 'BACKLOG')
+        .forEach(ticket => {
+          const status = ticket.status as BoardStatus;
+          if (status in newColumns) {
+            newColumns[status].tickets.push(ticket);
+          }
+        });
+      
+      setColumns(newColumns);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const onDragEnd = async (result: DropResult) => {
+    const { destination, source, draggableId } = result;
+
+    if (!destination) {
+      return;
+    }
+
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    ) {
+      return;
+    }
+
+    try {
+      // Update in Firestore
+      const ticketRef = doc(db, 'tickets', draggableId);
+      await updateDoc(ticketRef, {
+        status: destination.droppableId as Ticket['status'],
+        updatedAt: Date.now()
+      });
+
+      console.log('Ticket updated successfully');
+    } catch (error) {
+      console.error('Error updating ticket:', error);
+    }
+  };
+
+  return (
+    <div className="flex-1 bg-white dark:bg-gray-800">
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <div className="p-4 flex justify-between items-center">
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Tickets Board</h1>
+          <Link
+            to="/tickets/new"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Ticket
+          </Link>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="flex gap-4 overflow-x-auto pb-4">
+            {Object.entries(columns).map(([status, column]) => (
+              <div key={status} className="flex-1 min-w-[300px]">
+                <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
+                  <h3 className="font-medium text-gray-900 dark:text-white mb-4">
+                    {column.title} ({column.tickets.length})
+                  </h3>
+                  <Droppable droppableId={status} key={status}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className={`space-y-2 min-h-[200px] ${
+                          snapshot.isDraggingOver ? 'bg-gray-200 dark:bg-gray-600' : ''
+                        }`}
+                      >
+                        {column.tickets.map((ticket, index) => (
+                          <Draggable
+                            key={ticket.id}
+                            draggableId={ticket.id || ''}
+                            index={index}
+                          >
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`bg-white dark:bg-gray-800 p-4 rounded shadow-sm 
+                                  ${snapshot.isDragging ? 'shadow-lg' : 'hover:shadow-md'} 
+                                  transition-shadow`}
+                              >
+                                <Link to={`/tickets/${ticket.id}`} onClick={(e) => e.preventDefault()}>
+                                  <h4 className="font-medium text-gray-900 dark:text-white">
+                                    {ticket.title}
+                                  </h4>
+                                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                    {ticket.description}
+                                  </p>
+                                  <div className="mt-2">
+                                    <span className={`px-2 py-1 text-xs font-medium rounded-full
+                                      ${ticket.priority === 'HIGH' ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' :
+                                      ticket.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100' :
+                                      'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'}`}
+                                    >
+                                      {ticket.priority}
+                                    </span>
+                                  </div>
+                                </Link>
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DragDropContext>
+      </div>
+    </div>
+  );
+}
+
+--- File: ./src/components/Tickets/TicketList.tsx ---
+
+import React, { useState, useEffect } from 'react';
+import { collection, onSnapshot, query, orderBy, where, doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../services/firebase';
+import { Ticket } from '../../types/ticket';
+import { Link } from 'react-router-dom';
+import { Plus, ArrowRight } from 'lucide-react';
+
+const getStatusStyle = (status: Ticket['status']) => {
+  switch (status) {
+    case 'DEPLOYED':
+      return 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100';
+    case 'READY_FOR_TESTING':
+      return 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100';
+    case 'IN_PROGRESS':
+      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100';
+    case 'SELECTED_FOR_DEV':
+      return 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100';
+    case 'BACKLOG':
+    default:
+      return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100';
+  }
+};
+
+export default function TicketList({ showHeader = true }: { showHeader?: boolean }) {
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // First, get tickets without ordering while index builds
+    const simpleQuery = query(
+      collection(db, 'tickets'),
+      where('status', '==', 'BACKLOG')
+    );
+    
+    const unsubscribe = onSnapshot(
+      simpleQuery,
+      (snapshot) => {
+        const ticketsData = snapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })) as Ticket[];
+        
+        // Sort locally until index is ready
+        ticketsData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        
+        setTickets(ticketsData);
+        setLoading(false);
+        setError(null);
+      },
+      (error) => {
+        console.error('Error fetching tickets:', error);
+        setError('Error loading tickets. Please try again later.');
+        setLoading(false);
+      }
+    );
+    
+    return () => unsubscribe();
+  }, []);
+
+  const handleMoveToDev = async (ticketId: string) => {
+    try {
+      const ticketRef = doc(db, 'tickets', ticketId);
+      await updateDoc(ticketRef, {
+        status: 'SELECTED_FOR_DEV',
+        updatedAt: Date.now()
+      });
+    } catch (error) {
+      console.error('Error moving ticket to development:', error);
+      alert('Failed to move ticket to development. Please try again.');
+    }
+  };
+
+  return (
+    <div className="flex-1 bg-white dark:bg-gray-800">
+      {showHeader && (
+        <div className="border-b border-gray-200 dark:border-gray-700">
+          <div className="p-4 flex justify-between items-center">
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Backlog</h1>
+            <Link
+              to="/tickets/new"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Ticket
+            </Link>
+          </div>
+        </div>
+      )}
+      
+      <div className="p-4">
+        {loading ? (
+          <div className="text-center py-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">Loading tickets...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-4 text-red-600 dark:text-red-400">
+            {error}
+          </div>
+        ) : tickets.length === 0 ? (
+          <div className="text-center py-4 text-gray-600 dark:text-gray-400">
+            No tickets in backlog. Create a new ticket to get started.
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+              {tickets.map((ticket) => (
+                <li key={ticket.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <div className="px-4 py-4 sm:px-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0 pr-4">
+                        <Link to={`/tickets/${ticket.id}`} className="block">
+                          <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                            {ticket.title}
+                          </p>
+                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                            {ticket.description}
+                          </p>
+                        </Link>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusStyle(ticket.status)}`}>
+                            {ticket.status}
+                          </span>
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                            ${ticket.priority === 'HIGH' ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' :
+                            ticket.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100' :
+                            'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'}`}
+                          >
+                            {ticket.priority}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => ticket.id && handleMoveToDev(ticket.id)}
+                          className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                          <ArrowRight className="h-4 w-4 mr-1" />
+                          Move to Dev
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+--- File: ./src/components/Tickets/TicketsContainer.tsx ---
+
+import React, { useState } from 'react';
+import TicketList from './TicketList';
+import TicketBoard from './TicketBoard';
+import TicketViewSwitch from './TicketViewSwitch';
+import { Link } from 'react-router-dom';
+import { Plus } from 'lucide-react';
+
+export default function TicketsContainer() {
+  const [view, setView] = useState<'list' | 'board'>('list');
+
+  return (
+    <div className="flex-1 bg-white dark:bg-gray-800">
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <div className="p-4 flex justify-between items-center">
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Tickets</h1>
+          <div className="flex items-center space-x-4">
+            <TicketViewSwitch view={view} onViewChange={setView} />
+            <Link
+              to="/tickets/new"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Ticket
+            </Link>
+          </div>
+        </div>
+      </div>
+      {view === 'list' ? <TicketList showHeader={false} /> : <TicketBoard />}
+    </div>
+  );
+}
+
+
+--- File: ./src/components/ui/dropdown-menu.tsx ---
+
+import * as React from "react"
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
+
+const DropdownMenu = DropdownMenuPrimitive.Root
+
+const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
+
+const DropdownMenuContent = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
+>(({ className, sideOffset = 4, ...props }, ref) => (
+  <DropdownMenuPrimitive.Content
+    ref={ref}
+    sideOffset={sideOffset}
+    className="z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
+    {...props}
+  />
+))
+DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName
+
+const DropdownMenuItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item>
+>(({ className, ...props }, ref) => (
+  <DropdownMenuPrimitive.Item
+    ref={ref}
+    className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+    {...props}
+  />
+))
+DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName
+
+export { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem }
+
+
+--- File: ./src/components/ui/button.tsx ---
+
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline: "border border-input hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "underline-offset-4 hover:underline text-primary",
+      },
+      size: {
+        default: "h-10 py-2 px-4",
+        sm: "h-9 px-3 rounded-md",
+        lg: "h-11 px-8 rounded-md",
+        icon: "h-10 w-10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, ...props }, ref) => {
+    return (
+      <button
+        className={buttonVariants({ variant, size, className })}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button"
+
+export { Button, buttonVariants }
+
+
+--- File: ./src/components/ui/command.tsx ---
+
+import * as React from "react"
+import { Command as CommandPrimitive } from "cmdk"
+
+const Command = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive
+    ref={ref}
+    className="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground"
+    {...props}
+  />
+))
+Command.displayName = CommandPrimitive.displayName
+
+const CommandInput = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Input>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.Input
+    ref={ref}
+    className="flex h-11 w-full rounded-md bg-transparent py-3 px-4 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+    {...props}
+  />
+))
+CommandInput.displayName = CommandPrimitive.Input.displayName
+
+const CommandList = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.List>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.List
+    ref={ref}
+    className="max-h-[300px] overflow-y-auto overflow-x-hidden"
+    {...props}
+  />
+))
+CommandList.displayName = CommandPrimitive.List.displayName
+
+const CommandItem = React.forwardRef<
+  React.ElementRef<typeof CommandPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive.Item
+    ref={ref}
+    className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+    {...props}
+  />
+))
+CommandItem.displayName = CommandPrimitive.Item.displayName
+
+export { Command, CommandInput, CommandList, CommandItem }
+
+
+--- File: ./src/components/ui/input.tsx ---
+
+import * as React from "react"
+
+export interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        className={
+          `flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50 ${
+            className || ''
+          }`
+        }
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Input.displayName = "Input"
+
+export { Input }
+
+
+--- File: ./src/components/ui/scroll-area.tsx ---
+
+import * as React from "react"
+import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area"
+
+const ScrollArea = React.forwardRef<
+  React.ElementRef<typeof ScrollAreaPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root>
+>(({ className, children, ...props }, ref) => (
+  <ScrollAreaPrimitive.Root
+    ref={ref}
+    className="relative overflow-hidden"
+    {...props}
+  >
+    <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">
+      {children}
+    </ScrollAreaPrimitive.Viewport>
+    <ScrollAreaPrimitive.Scrollbar
+      orientation="vertical"
+      className="flex touch-none select-none transition-colors"
+    >
+      <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-border" />
+    </ScrollAreaPrimitive.Scrollbar>
+    <ScrollAreaPrimitive.Scrollbar
+      orientation="horizontal"
+      className="flex touch-none select-none transition-colors"
+    >
+      <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-border" />
+    </ScrollAreaPrimitive.Scrollbar>
+    <ScrollAreaPrimitive.Corner />
+  </ScrollAreaPrimitive.Root>
+))
+ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName
+
+export { ScrollArea }
+
+
+--- File: ./src/components/ui/popover.tsx ---
+
+import * as React from "react"
+import * as PopoverPrimitive from "@radix-ui/react-popover"
+
+const Popover = PopoverPrimitive.Root
+
+const PopoverTrigger = PopoverPrimitive.Trigger
+
+const PopoverContent = React.forwardRef<
+  React.ElementRef<typeof PopoverPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
+>(({ className, align = "center", sideOffset = 4, ...props }, ref) => (
+  <PopoverPrimitive.Content
+    ref={ref}
+    align={align}
+    sideOffset={sideOffset}
+    className="z-50 w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
+    {...props}
+  />
+))
+PopoverContent.displayName = PopoverPrimitive.Content.displayName
+
+export { Popover, PopoverTrigger, PopoverContent }
+
+
+--- File: ./src/components/ui/dialog.tsx ---
+
+import * as React from "react"
+import * as DialogPrimitive from "@radix-ui/react-dialog"
+
+const Dialog = DialogPrimitive.Root
+
+const DialogTrigger = DialogPrimitive.Trigger
+
+const DialogContent = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+>(({ className, children, ...props }, ref) => (
+  <DialogPrimitive.Portal>
+    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+    <DialogPrimitive.Content
+      ref={ref}
+      className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg"
+      {...props}
+    >
+      {children}
+    </DialogPrimitive.Content>
+  </DialogPrimitive.Portal>
+))
+DialogContent.displayName = DialogPrimitive.Content.displayName
+
+const DialogHeader = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div className="flex flex-col space-y-1.5 text-center sm:text-left" {...props} />
+)
+DialogHeader.displayName = "DialogHeader"
+
+const DialogTitle = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Title>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title
+    ref={ref}
+    className="text-lg font-semibold leading-none tracking-tight"
+    {...props}
+  />
+))
+DialogTitle.displayName = DialogPrimitive.Title.displayName
+
+export { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle }
+
+
+--- File: ./src/components/ui/textarea.tsx ---
+
+import * as React from "react"
+
+export interface TextareaProps
+  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {}
+
+const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <textarea
+        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Textarea.displayName = "Textarea"
+
+export { Textarea }
+
+
+--- File: ./src/components/ui/tooltip.tsx ---
+
+import * as React from "react"
+import * as TooltipPrimitive from "@radix-ui/react-tooltip"
+
+const TooltipProvider = TooltipPrimitive.Provider
+
+const Tooltip = TooltipPrimitive.Root
+
+const TooltipTrigger = TooltipPrimitive.Trigger
+
+const TooltipContent = React.forwardRef<
+  React.ElementRef<typeof TooltipPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
+>(({ className, sideOffset = 4, ...props }, ref) => (
+  <TooltipPrimitive.Content
+    ref={ref}
+    sideOffset={sideOffset}
+    className="z-50 overflow-hidden rounded-md border bg-popover px-3 py-1.5 text-sm text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
+    {...props}
+  />
+))
+TooltipContent.displayName = TooltipPrimitive.Content.displayName
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+
+
+--- File: ./src/components/ui/avatar.tsx ---
+
+import * as React from "react"
+import * as AvatarPrimitive from "@radix-ui/react-avatar"
+import type { 
+  AvatarProps,
+  AvatarImageProps,
+  AvatarFallbackProps
+} from "@radix-ui/react-avatar"
+
+const Avatar = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Root
+    ref={ref}
+    className="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full"
+    {...props}
+  />
+))
+Avatar.displayName = AvatarPrimitive.Root.displayName
+
+const AvatarImage = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Image>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Image
+    ref={ref}
+    className="aspect-square h-full w-full"
+    {...props}
+  />
+))
+AvatarImage.displayName = AvatarPrimitive.Image.displayName
+
+const AvatarFallback = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Fallback>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Fallback>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Fallback
+    ref={ref}
+    className="flex h-full w-full items-center justify-center rounded-full bg-muted"
+    {...props}
+  />
+))
+AvatarFallback.displayName = AvatarPrimitive.Fallback.displayName
+
+export { Avatar, AvatarImage, AvatarFallback }
+
+
+--- File: ./src/services/ticketService.ts ---
+
+import { collection, addDoc, updateDoc, deleteDoc, doc, getDoc } from 'firebase/firestore';
+import { db } from './firebase';
+import { Ticket } from '../types/ticket';
+import { getAuth } from 'firebase/auth';
+
+export const ticketService = {
+  async createTicket(ticket: Omit<Ticket, 'id'>) {
+    try {
+      if (!db) {
+        throw new Error('Firestore is not initialized');
+      }
+
+      console.log('Creating ticket with data:', ticket);
+      
+      // Verify user is authenticated
+      const auth = getAuth();
+      if (!auth.currentUser) {
+        throw new Error('User is not authenticated');
+      }
+
+      const ticketsRef = collection(db, 'tickets');
+      const docRef = await addDoc(ticketsRef, {
+        ...ticket,
+        createdBy: auth.currentUser.uid,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+
+      console.log('Ticket created successfully with ID:', docRef.id);
+      return docRef;
+    } catch (error) {
+      console.error('Error creating ticket:', error);
+      if (error instanceof Error) {
+        throw new Error(`Failed to create ticket: ${error.message}`);
+      }
+      throw error;
+    }
+  },
+
+  async updateTicket(id: string, ticket: Partial<Ticket>) {
+    const ticketRef = doc(db, 'tickets', id);
+    await updateDoc(ticketRef, {
+      ...ticket,
+      updatedAt: Date.now()
+    });
+  },
+
+  async deleteTicket(id: string) {
+    const ticketRef = doc(db, 'tickets', id);
+    await deleteDoc(ticketRef);
+  },
+
+  async getTicket(id: string) {
+    const ticketRef = doc(db, 'tickets', id);
+    const ticketSnap = await getDoc(ticketRef);
+    if (ticketSnap.exists()) {
+      return { id: ticketSnap.id, ...ticketSnap.data() } as Ticket;
+    }
+    return null;
+  }
+};
+
 --- File: ./src/services/firebase.ts ---
 
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 import { getFunctions } from "firebase/functions";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  databaseURL: process.env.REACT_APP_FIREBASE_DATABASE_URL,
   projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
   storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  databaseURL: process.env.REACT_APP_FIREBASE_DATABASE_URL
 };
 
-// Add this check to prevent initialization with undefined values
-if (!process.env.REACT_APP_FIREBASE_API_KEY) {
-  throw new Error('Firebase API key is missing. Check your .env file.');
-}
+// Debug log the config (remove sensitive data in production)
+console.log('Firebase Config:', {
+  projectId: firebaseConfig.projectId,
+  authDomain: firebaseConfig.authDomain,
+  databaseURL: firebaseConfig.databaseURL
+});
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const database = getDatabase(app);
 export const functions = getFunctions(app);
+export const db = getFirestore(app);
+
+// Verify initialization
+console.log('Firebase Services Initialized:', {
+  auth: !!auth,
+  database: !!database,
+  firestore: !!db,
+  functions: !!functions
+});
 
 
 --- File: ./src/services/chat.ts ---
 
 import { database, auth } from './firebase';
 import { ref, push, onChildAdded, off, get, set, query, orderByChild, startAfter, limitToFirst, limitToLast } from "firebase/database";
-import { getFunctions, httpsCallable, HttpsCallableResult } from 'firebase/functions';
 import { CustomUser } from '../types/user';
 
 export const fetchUsers = async (companyId: string): Promise<{ [key: string]: CustomUser }> => {
@@ -860,20 +2679,17 @@ export const fetchUsers = async (companyId: string): Promise<{ [key: string]: Cu
       throw new Error('User not authenticated');
     }
 
-    const functions = getFunctions();
-    const getUsers = httpsCallable(functions, 'getUsers');
+    const usersRef = ref(database, 'users');
+    const snapshot = await get(usersRef);
     
-    console.log("Calling getUsers function");
-    const result: HttpsCallableResult = await getUsers({ companyId });
-    console.log("Raw result from getUsers:", result);
-    
-    if (result.data === null || typeof result.data !== 'object') {
-      console.log("No users found or unexpected response format");
+    if (!snapshot.exists()) {
+      console.log("No users found");
       return {};
     }
     
-    console.log("Fetched users:", result.data);
-    return result.data as { [key: string]: CustomUser };
+    const users = snapshot.val();
+    console.log("Fetched users:", users);
+    return users;
   } catch (error) {
     console.error("Error fetching users:", error);
     if (error instanceof Error) {
@@ -921,12 +2737,83 @@ export const sendMessage = async (channelId: string, message: any) => {
   try {
     console.log(`Sending message to channel: ${channelId}`, message);
     const messagesRef = ref(database, `channels/${channelId}/messages`);
-    await push(messagesRef, message);
+    
+    // Add participants for direct messages
+    const messageWithMetadata = {
+      ...message,
+      timestamp: Date.now(),
+      status: 'sent',
+      reactions: {},
+      participants: channelId.startsWith('dm_') ? channelId.split('_').slice(1) : []
+    };
+    
+    await push(messagesRef, messageWithMetadata);
     console.log("Message sent successfully");
   } catch (error) {
     console.error("Error sending message:", error);
     throw error;
   }
+};
+
+export const updateMessage = async (channelId: string, messageId: string, updates: any) => {
+  try {
+    const messageRef = ref(database, `channels/${channelId}/messages/${messageId}`);
+    await set(messageRef, updates);
+  } catch (error) {
+    console.error("Error updating message:", error);
+    throw error;
+  }
+};
+
+export const deleteMessage = async (channelId: string, messageId: string) => {
+  try {
+    const messageRef = ref(database, `channels/${channelId}/messages/${messageId}`);
+    await set(messageRef, null);
+  } catch (error) {
+    console.error("Error deleting message:", error);
+    throw error;
+  }
+};
+
+export const addReaction = async (channelId: string, messageId: string, reaction: string, userId: string) => {
+  try {
+    const reactionRef = ref(database, `channels/${channelId}/messages/${messageId}/reactions/${reaction}/${userId}`);
+    await set(reactionRef, true);
+  } catch (error) {
+    console.error("Error adding reaction:", error);
+    throw error;
+  }
+};
+
+export const removeReaction = async (channelId: string, messageId: string, reaction: string, userId: string) => {
+  try {
+    const reactionRef = ref(database, `channels/${channelId}/messages/${messageId}/reactions/${reaction}/${userId}`);
+    await set(reactionRef, null);
+  } catch (error) {
+    console.error("Error removing reaction:", error);
+    throw error;
+  }
+};
+
+export const setTypingStatus = async (channelId: string, userId: string, isTyping: boolean) => {
+  try {
+    const typingRef = ref(database, `channels/${channelId}/typing/${userId}`);
+    await set(typingRef, isTyping ? Date.now() : null);
+  } catch (error) {
+    console.error("Error setting typing status:", error);
+    throw error;
+  }
+};
+
+export const subscribeToTyping = (channelId: string, callback: (typingUsers: {[key: string]: number}) => void) => {
+  const typingRef = ref(database, `channels/${channelId}/typing`);
+  const unsubscribe = onChildAdded(typingRef, (snapshot) => {
+    const typingUsers = snapshot.val();
+    callback(typingUsers);
+  });
+  return () => {
+    off(typingRef, 'child_added', unsubscribe);
+  };
 };
 
 // Expose fetchUsers globally for testing
@@ -1121,6 +3008,19 @@ export const useAuth = () => {
   return context;
 };
 
+
+--- File: ./src/types/ticket.ts ---
+
+export interface Ticket {
+    id?: string;
+    title: string;
+    description: string;
+    status: 'BACKLOG' | 'SELECTED_FOR_DEV' | 'IN_PROGRESS' | 'READY_FOR_TESTING' | 'DEPLOYED';
+    priority: 'LOW' | 'MEDIUM' | 'HIGH';
+    assigneeId?: string;
+    createdAt: number;
+    updatedAt: number;
+  }
 
 --- File: ./src/types/user.ts ---
 

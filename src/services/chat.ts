@@ -1,6 +1,7 @@
 import { database, auth } from './firebase';
-import { ref, push, onChildAdded, off, get, set, query, orderByChild, startAfter, limitToFirst, limitToLast } from "firebase/database";
+import { ref, push, onChildAdded, off, get, set, query, orderByChild, startAt, endAt, limitToLast } from "firebase/database";
 import { CustomUser } from '../types/user';
+import { Message } from '../types/message';
 
 export const fetchUsers = async (companyId: string): Promise<{ [key: string]: CustomUser }> => {
   try {
@@ -47,22 +48,42 @@ export const createUser = async (userId: string, userData: any) => {
   }
 };
 
-export const fetchMessages = (channelId: string, callback: (message: any) => void, lastTimestamp: number | null = null) => {
+export const fetchMessages = (
+  channelId: string,
+  callback: (message: Message) => void,
+  lastTimestamp: number | null = null
+) => {
   const messagesRef = ref(database, `channels/${channelId}/messages`);
-  let messageQuery;
+  let messagesQuery;
+
   if (lastTimestamp) {
-    messageQuery = query(messagesRef, orderByChild('timestamp'), startAfter(lastTimestamp), limitToFirst(20));
+    // If we have a lastTimestamp, get messages after that timestamp
+    messagesQuery = query(
+      messagesRef,
+      orderByChild('timestamp'),
+      startAt(lastTimestamp + 1),
+      limitToLast(50) // Optional: limit the number of messages
+    );
   } else {
-    messageQuery = query(messagesRef, orderByChild('timestamp'), limitToLast(20));
+    // If no lastTimestamp, get the most recent messages
+    messagesQuery = query(
+      messagesRef,
+      orderByChild('timestamp'),
+      limitToLast(50) // Optional: limit the number of messages
+    );
   }
-  const unsubscribe = onChildAdded(messageQuery, (snapshot) => {
-    const messageData = snapshot.val();
-    console.log("New message received:", messageData);
-    callback({...messageData, id: snapshot.key});
+
+  const unsubscribe = onChildAdded(messagesQuery, (snapshot) => {
+    const message: Message = {
+      id: snapshot.key || '',
+      ...snapshot.val()
+    };
+    callback(message);
   });
+
   return () => {
-    console.log(`Unsubscribing from messages for channel: ${channelId}`);
-    off(messagesRef, 'child_added', unsubscribe);
+    off(messagesRef);
+    unsubscribe();
   };
 };
 

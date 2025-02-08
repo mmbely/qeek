@@ -3,10 +3,13 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import SlackInterfaceSwitcher from './components/SlackInterfaceSwitcher';
+import SlackInterface from './components/SlackInterface';
+import { TicketForm, TicketEdit } from './components/Tickets';
+import TicketList from './components/Tickets/TicketList';
+import TicketBoard from './components/Tickets/TicketBoard';
 import './App.css';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './services/firebase'; // Updated import path
+import { auth } from './services/firebase';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
@@ -56,9 +59,14 @@ function App() {
           } />
           <Route path="/" element={
             <ProtectedRoute>
-              <SlackInterfaceSwitcher />
+              <SlackInterface />
             </ProtectedRoute>
-          } />
+          }>
+            <Route path="tickets" element={<TicketList />} />
+            <Route path="tickets/board" element={<TicketBoard />} />
+            <Route path="tickets/new" element={<TicketForm />} />
+            <Route path="tickets/:id" element={<TicketEdit />} />
+          </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

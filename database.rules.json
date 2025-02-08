@@ -2,39 +2,33 @@
   "rules": {
     "users": {
       ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["companyId", "email"],
       "$uid": {
         ".read": "auth != null",
         ".write": "$uid === auth.uid"
       }
     },
     "channels": {
-      ".read": "auth != null",
-      "$channelId": {
+      "$channel_id": {
+        ".read": "auth != null",
+        ".write": "auth != null",
         "messages": {
+          ".indexOn": ["timestamp"],
           ".read": "auth != null",
-          "$messageId": {
-            ".write": "newData.child('senderId').val() === auth.uid",
-            "reactions": {
-              ".read": "auth != null",
-              "$reaction": {
-                "$userId": {
-                  ".write": "$userId === auth.uid"
-                }
-              }
-            }
-          }
+          ".write": "auth != null"
         },
         "typing": {
           ".read": "auth != null",
-          "$userId": {
-            ".write": "$userId === auth.uid"
-          }
+          ".write": "auth != null"
         },
         "members": {
           ".read": "auth != null",
           ".write": "auth != null"
         }
       }
-    }
+    },
+    ".read": "auth != null",
+    ".write": "auth != null"
   }
 }
