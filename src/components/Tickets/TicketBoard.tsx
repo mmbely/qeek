@@ -144,7 +144,10 @@ export function TicketBoard() {
   };
 
   return (
-    <div className={`${layout.container.fluid} flex flex-col h-full`}>
+    <div className={`
+      flex flex-col h-full
+      bg-white dark:bg-[${theme.colors.dark.background.primary}]
+    `}>
       <ChatHeader
         title="Development Board"
         subtitle="Manage your team's tickets"
@@ -169,6 +172,8 @@ export function TicketBoard() {
           min-h-[calc(100vh-12rem)]
           overflow-x-auto
           gap-4 lg:gap-6
+          p-6
+          bg-white dark:bg-[${theme.colors.dark.background.primary}]
         `}>
           {Object.entries(columns).map(([status, column]) => (
             <Droppable droppableId={status} key={status}>
@@ -177,8 +182,10 @@ export function TicketBoard() {
                   ref={provided.innerRef}
                   {...provided.droppableProps}
                   className={`
-                    ${commonStyles.card}
-                    ${snapshot.isDraggingOver ? 'ring-2 ring-blue-500/20 bg-blue-50/50 dark:bg-blue-900/10' : ''}
+                    rounded-lg
+                    ${snapshot.isDraggingOver ? `ring-2 ring-blue-500/20 dark:bg-[${theme.colors.dark.background.hover}]` : ''}
+                    bg-white dark:bg-[${theme.colors.dark.primary}]
+                    border border-gray-200 dark:border-gray-700
                     p-4
                     ${animations.transition.normal}
                   `}
@@ -188,7 +195,7 @@ export function TicketBoard() {
                     <h2 className={typography.h4}>{column.title}</h2>
                     <span className={`
                       px-2.5 py-0.5 rounded-full text-sm
-                      bg-gray-100 dark:bg-gray-700
+                      bg-gray-100 dark:bg-[${theme.colors.dark.background.hover}]
                       text-gray-600 dark:text-gray-300
                     `}>
                       {column.tickets.length}
@@ -212,7 +219,8 @@ export function TicketBoard() {
                             className={`
                               ${commonStyles.card}
                               ${snapshot.isDragging ? 'ring-2 ring-blue-500/20 shadow-lg' : ''}
-                              hover:shadow-md
+                              bg-white dark:bg-[${theme.colors.dark.background.primary}]
+                              hover:shadow-md dark:hover:bg-[${theme.colors.dark.background.hover}]
                               cursor-pointer
                               p-4
                             `}

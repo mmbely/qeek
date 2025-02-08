@@ -10,10 +10,10 @@ import {
   signOut,
   updateProfile
 } from 'firebase/auth';
-import { auth } from '../services/firebase';
-import { registerUser, loginUser, logoutUser } from '../services/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { ref, set } from 'firebase/database';
-import { database } from '../services/firebase';
+import { auth, db, database } from '../services/firebase';
+import { registerUser, loginUser, logoutUser } from '../services/auth';
 import { CustomUser } from '../types/user';
 
 const googleProvider = new GoogleAuthProvider();
@@ -25,12 +25,35 @@ interface AuthContextProps {
   register: (email: string, password: string) => Promise<UserCredential>;
   logout: () => Promise<void>;
   googleSignIn: () => Promise<UserCredential>;
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
 }
 
 const AuthContext = createContext<AuthContextProps | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<CustomUser | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      return savedTheme === 'dark';
+    }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => {
+    setIsDarkMode(prev => !prev);
+  };
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,19 +65,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsubscribe;
   }, []);
 
+  const saveUserToDatabase = async (user: User) => {
+    // Save to Firestore (for user profiles)
+    const userRef = doc(db, 'users', user.uid);
+    await setDoc(userRef, {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
+      companyId: 'default',
+    }, { merge: true });
+
+    // Save to Realtime Database (if needed for real-time features)
+    const rtdbUserRef = ref(database, `users/${user.uid}`);
+    await set(rtdbUserRef, {
+      online: true,
+      lastSeen: new Date().toISOString(),
+      // ... other real-time data
+    });
+  };
+
   const login = async (email: string, password: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user as CustomUser;
-    user.companyId = 'default'; // You might want to fetch this from the database instead
-    await saveUserToDatabase(user);
+    await saveUserToDatabase(userCredential.user);
     return userCredential;
   };
 
   const register = async (email: string, password: string) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user as CustomUser;
-    user.companyId = 'default';
-    await saveUserToDatabase(user);
+    await saveUserToDatabase(userCredential.user);
     return userCredential;
   };
 
@@ -65,22 +104,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const googleSignIn = async () => {
     const provider = new GoogleAuthProvider();
     const userCredential = await signInWithPopup(auth, provider);
-    await saveUserToDatabase(userCredential.user as CustomUser);
+    await saveUserToDatabase(userCredential.user);
     return userCredential;
   };
 
-  const saveUserToDatabase = async (user: CustomUser) => {
-    const userRef = ref(database, `users/${user.uid}`);
-    await set(userRef, {
-      displayName: user.displayName || 'Anonymous',
-      email: user.email,
-      photoURL: user.photoURL || '/placeholder.svg?height=40&width=40',
-      companyId: user.companyId || 'default'
-    });
+  const value = {
+    user,
+    setUser,
+    login,
+    register,
+    logout,
+    googleSignIn,
+    isDarkMode,
+    toggleDarkMode,
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, login, register, logout, googleSignIn }}>
+    <AuthContext.Provider value={value}>
       {!loading && children}
     </AuthContext.Provider>
   );

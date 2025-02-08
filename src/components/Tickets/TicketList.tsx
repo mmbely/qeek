@@ -51,36 +51,38 @@ export function TicketList({ showHeader = true }: TicketListProps) {
   }, [user]);
 
   return (
-    <div className={`${layout.container.fluid} flex flex-col h-full`}>
-      <ChatHeader
-        title="Backlog"
-        subtitle="Manage your upcoming tickets"
-        actions={
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className={`
-              ${commonStyles.button.base} 
-              ${commonStyles.button.primary}
-            `}
-          >
-            <Plus className="w-4 h-4" />
-            Create Ticket
-          </button>
-        }
-      />
+    <div className={`
+      flex flex-col h-full
+      bg-white dark:bg-[${theme.colors.dark.background.primary}]
+    `}>
+      {showHeader && (
+        <ChatHeader
+          title="Backlog"
+          subtitle="Manage your upcoming tickets"
+          actions={
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className={`
+                ${commonStyles.button.base} 
+                ${commonStyles.button.primary}
+              `}
+            >
+              <Plus className="w-4 h-4" />
+              Create Ticket
+            </button>
+          }
+        />
+      )}
 
       {/* Tickets List */}
-      <div className="space-y-4">
+      <div className="flex-1 p-6 space-y-4 overflow-y-auto">
         {tickets.length > 0 ? (
           tickets.map((ticket) => (
             <div
               key={ticket.id}
               onClick={() => setSelectedTicket(ticket)}
               className={`
-                ${commonStyles.card}
-                ${animations.transition.normal}
-                hover:shadow-md cursor-pointer
-                p-4 sm:p-6
+                ${commonStyles.ticket.card}
               `}
             >
               <div className="space-y-4">
@@ -135,7 +137,7 @@ export function TicketList({ showHeader = true }: TicketListProps) {
         ) : (
           // Empty State
           <div className={`
-            ${commonStyles.card}
+            ${commonStyles.ticket.card}
             ${layout.flex.center}
             flex-col gap-3 p-12
           `}>

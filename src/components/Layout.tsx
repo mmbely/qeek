@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import Sidebar from './Navigation/Sidebar';
+import { Sidebar } from './Navigation/Sidebar';
 import { useAuth } from '../context/AuthContext';
 import { CustomUser } from '../types/user';
 import { subscribeToUsers } from '../services/chat';
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, isDarkMode, toggleDarkMode } = useAuth();
   const navigate = useNavigate();
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDirectMessageModalOpen, setIsDirectMessageModalOpen] = useState(false);
   const [isCreateChannelModalOpen, setIsCreateChannelModalOpen] = useState(false);
   const [currentChannel, setCurrentChannel] = useState('general');
-  const [channels] = useState(['general']);
-  const [users, setUsers] = useState<{[key: string]: CustomUser}>({});
+  const [channels] = useState(['general', 'random']);
+  const [users, setUsers] = useState<{ [key: string]: CustomUser }>({});
 
   useEffect(() => {
     if (!user) return;
@@ -31,8 +30,6 @@ export default function Layout() {
 
     return () => unsubscribe();
   }, [user?.uid]);
-
-  const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
   const handleLogout = async () => {
     try {
@@ -61,7 +58,7 @@ export default function Layout() {
 
   return (
     <div className={`flex h-screen ${isDarkMode ? 'dark' : ''}`}>
-      <Sidebar 
+      <Sidebar
         user={user}
         channels={channels}
         users={users}
@@ -69,13 +66,14 @@ export default function Layout() {
         isDarkMode={isDarkMode}
         isMobileMenuOpen={isMobileMenuOpen}
         setCurrentChannel={setCurrentChannel}
-        toggleDarkMode={toggleDarkMode}
+        setIsMobileMenuOpen={setIsMobileMenuOpen}
         setIsDirectMessageModalOpen={setIsDirectMessageModalOpen}
         setIsCreateChannelModalOpen={setIsCreateChannelModalOpen}
-        handleStartDirectMessage={handleStartDirectMessage}
+        toggleDarkMode={toggleDarkMode}
         handleLogout={handleLogout}
+        handleStartDirectMessage={handleStartDirectMessage}
       />
-      <main className="flex-1 overflow-auto bg-white dark:bg-gray-800">
+      <main className="flex-1 overflow-hidden">
         <Outlet />
       </main>
     </div>

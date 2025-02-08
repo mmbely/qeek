@@ -2,15 +2,81 @@ import React, { useEffect, useRef } from 'react';
 import { Message } from '../../types/message';
 import { CustomUser } from '../../types/user';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
-import { Loader } from 'lucide-react';
+import { Loader, User } from 'lucide-react';
 
 export interface MessageListProps {
   messages: Message[];
-  isLoading: boolean;
+  isLoading: boolean;   
   currentUser: CustomUser | null;
   users: { [key: string]: CustomUser };
   className?: string;
 }
+
+const UserAvatar = ({ user }: { user: CustomUser }) => {
+  if (user.photoURL) {
+    return (
+      <div className="w-10 h-10 rounded-md overflow-hidden">
+        <img
+          src={user.photoURL}
+          alt={user.displayName || user.email || 'User avatar'}
+          className="w-full h-full object-cover"
+        />
+      </div>
+    );
+  }
+
+  // Fallback avatar with first letter of email or name
+  const initial = (user.displayName || user.email || '?')[0].toUpperCase();
+  
+  return (
+    <div className={`
+      ${layout.flex.center}
+      w-10 h-10 rounded-md
+      bg-blue-100 dark:bg-blue-900
+      text-blue-700 dark:text-blue-300
+      font-medium text-lg
+    `}>
+      {initial}
+    </div>
+  );
+};
+
+const DateSeparator = ({ date }: { date: Date }) => {
+  const formatDate = (date: Date) => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return 'Today';
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString('en-US', { 
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric'
+      });
+    }
+  };
+
+  return (
+    <div className={`
+      ${layout.flex.center}
+      relative py-4
+    `}>
+      <div className="absolute left-0 right-0 h-px bg-gray-200 dark:bg-gray-700" />
+      <span className={`
+        ${typography.small}
+        px-4 bg-gray-50 dark:bg-gray-800
+        text-gray-500 dark:text-gray-400
+        relative z-10
+      `}>
+        {formatDate(date)}
+      </span>
+    </div>
+  );
+};
 
 export default function MessageList({ 
   messages, 
@@ -54,76 +120,110 @@ export default function MessageList({
     );
   }
 
+  // Group messages by date and then by user
+  const groupedMessages = messages.reduce((groups: { [key: string]: Message[][] }, message) => {
+    const date = new Date(message.timestamp).toDateString();
+    
+    if (!groups[date]) {
+      groups[date] = [];
+    }
+
+    const dateGroups = groups[date];
+    const lastGroup = dateGroups[dateGroups.length - 1];
+    const lastMessage = lastGroup?.[lastGroup.length - 1];
+    
+    const shouldStartNewGroup = !lastMessage || 
+      lastMessage.userId !== message.userId ||
+      message.timestamp - lastMessage.timestamp > 5 * 60 * 1000; // 5 minutes gap
+
+    if (shouldStartNewGroup) {
+      dateGroups.push([message]);
+    } else {
+      lastGroup.push(message);
+    }
+    
+    return groups;
+  }, {});
+
   return (
     <div className={`
       flex-1 overflow-y-auto
       ${className}
     `}>
-      <div className="space-y-6">
-        {messages.map((message) => {
-          const isCurrentUser = message.userId === currentUser?.uid;
-          const sender = users[message.userId];
-          const senderName = sender?.displayName || sender?.email || 'Unknown User';
+      <div className="space-y-2">
+        {Object.entries(groupedMessages).map(([dateStr, dateGroups]) => (
+          <div key={dateStr}>
+            <DateSeparator date={new Date(dateStr)} />
+            
+            <div className="space-y-6 px-4">
+              {dateGroups.map((group, groupIndex) => {
+                const firstMessage = group[0];
+                const sender = users[firstMessage.userId];
+                const senderName = sender?.displayName || sender?.email || 'Unknown User';
 
-          return (
-            <div 
-              key={message.id}
-              className={`
-                flex items-end gap-2
-                ${isCurrentUser ? 'justify-end' : 'justify-start'}
-              `}
-            >
-              {/* Message Content */}
-              <div className={`
-                ${commonStyles.card}
-                ${isCurrentUser 
-                  ? 'bg-blue-500 text-white dark:bg-blue-600'
-                  : 'bg-white dark:bg-gray-700'
-                }
-                max-w-[70%] p-4 shadow-sm
-                ${animations.transition.normal}
-              `}>
-                {/* Sender Name */}
-                {!isCurrentUser && (
-                  <div className={`
-                    ${typography.small}
-                    font-medium mb-1
-                    ${isCurrentUser 
-                      ? 'text-blue-100' 
-                      : 'text-gray-600 dark:text-gray-300'
-                    }
-                  `}>
-                    {senderName}
+                return (
+                  <div key={groupIndex} className="flex items-start gap-3 group">
+                    {/* User Avatar */}
+                    <div className="flex-shrink-0 mt-1">
+                      {sender ? (
+                        <UserAvatar user={sender} />
+                      ) : (
+                        <div className={`
+                          ${layout.flex.center}
+                          w-10 h-10 rounded-md
+                          bg-gray-100 dark:bg-gray-700
+                        `}>
+                          <User className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Messages Content */}
+                    <div className="flex-1 min-w-0">
+                      {/* Sender Info */}
+                      <div className={`${layout.flex.start} gap-2`}>
+                        <span className={`
+                          ${typography.body}
+                          font-medium
+                          text-gray-900 dark:text-gray-100
+                        `}>
+                          {senderName}
+                        </span>
+                        <span className={`
+                          ${typography.small}
+                          text-gray-500 dark:text-gray-400
+                        `}>
+                          {new Date(firstMessage.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+
+                      {/* Messages */}
+                      <div className="space-y-1 mt-1">
+                        {group.map((message) => (
+                          <div 
+                            key={message.id}
+                            className={`
+                              ${typography.body}
+                              text-gray-900 dark:text-gray-100
+                              hover:bg-gray-50 dark:hover:bg-gray-750
+                              -mx-2 px-2 py-1 rounded
+                              ${animations.transition.normal}
+                            `}
+                          >
+                            {message.content}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                )}
-
-                {/* Message Text */}
-                <div className={`
-                  ${typography.body}
-                  whitespace-pre-wrap break-words
-                `}>
-                  {message.content}
-                </div>
-
-                {/* Timestamp */}
-                <div className={`
-                  ${typography.small}
-                  mt-2
-                  ${isCurrentUser 
-                    ? 'text-blue-100' 
-                    : 'text-gray-500 dark:text-gray-400'
-                  }
-                `}>
-                  {new Date(message.timestamp).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </div>
-              </div>
+                );
+              })}
             </div>
-          );
-        })}
-        {/* Scroll anchor */}
+          </div>
+        ))}
         <div ref={messagesEndRef} />
       </div>
     </div>

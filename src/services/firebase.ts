@@ -1,8 +1,8 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 import { getDatabase } from "firebase/database";
 import { getFunctions } from "firebase/functions";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -14,6 +14,14 @@ const firebaseConfig = {
   databaseURL: process.env.REACT_APP_FIREBASE_DATABASE_URL
 };
 
+const app = initializeApp(firebaseConfig);
+
+// Initialize services
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const database = getDatabase(app);
+export const functions = getFunctions(app);
+
 // Debug log the config (remove sensitive data in production)
 console.log('Firebase Config:', {
   projectId: firebaseConfig.projectId,
@@ -21,17 +29,11 @@ console.log('Firebase Config:', {
   databaseURL: firebaseConfig.databaseURL
 });
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const database = getDatabase(app);
-export const functions = getFunctions(app);
-export const db = getFirestore(app);
-
 // Verify initialization
 console.log('Firebase Services Initialized:', {
   auth: !!auth,
-  database: !!database,
   firestore: !!db,
+  database: !!database,
   functions: !!functions
 });
 

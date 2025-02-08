@@ -1,3 +1,5 @@
+import { animations } from './animations';
+
 export const theme = {
   colors: {
     // Dark mode colors
@@ -10,20 +12,20 @@ export const theme = {
         muted: '#6b7280', // Even more dimmed text
       },
       background: {
-        primary: '#0f1015', // Main background
-        secondary: '#1a1c23', // Secondary background
-        hover: '#2b2f44', // Hover state
+        primary: '#262b3d', // Main background
+        secondary: '#1e2132', // Secondary background (cards, etc)
+        hover: '#313a55', // Hover state
       },
-      border: '#2d3748',
+      border: '#374151',
     },
     // Light mode colors
     light: {
       primary: '#ffffff',
       secondary: '#f3f4f6',
       text: {
-        primary: '#111827',
-        secondary: '#4b5563',
-        muted: '#6b7280',
+        primary: '#111827',    // Almost black for primary text
+        secondary: '#374151',  // Dark gray for secondary text
+        muted: '#6B7280',     // Medium gray for muted text
       },
       background: {
         primary: '#ffffff',
@@ -77,35 +79,92 @@ export const theme = {
 };
 
 export const commonStyles = {
-  button: {
-    base: `
-      px-4 py-2 rounded-xl transition-colors duration-200
-      flex items-center gap-2 font-medium
+  layout: {
+    sidebar: `
+      w-64 h-full flex flex-col
+      bg-[#1e2132] dark:bg-[#1e2132]
+      border-r border-gray-700
     `,
-    primary: `
-      bg-[#1e2132] text-gray-100
-      hover:bg-[#2b2f44]
-      dark:bg-[#2b2f44] dark:hover:bg-[#363b54]
+    main: `
+      flex-1 
+      bg-[#262b3d] dark:bg-[#262b3d]
     `,
-    secondary: `
-      text-gray-700 hover:bg-[#1e2132] hover:text-gray-100
-      dark:text-gray-100 dark:hover:bg-[#2b2f44]
+    content: `
+      min-h-screen
+      bg-white dark:bg-[#262b3d]
+      p-6
     `,
   },
+
+  button: {
+    base: `
+      flex items-center gap-2 px-4 py-2 rounded-lg
+      font-medium
+      ${animations.transition.normal}
+      disabled:opacity-50 disabled:cursor-not-allowed
+    `,
+    primary: `
+      bg-[${theme.colors.dark.background.hover}] hover:bg-[${theme.colors.dark.secondary}]
+      text-white
+      shadow-sm
+    `,
+    secondary: `
+      bg-[${theme.colors.dark.background.hover}] hover:bg-[${theme.colors.dark.secondary}]
+      text-gray-200
+    `,
+  },
+
+  navLink: {
+    base: `
+      flex items-center p-2 rounded-lg
+      text-gray-400 hover:text-gray-200 hover:bg-[#313a55]
+    `,
+    active: `
+      bg-[#313a55] text-gray-200
+    `,
+  },
+
+  ticket: {
+    card: `
+      bg-white dark:bg-[${theme.colors.dark.background.secondary}]
+      border border-gray-200 dark:border-gray-700
+      rounded-lg p-4 mb-4
+      hover:bg-gray-50 dark:hover:bg-[${theme.colors.dark.background.hover}]
+      ${animations.transition.normal}
+    `,
+    priority: {
+      low: 'text-green-400',
+      medium: 'text-yellow-400',
+      high: 'text-red-400',
+    },
+    title: `
+      text-gray-900 dark:text-gray-200
+      font-medium text-base
+    `,
+    description: `
+      text-gray-700 dark:text-gray-300
+      text-sm mt-1
+    `,
+    metadata: `
+      text-gray-600 dark:text-gray-400
+      text-sm
+    `,
+  },
+
   card: `
-    bg-white dark:bg-[#1e2132]
+    bg-white dark:bg-gray-800
     border border-gray-200 dark:border-gray-700
-    rounded-xl shadow-sm
-    transition-all duration-200
+    rounded-lg shadow-sm
   `,
   input: `
-    w-full px-4 py-2
-    bg-white dark:bg-[#2b2f44]
+    w-full px-4 py-2 rounded-lg
+    bg-white dark:bg-gray-700
     border border-gray-200 dark:border-gray-600
-    rounded-xl
     text-gray-900 dark:text-gray-100
-    focus:outline-none focus:ring-2 focus:ring-blue-500
-    transition-colors duration-200
+    placeholder-gray-500 dark:placeholder-gray-400
+    focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400
+    focus:border-transparent
+    ${animations.transition.normal}
   `,
   modal: `
     bg-white dark:bg-[#1e2132]
@@ -130,9 +189,8 @@ export const commonStyles = {
   header: {
     wrapper: `
       sticky top-0 z-10
-      bg-white dark:bg-[#1e2132]
+      bg-gray-50 dark:bg-[${theme.colors.dark.background.primary}]
       border-b border-gray-200 dark:border-gray-700
-      backdrop-blur-sm bg-white/80 dark:bg-[#1e2132]/80
     `,
     container: `
       flex items-center justify-between
@@ -143,15 +201,26 @@ export const commonStyles = {
     `,
     title: `
       text-lg font-semibold
-      text-gray-900 dark:text-gray-100
+      text-gray-900 dark:text-gray-200
     `,
     subtitle: `
       text-sm
-      text-gray-500 dark:text-gray-400
-      mt-0.5
+      text-gray-600 dark:text-gray-400
     `,
     actions: `
       flex items-center gap-3
-    `
+    `,
   },
+};
+
+export const typography = {
+  brand: 'text-xl font-semibold text-gray-200',
+  sidebarHeader: 'text-lg font-semibold text-gray-200',
+  h1: 'text-xl font-semibold text-gray-900 dark:text-gray-200',
+  h2: 'text-lg font-semibold text-gray-900 dark:text-gray-200',
+  h3: 'text-base font-semibold text-gray-900 dark:text-gray-200',
+  h4: 'text-sm font-semibold text-gray-900 dark:text-gray-200',
+  body: 'text-gray-700 dark:text-gray-300',
+  small: 'text-sm text-gray-600 dark:text-gray-400',
+  subtitle: 'text-gray-600 dark:text-gray-400 text-sm',
 };

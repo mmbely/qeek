@@ -4,23 +4,27 @@ import { Hash, Plus, Sun, Moon, ListTodo, Kanban, MessageSquare, LayoutGrid, Log
 import { ScrollArea } from "../ui/scroll-area"
 import { Button } from "../ui/button"
 import { CustomUser } from '../../types/user'
+import { commonStyles } from '../../styles/theme'
+import { animations } from '../../styles/animations'
+import { typography } from '../../styles/theme'
 
 interface SidebarProps {
   user: CustomUser | null;
   channels: string[];
-  users: {[key: string]: CustomUser};
+  users: { [key: string]: CustomUser };
   currentChannel: string;
   isDarkMode: boolean;
   isMobileMenuOpen: boolean;
   setCurrentChannel: (channel: string) => void;
-  toggleDarkMode: () => void;
+  setIsMobileMenuOpen: (isOpen: boolean) => void;
   setIsDirectMessageModalOpen: (isOpen: boolean) => void;
   setIsCreateChannelModalOpen: (isOpen: boolean) => void;
-  handleStartDirectMessage: (userId: string) => void;
+  toggleDarkMode: () => void;
   handleLogout: () => void;
+  handleStartDirectMessage: (userId: string) => void;
 }
 
-export default function Sidebar({
+export function Sidebar({
   user,
   channels,
   users,
@@ -28,11 +32,12 @@ export default function Sidebar({
   isDarkMode,
   isMobileMenuOpen,
   setCurrentChannel,
-  toggleDarkMode,
+  setIsMobileMenuOpen,
   setIsDirectMessageModalOpen,
   setIsCreateChannelModalOpen,
+  toggleDarkMode,
+  handleLogout,
   handleStartDirectMessage,
-  handleLogout
 }: SidebarProps) {
   const location = useLocation();
   const currentPath = location.pathname;
@@ -44,18 +49,25 @@ export default function Sidebar({
   console.log('Users in Sidebar:', users);
 
   return (
-    <div className={`w-64 bg-gray-900 text-white h-screen flex flex-col ${isMobileMenuOpen ? 'flex' : 'hidden'} md:flex`}>
+    <div className={commonStyles.layout.sidebar}>
       <div className="p-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold">Qeek</h1>
-        <button onClick={toggleDarkMode} className="p-2 hover:bg-gray-700 rounded">
-          {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        <h1 className={typography.brand}>Qeek</h1>
+        <button
+          onClick={toggleDarkMode}
+          className="p-2 rounded-lg text-gray-300 hover:bg-[#313a55] transition-colors duration-200"
+        >
+          {isDarkMode ? (
+            <Sun className="w-5 h-5" />
+          ) : (
+            <Moon className="w-5 h-5" />
+          )}
         </button>
       </div>
 
-      <nav className="flex-1 p-4 space-y-8 overflow-y-auto">
+      <nav className="flex-1 p-4 space-y-8">
         {/* Tickets Section */}
         <div>
-          <h2 className="text-lg font-semibold mb-2">Tickets</h2>
+          <h2 className={typography.sidebarHeader}>Tickets</h2>
           <ul className="space-y-1">
             <li>
               <NavLink
@@ -89,7 +101,7 @@ export default function Sidebar({
         {/* Direct Messages Section */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <h2 className="text-lg font-semibold">Direct Messages</h2>
+            <h2 className={typography.sidebarHeader}>Direct Messages</h2>
             <button
               onClick={() => setIsDirectMessageModalOpen(true)}
               className="p-1 hover:bg-gray-700 rounded"
@@ -119,7 +131,7 @@ export default function Sidebar({
         {/* Channels Section */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <h2 className="text-lg font-semibold">Channels</h2>
+            <h2 className={typography.sidebarHeader}>Channels</h2>
             <button
               onClick={() => setIsCreateChannelModalOpen(true)}
               className="p-1 hover:bg-gray-700 rounded"
@@ -151,13 +163,14 @@ export default function Sidebar({
         </div>
       </nav>
 
-      <div className="p-4 border-t border-gray-700">
+      {/* Footer with only Sign Out now */}
+      <div className="border-t border-gray-700 p-4">
         <button
           onClick={handleLogout}
-          className="flex items-center p-2 rounded-lg text-gray-300 hover:bg-gray-700 w-full"
+          className="flex items-center w-full p-2 rounded-lg text-gray-300 hover:bg-[#313a55] transition-colors duration-200 gap-2"
         >
-          <LogOut className="h-5 w-5 mr-2" />
-          Logout
+          <LogOut className="w-5 h-5" />
+          <span>Sign Out</span>
         </button>
       </div>
     </div>

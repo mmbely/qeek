@@ -1,8 +1,8 @@
 export const animations = {
   transition: {
-    fast: 'transition-all duration-150',
-    normal: 'transition-all duration-200',
-    slow: 'transition-all duration-300',
+    normal: 'transition-all duration-200 ease-in-out',
+    fast: 'transition-all duration-150 ease-in-out',
+    slow: 'transition-all duration-300 ease-in-out',
   },
   hover: {
     scale: 'hover:scale-105',
@@ -10,11 +10,7 @@ export const animations = {
     glow: 'hover:shadow-lg',
   },
   fade: {
-    enter: 'transition-opacity duration-200 ease-in-out',
-    enterFrom: 'opacity-0',
-    enterTo: 'opacity-100',
-    leave: 'transition-opacity duration-150 ease-in-out',
-    leaveFrom: 'opacity-100',
-    leaveTo: 'opacity-0',
+    enter: 'animate-fade-in',
+    exit: 'animate-fade-out',
   },
 };
