@@ -1,166 +1,287 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { Ticket } from '../../types/ticket';
-import { Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { database } from '../../services/firebase';
+import { ref, get } from 'firebase/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { Plus } from 'lucide-react';
-import { ticketService } from '../../services/ticketService';
+import TicketModal from './TicketModal';
+import { Plus, AlertCircle } from 'lucide-react';
+import { theme, commonStyles, typography, layout, animations } from '../../styles';
 
 type BoardStatus = Exclude<Ticket['status'], 'BACKLOG'>;
 
-type TicketColumn = {
-  title: string;
-  tickets: Ticket[];
-};
+interface ColumnType {
+  [key: string]: {
+    title: string;
+    tickets: Ticket[];
+  };
+}
 
-type ColumnType = {
-  [K in BoardStatus]: TicketColumn;
-};
-
-export default function TicketBoard() {
+export function TicketBoard() {
+  const { user } = useAuth();
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [users, setUsers] = useState<{[key: string]: any}>({});
   const [columns, setColumns] = useState<ColumnType>({
     SELECTED_FOR_DEV: { title: 'Selected for Dev', tickets: [] },
     IN_PROGRESS: { title: 'In Progress', tickets: [] },
     READY_FOR_TESTING: { title: 'Ready for Testing', tickets: [] },
     DEPLOYED: { title: 'Deployed', tickets: [] },
   });
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  // Fetch users
   useEffect(() => {
-    const q = query(collection(db, 'tickets'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ticketsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Ticket[];
-      setTickets(ticketsData);
-      
-      // Reset columns before populating
-      const newColumns: ColumnType = {
-        SELECTED_FOR_DEV: { title: 'Selected for Dev', tickets: [] },
-        IN_PROGRESS: { title: 'In Progress', tickets: [] },
-        READY_FOR_TESTING: { title: 'Ready for Testing', tickets: [] },
-        DEPLOYED: { title: 'Deployed', tickets: [] },
-      };
-      
-      ticketsData
-        .filter(ticket => ticket.status !== 'BACKLOG')
-        .forEach(ticket => {
-          const status = ticket.status as BoardStatus;
-          if (status in newColumns) {
-            newColumns[status].tickets.push(ticket);
-          }
-        });
-      
-      setColumns(newColumns);
-    });
-    return () => unsubscribe();
+    const fetchUsers = async () => {
+      const usersRef = ref(database, 'users');
+      const snapshot = await get(usersRef);
+      if (snapshot.exists()) {
+        setUsers(snapshot.val());
+      }
+    };
+    fetchUsers();
   }, []);
 
-  const onDragEnd = async (result: DropResult) => {
-    const { source, destination, draggableId } = result;
+  // Fetch tickets and organize them into columns
+  useEffect(() => {
+    if (!user) return;
 
-    // If there's no destination or the item was dropped in its original location
-    if (!destination || 
-        (source.droppableId === destination.droppableId && 
-         source.index === destination.index)) {
+    const ticketsRef = collection(db, 'tickets');
+    const unsubscribe = onSnapshot(
+      query(ticketsRef),
+      (snapshot) => {
+        const ticketsData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          order: doc.data().order || 0, // Default order to 0 if not set
+        })) as Ticket[];
+
+        // Organize tickets into columns
+        const newColumns = {
+          SELECTED_FOR_DEV: { title: 'Selected for Dev', tickets: [] },
+          IN_PROGRESS: { title: 'In Progress', tickets: [] },
+          READY_FOR_TESTING: { title: 'Ready for Testing', tickets: [] },
+          DEPLOYED: { title: 'Deployed', tickets: [] },
+        } as ColumnType;
+
+        // Sort tickets by order within each status
+        ticketsData.forEach(ticket => {
+          if (ticket.status !== 'BACKLOG' && ticket.status in newColumns) {
+            newColumns[ticket.status as BoardStatus].tickets.push(ticket);
+          }
+        });
+
+        // Sort tickets in each column by order
+        Object.values(newColumns).forEach(column => {
+          column.tickets.sort((a, b) => (a.order || 0) - (b.order || 0));
+        });
+
+        setColumns(newColumns);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const getUserName = (userId: string) => {
+    const userInfo = users[userId];
+    return userInfo?.displayName || userInfo?.email || 'Unknown User';
+  };
+
+  const onDragEnd = async (result: DropResult) => {
+    const { destination, source, draggableId } = result;
+
+    if (!destination) return;
+
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    ) {
       return;
     }
 
     try {
-      // Update in Firestore
       const ticketRef = doc(db, 'tickets', draggableId);
-      await updateDoc(ticketRef, {
-        status: destination.droppableId as Ticket['status'],
-        updatedAt: Date.now()
-      });
+      const updates: any = {
+        status: destination.droppableId as BoardStatus,
+      };
 
-      console.log('Ticket updated successfully');
+      // If we're reordering within the same column, update the order
+      if (destination.droppableId === source.droppableId) {
+        const columnTickets = columns[destination.droppableId as BoardStatus].tickets;
+        const newOrder = Array.from(columnTickets);
+        const [movedTicket] = newOrder.splice(source.index, 1);
+        newOrder.splice(destination.index, 0, movedTicket);
+        
+        // Update order field for the moved ticket
+        updates.order = destination.index;
+        
+        // Update order for affected tickets
+        const batch = writeBatch(db);
+        newOrder.forEach((ticket, index) => {
+          if (ticket.id !== draggableId && ticket.order !== index) {
+            batch.update(doc(db, 'tickets', ticket.id!), { order: index });
+          }
+        });
+        
+        await batch.commit();
+      } else {
+        // If moving to a new column, set order to the destination index
+        updates.order = destination.index;
+      }
+
+      await updateDoc(ticketRef, updates);
     } catch (error) {
       console.error('Error updating ticket:', error);
     }
   };
 
+  const handleTicketClick = (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+  };
+
   return (
-    <div className="flex-1 bg-white dark:bg-gray-800">
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <div className="p-4 flex justify-between items-center">
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Tickets Board</h1>
-          <Link
-            to="/tickets/new"
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Ticket
-          </Link>
-        </div>
+    <div className={`${layout.container.fluid} py-6`}>
+      {/* Header */}
+      <div className={`${layout.flex.between} mb-8`}>
+        <h1 className={typography.h1}>Development Board</h1>
+        <button
+          onClick={() => setIsCreateModalOpen(true)}
+          className={`
+            ${commonStyles.button.base} 
+            ${commonStyles.button.primary}
+          `}
+        >
+          <Plus className="w-4 h-4" />
+          Create Ticket
+        </button>
       </div>
 
-      <div className="p-4">
-        <DragDropContext onDragEnd={onDragEnd}>
-          <div className="flex gap-4 overflow-x-auto pb-4">
-            {Object.entries(columns).map(([status, column]) => (
-              <div key={status} className="flex-1 min-w-[300px]">
-                <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
-                  <h3 className="font-medium text-gray-900 dark:text-white mb-4">
-                    {column.title} ({column.tickets.length})
-                  </h3>
-                  <Droppable droppableId={status}>
-                    {(provided, snapshot) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        className={`space-y-2 min-h-[200px] ${
-                          snapshot.isDraggingOver ? 'bg-gray-200 dark:bg-gray-600' : ''
-                        }`}
+      {/* Board */}
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className={`
+          ${layout.grid.cols4}
+          min-h-[calc(100vh-12rem)]
+          overflow-x-auto
+          gap-4 lg:gap-6
+        `}>
+          {Object.entries(columns).map(([status, column]) => (
+            <Droppable droppableId={status} key={status}>
+              {(provided, snapshot) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  className={`
+                    ${commonStyles.card}
+                    ${snapshot.isDraggingOver ? 'ring-2 ring-blue-500/20 bg-blue-50/50 dark:bg-blue-900/10' : ''}
+                    p-4
+                    ${animations.transition.normal}
+                  `}
+                >
+                  {/* Column Header */}
+                  <div className={`${layout.flex.between} mb-4`}>
+                    <h2 className={typography.h4}>{column.title}</h2>
+                    <span className={`
+                      px-2.5 py-0.5 rounded-full text-sm
+                      bg-gray-100 dark:bg-gray-700
+                      text-gray-600 dark:text-gray-300
+                    `}>
+                      {column.tickets.length}
+                    </span>
+                  </div>
+
+                  {/* Tickets */}
+                  <div className="space-y-3">
+                    {column.tickets.map((ticket, index) => (
+                      <Draggable
+                        key={ticket.id}
+                        draggableId={ticket.id!}
+                        index={index}
                       >
-                        {column.tickets.map((ticket, index) => (
-                          <Draggable
-                            key={ticket.id}
-                            draggableId={ticket.id || ''}
-                            index={index}
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            onClick={() => setSelectedTicket(ticket)}
+                            className={`
+                              ${commonStyles.card}
+                              ${snapshot.isDragging ? 'ring-2 ring-blue-500/20 shadow-lg' : ''}
+                              hover:shadow-md
+                              cursor-pointer
+                              p-4
+                            `}
                           >
-                            {(provided, snapshot) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`bg-white dark:bg-gray-800 p-4 rounded shadow-sm 
-                                  ${snapshot.isDragging ? 'shadow-lg' : 'hover:shadow-md'} 
-                                  transition-shadow`}
-                              >
-                                <Link to={`/tickets/${ticket.id}`}>
-                                  <h4 className="font-medium text-gray-900 dark:text-white">
-                                    {ticket.title}
-                                  </h4>
-                                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                    {ticket.description}
-                                  </p>
-                                  <div className="mt-2">
-                                    <span className={`px-2 py-1 text-xs font-medium rounded-full
-                                      ${ticket.priority === 'HIGH' ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' :
-                                      ticket.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100' :
-                                      'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'}`}
-                                    >
-                                      {ticket.priority}
-                                    </span>
-                                  </div>
-                                </Link>
+                            {/* Ticket Content */}
+                            <div className="space-y-2">
+                              <h3 className={typography.body}>{ticket.title}</h3>
+                              
+                              <div className={`${layout.flex.between} gap-2`}>
+                                {/* Priority Badge */}
+                                <span className={`
+                                  px-2 py-1 rounded-md text-xs font-medium
+                                  ${ticket.priority === 'high' 
+                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                    : ticket.priority === 'medium'
+                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                    : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                  }
+                                `}>
+                                  {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
+                                </span>
+
+                                {/* Assignee */}
+                                {ticket.assigneeId && (
+                                  <span className={`
+                                    ${typography.small}
+                                    truncate max-w-[150px]
+                                  `}>
+                                    {getUserName(ticket.assigneeId)}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                          </Draggable>
-                        ))}
-                        {provided.placeholder}
-                      </div>
-                    )}
-                  </Droppable>
+                            </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+
+                  {/* Empty State */}
+                  {column.tickets.length === 0 && (
+                    <div className={`
+                      ${layout.flex.center}
+                      flex-col gap-2 p-6
+                      text-gray-400 dark:text-gray-600
+                    `}>
+                      <AlertCircle className="w-5 h-5" />
+                      <p className={typography.small}>No tickets</p>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
-          </div>
-        </DragDropContext>
-      </div>
+              )}
+            </Droppable>
+          ))}
+        </div>
+      </DragDropContext>
+
+      {/* Modals */}
+      {selectedTicket && (
+        <TicketModal
+          ticket={selectedTicket}
+          isOpen={!!selectedTicket}
+          onClose={() => setSelectedTicket(null)}
+        />
+      )}
+      <TicketModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+      />
     </div>
   );
 }
+
+export default TicketBoard;

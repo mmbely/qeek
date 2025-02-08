@@ -1,39 +1,46 @@
 import { database, auth } from './firebase';
-import { ref, push, onChildAdded, off, get, set, query, orderByChild, startAt, endAt, limitToLast } from "firebase/database";
+import { ref, push, onChildAdded, off, get, set, query, orderByChild, startAt, endAt, limitToLast, onValue } from "firebase/database";
 import { CustomUser } from '../types/user';
 import { Message } from '../types/message';
 
-export const fetchUsers = async (companyId: string): Promise<{ [key: string]: CustomUser }> => {
-  try {
-    console.log("Fetching users for company:", companyId);
-    const user = auth.currentUser;
-    console.log("Current user:", user);
-    
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
+// Callback-based version for real-time updates
+export const subscribeToUsers = (callback: (users: { [key: string]: CustomUser }) => void) => {
+  const usersRef = ref(database, 'users');
+  
+  console.log('Setting up users subscription'); // Debug log
+  
+  const unsubscribe = onValue(usersRef, (snapshot) => {
+    console.log('Received users snapshot:', snapshot.val()); // Debug log
+    const users: { [key: string]: CustomUser } = {};
+    snapshot.forEach((childSnapshot) => {
+      const userId = childSnapshot.key;
+      const userData = childSnapshot.val();
+      if (userId) {
+        users[userId] = userData;
+      }
+    });
+    console.log('Processed users:', users); // Debug log
+    callback(users);
+  });
 
-    const usersRef = ref(database, 'users');
-    const snapshot = await get(usersRef);
-    
-    if (!snapshot.exists()) {
-      console.log("No users found");
-      return {};
-    }
-    
-    const users = snapshot.val();
-    console.log("Fetched users:", users);
-    return users;
-  } catch (error) {
-    console.error("Error fetching users:", error);
-    if (error instanceof Error) {
-      console.error("Error details:", error.stack);
-      throw new Error(`Failed to fetch users: ${error.message}`);
-    } else {
-      console.error("Unknown error object:", error);
-      throw new Error('An unknown error occurred while fetching users');
-    }
-  }
+  return () => {
+    console.log('Unsubscribing from users'); // Debug log
+    off(usersRef);
+    unsubscribe();
+  };
+};
+
+// Promise-based version for one-time fetches
+export const fetchUsers = async (companyId: string): Promise<{ [key: string]: CustomUser }> => {
+  const usersRef = ref(database, 'users');
+  const snapshot = await get(usersRef);
+  const users: { [key: string]: CustomUser } = {};
+  
+  snapshot.forEach((childSnapshot) => {
+    users[childSnapshot.key!] = childSnapshot.val();
+  });
+  
+  return users;
 };
 
 export const createUser = async (userId: string, userData: any) => {
@@ -48,37 +55,25 @@ export const createUser = async (userId: string, userData: any) => {
   }
 };
 
-export const fetchMessages = (
-  channelId: string,
-  callback: (message: Message) => void,
-  lastTimestamp: number | null = null
-) => {
+export const subscribeToMessages = (channelId: string, callback: (messages: Message[]) => void) => {
+  console.log('Setting up message subscription for channel:', channelId);
   const messagesRef = ref(database, `channels/${channelId}/messages`);
-  let messagesQuery;
-
-  if (lastTimestamp) {
-    // If we have a lastTimestamp, get messages after that timestamp
-    messagesQuery = query(
-      messagesRef,
-      orderByChild('timestamp'),
-      startAt(lastTimestamp + 1),
-      limitToLast(50) // Optional: limit the number of messages
-    );
-  } else {
-    // If no lastTimestamp, get the most recent messages
-    messagesQuery = query(
-      messagesRef,
-      orderByChild('timestamp'),
-      limitToLast(50) // Optional: limit the number of messages
-    );
-  }
-
-  const unsubscribe = onChildAdded(messagesQuery, (snapshot) => {
-    const message: Message = {
-      id: snapshot.key || '',
-      ...snapshot.val()
-    };
-    callback(message);
+  
+  const unsubscribe = onValue(messagesRef, (snapshot) => {
+    const messages: Message[] = [];
+    if (snapshot.exists()) {
+      snapshot.forEach((childSnapshot) => {
+        messages.push({
+          id: childSnapshot.key,
+          ...childSnapshot.val()
+        });
+      });
+      
+      // Sort messages by timestamp
+      messages.sort((a, b) => a.timestamp - b.timestamp);
+    }
+    console.log(`Received ${messages.length} messages for channel:`, channelId);
+    callback(messages);
   });
 
   return () => {
@@ -87,26 +82,11 @@ export const fetchMessages = (
   };
 };
 
-export const sendMessage = async (channelId: string, message: any) => {
-  try {
-    console.log(`Sending message to channel: ${channelId}`, message);
-    const messagesRef = ref(database, `channels/${channelId}/messages`);
-    
-    // Add participants for direct messages
-    const messageWithMetadata = {
-      ...message,
-      timestamp: Date.now(),
-      status: 'sent',
-      reactions: {},
-      participants: channelId.startsWith('dm_') ? channelId.split('_').slice(1) : []
-    };
-    
-    await push(messagesRef, messageWithMetadata);
-    console.log("Message sent successfully");
-  } catch (error) {
-    console.error("Error sending message:", error);
-    throw error;
-  }
+export const sendMessage = async (channelId: string, message: Omit<Message, 'id'>) => {
+  console.log('Sending message to channel:', channelId, message);
+  const messagesRef = ref(database, `channels/${channelId}/messages`);
+  const newMessageRef = push(messagesRef);
+  await set(newMessageRef, message);
 };
 
 export const updateMessage = async (channelId: string, messageId: string, updates: any) => {
@@ -173,7 +153,7 @@ export const subscribeToTyping = (channelId: string, callback: (typingUsers: {[k
 // Expose fetchUsers globally for testing
 (window as any).fetchUsers = fetchUsers;
 
-// Add this at the end of the file
+// Update the test functions
 (window as any).testFetchUsers = async (companyId: string) => {
   try {
     const users = await fetchUsers(companyId);

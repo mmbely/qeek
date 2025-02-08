@@ -1,126 +1,129 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ticketService } from '../../services/ticketService';
-import { useAuth } from '../../context/AuthContext';
-import { addDoc, collection } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import { Plus } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { Ticket } from '../../types/ticket';
 
 export default function TicketForm() {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('LOW');
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log('Form submitted'); // Debug log
-    
-    if (!user) {
-      console.error('No user found');
-      alert('You must be logged in to create a ticket');
-      return;
-    }
+    if (!user) return;
 
-    if (!title.trim()) {
-      console.error('Title is required');
-      alert('Title is required');
-      return;
-    }
+    setLoading(true);
+    setError(null);
 
     try {
-      console.log('Creating ticket...', { title, description, priority });
+      const formData = new FormData(e.currentTarget);
       
-      const newTicket = {
-        title,
-        description,
-        priority,
-        status: 'BACKLOG' as const,
+      // Get the current highest order in the BACKLOG status
+      const ticketsRef = collection(db, 'tickets');
+      const statusQuery = query(
+        ticketsRef, 
+        where('status', '==', 'BACKLOG')
+      );
+      const statusSnapshot = await getDocs(statusQuery);
+      const maxOrder = statusSnapshot.docs.reduce((max, doc) => 
+        Math.max(max, doc.data().order || 0), -1);
+
+      const ticketData: Omit<Ticket, 'id'> = {
+        title: formData.get('title') as string,
+        description: formData.get('description') as string,
+        status: 'BACKLOG',
+        priority: formData.get('priority') as Ticket['priority'],
+        createdBy: user.uid,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        assigneeId: user.uid
+        order: maxOrder + 1,
       };
 
-      await addDoc(collection(db, 'tickets'), newTicket);
+      await addDoc(collection(db, 'tickets'), ticketData);
       navigate('/tickets');
     } catch (error) {
+      setError('Failed to create ticket. Please try again.');
       console.error('Error creating ticket:', error);
-      alert('Failed to create ticket. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="flex-1 bg-white dark:bg-gray-800">
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <div className="p-4">
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Create New Ticket</h1>
-        </div>
-      </div>
+    <div className="max-w-2xl mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-6">Create New Ticket</h1>
       
-      <div className="max-w-3xl mx-auto p-4">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-              Title
-            </label>
-            <input
-              type="text"
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
-            />
-          </div>
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-              Description
-            </label>
-            <textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
-            />
-          </div>
-          <div>
-            <label htmlFor="priority" className="block text-sm font-medium text-gray-700">
-              Priority
-            </label>
-            <select
-              id="priority"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as 'LOW' | 'MEDIUM' | 'HIGH')}
-              className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
-            >
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-            </select>
-          </div>
-          <div className="flex justify-end space-x-2 pt-4">
-            <button
-              type="button"
-              onClick={() => {
-                console.log('Cancel clicked');
-                navigate('/tickets');
-              }}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              onClick={() => console.log('Submit button clicked')}
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
-            >
-              Create Ticket
-            </button>
-          </div>
-        </form>
-      </div>
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 text-red-600 rounded">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
+            Title
+          </label>
+          <input
+            type="text"
+            id="title"
+            name="title"
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Enter ticket title"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+            Description
+          </label>
+          <textarea
+            id="description"
+            name="description"
+            required
+            rows={4}
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Enter ticket description"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
+            Priority
+          </label>
+          <select
+            id="priority"
+            name="priority"
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+
+        <div className="flex justify-end space-x-2 pt-4">
+          <button
+            type="button"
+            onClick={() => navigate('/tickets')}
+            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded shadow-sm hover:bg-blue-700 transition-colors disabled:bg-blue-400"
+          >
+            {loading ? 'Creating...' : 'Create Ticket'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

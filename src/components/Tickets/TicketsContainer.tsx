@@ -1,27 +1,41 @@
 import React, { useState } from 'react';
 import TicketList from './TicketList';
-import TicketBoard from './TicketBoard';
+import { TicketBoard } from './TicketBoard';
 import TicketViewSwitch from './TicketViewSwitch';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 
-export default function TicketsContainer() {
-  const [view, setView] = useState<'list' | 'board'>('list');
+type ViewType = 'list' | 'board';
+
+export function TicketsContainer() {
+  const [view, setView] = useState<ViewType>('list');
 
   return (
-    <div className="flex-1 bg-white dark:bg-gray-800">
+    <div className="flex flex-col h-full">
       <div className="border-b border-gray-200 dark:border-gray-700">
-        <div className="p-4 flex justify-between items-center">
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Tickets</h1>
-          <div className="flex items-center space-x-4">
-            <TicketViewSwitch view={view} onViewChange={setView} />
-            <Link
-              to="/tickets/new"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        <div className="p-4 flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Tickets</h1>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setView('list')}
+              className={`px-4 py-2 rounded-lg ${
+                view === 'list' 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+              }`}
             >
-              <Plus className="h-4 w-4 mr-2" />
-              New Ticket
-            </Link>
+              List
+            </button>
+            <button
+              onClick={() => setView('board')}
+              className={`px-4 py-2 rounded-lg ${
+                view === 'board' 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+              }`}
+            >
+              Board
+            </button>
           </div>
         </div>
       </div>

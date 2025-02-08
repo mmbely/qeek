@@ -1,154 +1,179 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, orderBy, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, orderBy } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { Ticket } from '../../types/ticket';
-import { Link } from 'react-router-dom';
-import { Plus, ArrowRight } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { Plus, AlertCircle } from 'lucide-react';
+import TicketModal from './TicketModal';
+import { theme, commonStyles, typography, layout, animations } from '../../styles';
 
-const getStatusStyle = (status: Ticket['status']) => {
-  switch (status) {
-    case 'DEPLOYED':
-      return 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100';
-    case 'READY_FOR_TESTING':
-      return 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100';
-    case 'IN_PROGRESS':
-      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100';
-    case 'SELECTED_FOR_DEV':
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100';
-    case 'BACKLOG':
-    default:
-      return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100';
-  }
-};
+interface TicketListProps {
+  showHeader?: boolean;
+}
 
-export default function TicketList({ showHeader = true }: { showHeader?: boolean }) {
+export function TicketList({ showHeader = true }: TicketListProps) {
+  const { user } = useAuth();
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   useEffect(() => {
-    // First, get tickets without ordering while index builds
-    const simpleQuery = query(
-      collection(db, 'tickets'),
-      where('status', '==', 'BACKLOG')
-    );
-    
-    const unsubscribe = onSnapshot(
-      simpleQuery,
-      (snapshot) => {
-        const ticketsData = snapshot.docs
-          .map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })) as Ticket[];
-        
-        // Sort locally until index is ready
-        ticketsData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-        
-        setTickets(ticketsData);
-        setLoading(false);
-        setError(null);
-      },
-      (error) => {
-        console.error('Error fetching tickets:', error);
-        setError('Error loading tickets. Please try again later.');
-        setLoading(false);
-      }
-    );
-    
-    return () => unsubscribe();
-  }, []);
+    if (!user) return;
 
-  const handleMoveToDev = async (ticketId: string) => {
-    try {
-      const ticketRef = doc(db, 'tickets', ticketId);
-      await updateDoc(ticketRef, {
-        status: 'SELECTED_FOR_DEV',
-        updatedAt: Date.now()
+    const ticketsRef = collection(db, 'tickets');
+    const q = query(
+      ticketsRef,
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const ticketsData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        console.log('Ticket data:', data);
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toMillis?.() || data.createdAt,
+          updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt,
+        } as Ticket;
       });
-    } catch (error) {
-      console.error('Error moving ticket to development:', error);
-      alert('Failed to move ticket to development. Please try again.');
-    }
-  };
+      
+      console.log('All tickets:', ticketsData);
+      
+      const backlogTickets = ticketsData.filter(ticket => ticket.status === 'BACKLOG');
+      console.log('Backlog tickets:', backlogTickets);
+      
+      setTickets(backlogTickets);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   return (
-    <div className="flex-1 bg-white dark:bg-gray-800">
+    <div className={`${layout.container.fluid} py-6`}>
+      {/* Header */}
       {showHeader && (
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <div className="p-4 flex justify-between items-center">
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Backlog</h1>
-            <Link
-              to="/tickets/new"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              New Ticket
-            </Link>
-          </div>
+        <div className={`${layout.flex.between} mb-8`}>
+          <h1 className={typography.h1}>Backlog</h1>
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className={`
+              ${commonStyles.button.base} 
+              ${commonStyles.button.primary}
+            `}
+          >
+            <Plus className="w-4 h-4" />
+            Create Ticket
+          </button>
         </div>
       )}
-      
-      <div className="p-4">
-        {loading ? (
-          <div className="text-center py-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">Loading tickets...</p>
-          </div>
-        ) : error ? (
-          <div className="text-center py-4 text-red-600 dark:text-red-400">
-            {error}
-          </div>
-        ) : tickets.length === 0 ? (
-          <div className="text-center py-4 text-gray-600 dark:text-gray-400">
-            No tickets in backlog. Create a new ticket to get started.
-          </div>
-        ) : (
-          <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
-            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-              {tickets.map((ticket) => (
-                <li key={ticket.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <div className="px-4 py-4 sm:px-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0 pr-4">
-                        <Link to={`/tickets/${ticket.id}`} className="block">
-                          <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
-                            {ticket.title}
-                          </p>
-                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                            {ticket.description}
-                          </p>
-                        </Link>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <div className="flex items-center space-x-2">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusStyle(ticket.status)}`}>
-                            {ticket.status}
-                          </span>
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
-                            ${ticket.priority === 'HIGH' ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' :
-                            ticket.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100' :
-                            'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'}`}
-                          >
-                            {ticket.priority}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => ticket.id && handleMoveToDev(ticket.id)}
-                          className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                        >
-                          <ArrowRight className="h-4 w-4 mr-1" />
-                          Move to Dev
-                        </button>
-                      </div>
-                    </div>
+
+      {/* Tickets List */}
+      <div className="space-y-4">
+        {tickets.length > 0 ? (
+          tickets.map((ticket) => (
+            <div
+              key={ticket.id}
+              onClick={() => setSelectedTicket(ticket)}
+              className={`
+                ${commonStyles.card}
+                ${animations.transition.normal}
+                hover:shadow-md cursor-pointer
+                p-4 sm:p-6
+              `}
+            >
+              <div className="space-y-4">
+                {/* Title and Priority */}
+                <div className={layout.flex.between}>
+                  <h2 className={typography.h4}>{ticket.title}</h2>
+                  <span className={`
+                    px-2.5 py-1 rounded-full text-sm font-medium
+                    ${ticket.priority === 'high' 
+                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                      : ticket.priority === 'medium'
+                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                      : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                    }
+                  `}>
+                    {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
+                  </span>
+                </div>
+
+                {/* Description */}
+                <p className={`
+                  ${typography.body}
+                  line-clamp-2
+                `}>
+                  {ticket.description}
+                </p>
+
+                {/* Metadata */}
+                <div className={`
+                  ${layout.flex.between}
+                  pt-4 border-t border-gray-200 dark:border-gray-700
+                `}>
+                  <div className="flex items-center gap-4">
+                    {ticket.assigneeId && (
+                      <span className={typography.small}>
+                        Assigned to: {ticket.assigneeId}
+                      </span>
+                    )}
+                    <span className={typography.small}>
+                      Created: {new Date(ticket.createdAt).toLocaleDateString()}
+                    </span>
                   </div>
-                </li>
-              ))}
-            </ul>
+                  {ticket.updatedAt && (
+                    <span className={typography.small}>
+                      Updated: {new Date(ticket.updatedAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          // Empty State
+          <div className={`
+            ${commonStyles.card}
+            ${layout.flex.center}
+            flex-col gap-3 p-12
+          `}>
+            <AlertCircle className="w-8 h-8 text-gray-400 dark:text-gray-600" />
+            <div className="text-center">
+              <h3 className={`${typography.h4} mb-1`}>No tickets found</h3>
+              <p className={typography.small}>
+                Create a new ticket to get started
+              </p>
+            </div>
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className={`
+                ${commonStyles.button.base} 
+                ${commonStyles.button.primary}
+                mt-4
+              `}
+            >
+              <Plus className="w-4 h-4" />
+              Create Ticket
+            </button>
           </div>
         )}
       </div>
+
+      {/* Modals */}
+      {selectedTicket && (
+        <TicketModal
+          ticket={selectedTicket}
+          isOpen={!!selectedTicket}
+          onClose={() => setSelectedTicket(null)}
+        />
+      )}
+      <TicketModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+      />
     </div>
   );
 }
+
+export default TicketList;

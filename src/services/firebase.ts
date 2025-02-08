@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 import { getFunctions } from "firebase/functions";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -34,3 +34,11 @@ console.log('Firebase Services Initialized:', {
   firestore: !!db,
   functions: !!functions
 });
+
+// Log Firestore initialization
+console.log('Firestore initialized:', !!db);
+
+// If you're using emulators, uncomment this:
+// if (process.env.NODE_ENV === 'development') {
+//   connectFirestoreEmulator(db, 'localhost', 8080);
+// }
