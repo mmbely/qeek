@@ -146,10 +146,7 @@ export default function MessageList({
   }, {});
 
   return (
-    <div className={`
-      flex-1 overflow-y-auto
-      ${className}
-    `}>
+    <div className="flex-1 overflow-y-auto">
       <div className="space-y-2">
         {Object.entries(groupedMessages).map(([dateStr, dateGroups]) => (
           <div key={dateStr}>

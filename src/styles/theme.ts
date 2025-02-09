@@ -189,7 +189,7 @@ export const commonStyles = {
   header: {
     wrapper: `
       sticky top-0 z-10
-      bg-gray-50 dark:bg-[${theme.colors.dark.background.primary}]
+      bg-gray-100 dark:bg-[${theme.colors.dark.background.primary}]
       border-b border-gray-200 dark:border-gray-700
     `,
     container: `
@@ -216,6 +216,7 @@ export const commonStyles = {
 export const typography = {
   brand: 'text-xl font-semibold text-gray-200',
   sidebarHeader: 'text-lg font-semibold text-gray-200',
+  sectionHeader: 'text-sm font-medium text-gray-900 dark:text-gray-200 mb-4',
   h1: 'text-xl font-semibold text-gray-900 dark:text-gray-200',
   h2: 'text-lg font-semibold text-gray-900 dark:text-gray-200',
   h3: 'text-base font-semibold text-gray-900 dark:text-gray-200',

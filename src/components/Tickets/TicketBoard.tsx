@@ -9,27 +9,58 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import TicketModal from './TicketModal';
 import { Plus, AlertCircle } from 'lucide-react';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
-import ChatHeader from '../Chat/ChatHeader';
 
-type BoardStatus = Exclude<Ticket['status'], 'BACKLOG'>;
+import { TicketStatus } from '../../types/ticket';
+
+type BoardStatus = Extract<TicketStatus, 'SELECTED_FOR_DEV' | 'IN_PROGRESS' | 'READY_FOR_TESTING' | 'DEPLOYED'>;
+type BacklogStatus = Extract<TicketStatus, 'BACKLOG_ICEBOX' | 'BACKLOG_NEW' | 'BACKLOG_REFINED' | 'BACKLOG_DEV_NEXT'>;
+type BoardMode = 'development' | 'backlog';
 
 interface ColumnType {
-  [key: string]: {
-    title: string;
-    tickets: Ticket[];
-  };
+  title: string;
+  tickets: Ticket[];
 }
 
-export function TicketBoard() {
+interface TicketBoardProps {
+  mode?: BoardMode;
+}
+
+const developmentColumns: Record<BoardStatus, ColumnType> = {
+  'SELECTED_FOR_DEV': { title: 'Selected', tickets: [] },
+  'IN_PROGRESS': { title: 'In Progress', tickets: [] },
+  'READY_FOR_TESTING': { title: 'Testing', tickets: [] },
+  'DEPLOYED': { title: 'Deployed', tickets: [] },
+};
+
+const backlogColumns: Record<BacklogStatus, ColumnType> = {
+  'BACKLOG_ICEBOX': { title: 'Icebox', tickets: [] },
+  'BACKLOG_NEW': { title: 'New', tickets: [] },
+  'BACKLOG_REFINED': { title: 'Refined', tickets: [] },
+  'BACKLOG_DEV_NEXT': { title: 'Dev Next', tickets: [] },
+};
+
+export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   const { user } = useAuth();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [users, setUsers] = useState<{[key: string]: any}>({});
-  const [columns, setColumns] = useState<ColumnType>({
-    SELECTED_FOR_DEV: { title: 'Selected for Dev', tickets: [] },
-    IN_PROGRESS: { title: 'In Progress', tickets: [] },
-    READY_FOR_TESTING: { title: 'Ready for Testing', tickets: [] },
-    DEPLOYED: { title: 'Deployed', tickets: [] },
+  const [columns, setColumns] = useState<typeof developmentColumns | typeof backlogColumns>(() => {
+    // Initialize with fresh column objects
+    if (mode === 'development') {
+      return Object.keys(developmentColumns).reduce((acc, key) => ({
+        ...acc,
+        [key]: { ...developmentColumns[key as BoardStatus], tickets: [] }
+      }), {} as typeof developmentColumns);
+    } else {
+      return Object.keys(backlogColumns).reduce((acc, key) => ({
+        ...acc,
+        [key]: { ...backlogColumns[key as BacklogStatus], tickets: [] }
+      }), {} as typeof backlogColumns);
+    }
   });
+  const title = mode === 'development' ? 'Development Board' : 'Backlog Board';
+  const subtitle = mode === 'development' 
+    ? "Manage your team's tickets"
+    : 'Manage your upcoming tickets';
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
@@ -56,35 +87,58 @@ export function TicketBoard() {
         const ticketsData = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
-          order: doc.data().order || 0, // Default order to 0 if not set
+          order: doc.data().order || 0,
         })) as Ticket[];
 
-        // Organize tickets into columns
-        const newColumns = {
-          SELECTED_FOR_DEV: { title: 'Selected for Dev', tickets: [] },
-          IN_PROGRESS: { title: 'In Progress', tickets: [] },
-          READY_FOR_TESTING: { title: 'Ready for Testing', tickets: [] },
-          DEPLOYED: { title: 'Deployed', tickets: [] },
-        } as ColumnType;
+        // Create a map to track processed tickets
+        const processedTickets = new Map<string, boolean>();
+        
+        // Sort tickets first
+        const sortedTickets = [...ticketsData].sort((a, b) => (a.order || 0) - (b.order || 0));
 
-        // Sort tickets by order within each status
-        ticketsData.forEach(ticket => {
-          if (ticket.status !== 'BACKLOG' && ticket.status in newColumns) {
-            newColumns[ticket.status as BoardStatus].tickets.push(ticket);
+        // Create fresh columns with empty ticket arrays
+        const newColumns = mode === 'development'
+          ? Object.keys(developmentColumns).reduce((acc, key) => ({
+              ...acc,
+              [key]: { ...developmentColumns[key as BoardStatus], tickets: [] }
+            }), {} as typeof developmentColumns)
+          : Object.keys(backlogColumns).reduce((acc, key) => ({
+              ...acc,
+              [key]: { ...backlogColumns[key as BacklogStatus], tickets: [] }
+            }), {} as typeof backlogColumns);
+
+        // Create a map of tickets by status
+        const ticketsByStatus = sortedTickets.reduce((acc, ticket) => {
+          const status = ticket.status as BoardStatus | BacklogStatus;
+          if (!acc[status]) {
+            acc[status] = [];
           }
-        });
+          acc[status].push({...ticket});
+          return acc;
+        }, {} as Record<string, Ticket[]>);
 
-        // Sort tickets in each column by order
-        Object.values(newColumns).forEach(column => {
-          column.tickets.sort((a, b) => (a.order || 0) - (b.order || 0));
-        });
+        // Distribute tickets to appropriate columns
+        if (mode === 'development') {
+          Object.keys(developmentColumns).forEach(status => {
+            if (ticketsByStatus[status]) {
+              (newColumns as typeof developmentColumns)[status as BoardStatus].tickets = ticketsByStatus[status];
+            }
+          });
+        } else {
+          Object.keys(backlogColumns).forEach(status => {
+            if (ticketsByStatus[status]) {
+              (newColumns as typeof backlogColumns)[status as BacklogStatus].tickets = ticketsByStatus[status];
+            }
+          });
+        }
 
+        setTickets(ticketsData);
         setColumns(newColumns);
       }
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, mode]);
 
   const getUserName = (userId: string) => {
     const userInfo = users[userId];
@@ -104,36 +158,101 @@ export function TicketBoard() {
     }
 
     try {
-      const ticketRef = doc(db, 'tickets', draggableId);
-      const updates: any = {
-        status: destination.droppableId as BoardStatus,
-      };
+      // Type the statuses based on the current mode
+      const sourceStatus = mode === 'development'
+        ? source.droppableId as BoardStatus
+        : source.droppableId as BacklogStatus;
+      
+      const destStatus = mode === 'development'
+        ? destination.droppableId as BoardStatus
+        : destination.droppableId as BacklogStatus;
 
-      // If we're reordering within the same column, update the order
-      if (destination.droppableId === source.droppableId) {
-        const columnTickets = columns[destination.droppableId as BoardStatus].tickets;
-        const newOrder = Array.from(columnTickets);
-        const [movedTicket] = newOrder.splice(source.index, 1);
-        newOrder.splice(destination.index, 0, movedTicket);
-        
-        // Update order field for the moved ticket
-        updates.order = destination.index;
-        
-        // Update order for affected tickets
-        const batch = writeBatch(db);
-        newOrder.forEach((ticket, index) => {
-          if (ticket.id !== draggableId && ticket.order !== index) {
-            batch.update(doc(db, 'tickets', ticket.id!), { order: index });
-          }
-        });
-        
-        await batch.commit();
-      } else {
-        // If moving to a new column, set order to the destination index
-        updates.order = destination.index;
+      // Validate status based on mode
+      const isValidMove = mode === 'development'
+        ? sourceStatus in developmentColumns && destStatus in developmentColumns
+        : sourceStatus in backlogColumns && destStatus in backlogColumns;
+
+      if (!isValidMove) {
+        console.error('Invalid status for current mode');
+        return;
       }
 
-      await updateDoc(ticketRef, updates);
+      // Find the moved ticket
+      const movedTicket = tickets.find(t => t.id === draggableId);
+      if (!movedTicket || !movedTicket.id) return;
+
+      // Create a batch for all updates
+      const batch = writeBatch(db);
+      const ticketRef = doc(db, 'tickets', movedTicket.id);
+
+      if (sourceStatus === destStatus) {
+        // Reordering within the same column
+        const columnTickets = [...tickets]
+          .filter(t => t.status === sourceStatus)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+        // Update moved ticket's order
+        batch.update(ticketRef, {
+          order: destination.index,
+        });
+
+        // Update orders for affected tickets
+        if (destination.index < source.index) {
+          // Moving up: increment orders of tickets between new and old position
+          columnTickets.forEach((ticket, index) => {
+            if (ticket.id && ticket.id !== draggableId && 
+                index >= destination.index && index < source.index) {
+              const ref = doc(db, 'tickets', ticket.id);
+              batch.update(ref, { order: index + 1 });
+            }
+          });
+        } else {
+          // Moving down: decrement orders of tickets between old and new position
+          columnTickets.forEach((ticket, index) => {
+            if (ticket.id && ticket.id !== draggableId && 
+                index > source.index && index <= destination.index) {
+              const ref = doc(db, 'tickets', ticket.id);
+              batch.update(ref, { order: index - 1 });
+            }
+          });
+        }
+      } else {
+        // Moving between columns
+        const destColumnTickets = [...tickets]
+          .filter(t => t.status === destStatus)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+        // Update moved ticket
+        batch.update(ticketRef, {
+          status: destStatus,
+          order: destination.index,
+        });
+
+        // Insert ticket at new position
+        destColumnTickets.splice(destination.index, 0, { id: draggableId } as Ticket);
+
+        // Update orders for destination column
+        destColumnTickets.forEach((ticket, index) => {
+          if (ticket.id && ticket.id !== draggableId) {
+            const ref = doc(db, 'tickets', ticket.id);
+            batch.update(ref, { order: index });
+          }
+        });
+
+        // Update orders for source column
+        const sourceColumnTickets = [...tickets]
+          .filter(t => t.status === sourceStatus && t.id !== draggableId)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+        sourceColumnTickets.forEach((ticket, index) => {
+          if (ticket.id) {
+            const ref = doc(db, 'tickets', ticket.id);
+            batch.update(ref, { order: index });
+          }
+        });
+      }
+
+      await batch.commit();
     } catch (error) {
       console.error('Error updating ticket:', error);
     }
@@ -148,22 +267,26 @@ export function TicketBoard() {
       flex flex-col h-full
       bg-white dark:bg-[${theme.colors.dark.background.primary}]
     `}>
-      <ChatHeader
-        title="Development Board"
-        subtitle="Manage your team's tickets"
-        actions={
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className={`
-              ${commonStyles.button.base} 
-              ${commonStyles.button.primary}
-            `}
-          >
-            <Plus className="w-4 h-4" />
-            Create Ticket
-          </button>
-        }
-      />
+      <header className={commonStyles.header.wrapper}>
+        <div className={commonStyles.header.container}>
+          <div className={commonStyles.header.titleWrapper}>
+            <h2 className={commonStyles.header.title}>{title}</h2>
+            <p className={commonStyles.header.subtitle}>{subtitle}</p>
+          </div>
+          <div className={commonStyles.header.actions}>
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className={`
+                ${commonStyles.button.base} 
+                ${commonStyles.button.primary}
+              `}
+            >
+              <Plus className="w-4 h-4" />
+              Create Ticket
+            </button>
+          </div>
+        </div>
+      </header>
 
       {/* Board */}
       <DragDropContext onDragEnd={onDragEnd}>

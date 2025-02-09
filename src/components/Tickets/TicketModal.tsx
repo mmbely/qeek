@@ -19,7 +19,7 @@ export default function TicketModal({ ticket, isOpen, onClose }: TicketModalProp
   const [title, setTitle] = useState(ticket?.title || '');
   const [description, setDescription] = useState(ticket?.description || '');
   const [priority, setPriority] = useState<Ticket['priority']>(ticket?.priority || 'low');
-  const [status, setStatus] = useState<Ticket['status']>(ticket?.status || 'BACKLOG');
+  const [status, setStatus] = useState<Ticket['status']>(ticket?.status || 'BACKLOG_NEW');
   const [assigneeId, setAssigneeId] = useState(ticket?.assigneeId || '');
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<{[key: string]: any}>({});
@@ -40,7 +40,7 @@ export default function TicketModal({ ticket, isOpen, onClose }: TicketModalProp
     setTitle(ticket?.title || '');
     setDescription(ticket?.description || '');
     setPriority(ticket?.priority || 'low');
-    setStatus(ticket?.status || 'BACKLOG');
+    setStatus(ticket?.status || 'BACKLOG_NEW');
     setAssigneeId(ticket?.assigneeId || '');
   }, [ticket]);
 
@@ -175,11 +175,20 @@ export default function TicketModal({ ticket, isOpen, onClose }: TicketModalProp
                 onChange={(e) => setStatus(e.target.value as Ticket['status'])}
                 className={commonStyles.input}
               >
-                <option value="BACKLOG">Backlog</option>
-                <option value="SELECTED_FOR_DEV">Selected for Dev</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="READY_FOR_TESTING">Ready for Testing</option>
-                <option value="DEPLOYED">Deployed</option>
+                {/* Backlog Statuses */}
+                <optgroup label="Backlog">
+                  <option value="BACKLOG_ICEBOX">Icebox</option>
+                  <option value="BACKLOG_NEW">New</option>
+                  <option value="BACKLOG_REFINED">Refined</option>
+                  <option value="BACKLOG_DEV_NEXT">Dev Next</option>
+                </optgroup>
+                {/* Development Statuses */}
+                <optgroup label="Development">
+                  <option value="SELECTED_FOR_DEV">Selected for Dev</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="READY_FOR_TESTING">Ready for Testing</option>
+                  <option value="DEPLOYED">Deployed</option>
+                </optgroup>
               </select>
             </div>
 

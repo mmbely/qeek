@@ -38,12 +38,13 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/chat" replace />} />
+            <Route index element={<Navigate to="/tickets/board" replace />} />
             <Route path="/chat" element={<ChatInterface />} />
             <Route path="/chat/dm/:userId" element={<ChatInterface />} />
             <Route path="/tickets" element={<TicketList />} />
-            <Route path="/tickets/backlog" element={<TicketList />} />
-            <Route path="/tickets/board" element={<TicketBoard />} />
+            <Route path="/tickets/backlog" element={<TicketBoard mode="backlog" />} />
+            <Route path="/tickets/board" element={<TicketBoard mode="development" />} />
+            <Route path="/tickets/all" element={<TicketList />} />
             <Route path="/tickets/new" element={<TicketForm />} />
           </Route>
         </Routes>

@@ -1,54 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { collection, query, onSnapshot, where, orderBy } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { Ticket } from '../../types/ticket';
 import { useAuth } from '../../context/AuthContext';
-import { Plus, AlertCircle } from 'lucide-react';
+import { Plus, AlertCircle, ArrowRight } from 'lucide-react';
 import TicketModal from './TicketModal';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
-import ChatHeader from '../Chat/ChatHeader';
+import { useTickets } from '../../hooks/useTickets';
 
 interface TicketListProps {
   showHeader?: boolean;
 }
 
 export function TicketList({ showHeader = true }: TicketListProps) {
-  const { user } = useAuth();
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const { getTickets, updateTicket } = useTickets();
+  const { user } = useAuth();
+
+  const fetchTickets = useCallback(async () => {
+    const allTickets = await getTickets();
+    setTickets(allTickets);
+  }, [getTickets]);
 
   useEffect(() => {
-    if (!user) return;
-
-    const ticketsRef = collection(db, 'tickets');
-    const q = query(
-      ticketsRef,
-      orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ticketsData = snapshot.docs.map(doc => {
-        const data = doc.data();
-        console.log('Ticket data:', data);
-        return {
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt?.toMillis?.() || data.createdAt,
-          updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt,
-        } as Ticket;
-      });
-      
-      console.log('All tickets:', ticketsData);
-      
-      const backlogTickets = ticketsData.filter(ticket => ticket.status === 'BACKLOG');
-      console.log('Backlog tickets:', backlogTickets);
-      
-      setTickets(backlogTickets);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
+    fetchTickets();
+  }, [fetchTickets]);
 
   return (
     <div className={`
@@ -56,114 +34,62 @@ export function TicketList({ showHeader = true }: TicketListProps) {
       bg-white dark:bg-[${theme.colors.dark.background.primary}]
     `}>
       {showHeader && (
-        <ChatHeader
-          title="Backlog"
-          subtitle="Manage your upcoming tickets"
-          actions={
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className={`
-                ${commonStyles.button.base} 
-                ${commonStyles.button.primary}
-              `}
-            >
-              <Plus className="w-4 h-4" />
-              Create Ticket
-            </button>
-          }
-        />
+        <header className={commonStyles.header.wrapper}>
+          <div className={commonStyles.header.container}>
+            <div className={commonStyles.header.titleWrapper}>
+              <h2 className={commonStyles.header.title}>All Tickets</h2>
+              <p className={commonStyles.header.subtitle}>All tickets in a list</p>
+            </div>
+            <div className={commonStyles.header.actions}>
+              <button
+                onClick={() => setIsCreateModalOpen(true)}
+                className={`
+                  ${commonStyles.button.base} 
+                  ${commonStyles.button.primary}
+                `}
+              >
+                <Plus className="w-4 h-4" />
+                Create Ticket
+              </button>
+            </div>
+          </div>
+        </header>
       )}
 
-      {/* Tickets List */}
-      <div className="flex-1 p-6 space-y-4 overflow-y-auto">
+      <div className="p-6">
         {tickets.length > 0 ? (
-          tickets.map((ticket) => (
-            <div
-              key={ticket.id}
-              onClick={() => setSelectedTicket(ticket)}
-              className={`
-                ${commonStyles.ticket.card}
-              `}
-            >
-              <div className="space-y-4">
-                {/* Title and Priority */}
-                <div className={layout.flex.between}>
-                  <h2 className={typography.h4}>{ticket.title}</h2>
-                  <span className={`
-                    px-2.5 py-1 rounded-full text-sm font-medium
-                    ${ticket.priority === 'high' 
-                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                      : ticket.priority === 'medium'
-                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                      : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                    }
-                  `}>
-                    {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
-                  </span>
-                </div>
-
-                {/* Description */}
-                <p className={`
-                  ${typography.body}
-                  line-clamp-2
-                `}>
-                  {ticket.description}
-                </p>
-
-                {/* Metadata */}
-                <div className={`
-                  ${layout.flex.between}
-                  pt-4 border-t border-gray-200 dark:border-gray-700
-                `}>
-                  <div className="flex items-center gap-4">
-                    {ticket.assigneeId && (
-                      <span className={typography.small}>
-                        Assigned to: {ticket.assigneeId}
-                      </span>
-                    )}
-                    <span className={typography.small}>
-                      Created: {new Date(ticket.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  {ticket.updatedAt && (
-                    <span className={typography.small}>
-                      Updated: {new Date(ticket.updatedAt).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))
+          <table className="w-full">
+            <thead>
+              <tr>
+                <th className="text-left">Title</th>
+                <th className="text-left">Description</th>
+                <th className="text-left">Priority</th>
+                <th className="text-left">Assignee</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tickets.map((ticket) => (
+                <tr key={ticket.id} onClick={() => setSelectedTicket(ticket)} className="hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                  <td>{ticket.title}</td>
+                  <td>{ticket.description}</td>
+                  <td>{ticket.priority}</td>
+                  <td>{ticket.assigneeId}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         ) : (
-          // Empty State
           <div className={`
-            ${commonStyles.ticket.card}
             ${layout.flex.center}
-            flex-col gap-3 p-12
+            flex-col gap-2 p-6
+            text-gray-400 dark:text-gray-600
           `}>
-            <AlertCircle className="w-8 h-8 text-gray-400 dark:text-gray-600" />
-            <div className="text-center">
-              <h3 className={`${typography.h4} mb-1`}>No tickets found</h3>
-              <p className={typography.small}>
-                Create a new ticket to get started
-              </p>
-            </div>
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className={`
-                ${commonStyles.button.base} 
-                ${commonStyles.button.primary}
-                mt-4
-              `}
-            >
-              <Plus className="w-4 h-4" />
-              Create Ticket
-            </button>
+            <AlertCircle className="w-5 h-5" />
+            <p className={typography.small}>No tickets</p>
           </div>
         )}
       </div>
 
-      {/* Modals */}
       {selectedTicket && (
         <TicketModal
           ticket={selectedTicket}

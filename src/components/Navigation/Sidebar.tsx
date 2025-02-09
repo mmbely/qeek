@@ -51,7 +51,7 @@ export function Sidebar({
   return (
     <div className={commonStyles.layout.sidebar}>
       <div className="p-4 flex justify-between items-center">
-        <h1 className={typography.brand}>Qeek</h1>
+        <h1 className={typography.brand}>QEEK</h1>
         <button
           onClick={toggleDarkMode}
           className="p-2 rounded-lg text-gray-300 hover:bg-[#313a55] transition-colors duration-200"
@@ -93,6 +93,19 @@ export function Sidebar({
               >
                 <LayoutGrid className="h-5 w-5 mr-2" />
                 Board
+              </NavLink>
+            </li>
+            <li>
+              <NavLink
+                to="/tickets/all"
+                className={({ isActive }) =>
+                  `flex items-center p-2 rounded-lg ${
+                    isActive ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700'
+                  }`
+                }
+              >
+                <ListTodo className="h-5 w-5 mr-2" />
+                All
               </NavLink>
             </li>
           </ul>

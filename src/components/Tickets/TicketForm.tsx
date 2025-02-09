@@ -21,11 +21,11 @@ export default function TicketForm() {
     try {
       const formData = new FormData(e.currentTarget);
       
-      // Get the current highest order in the BACKLOG status
+      // Get the current highest order in the BACKLOG_NEW status
       const ticketsRef = collection(db, 'tickets');
       const statusQuery = query(
         ticketsRef, 
-        where('status', '==', 'BACKLOG')
+        where('status', '==', 'BACKLOG_NEW')
       );
       const statusSnapshot = await getDocs(statusQuery);
       const maxOrder = statusSnapshot.docs.reduce((max, doc) => 
@@ -34,7 +34,7 @@ export default function TicketForm() {
       const ticketData: Omit<Ticket, 'id'> = {
         title: formData.get('title') as string,
         description: formData.get('description') as string,
-        status: 'BACKLOG',
+        status: 'BACKLOG_NEW',
         priority: formData.get('priority') as Ticket['priority'],
         createdBy: user.uid,
         createdAt: Date.now(),

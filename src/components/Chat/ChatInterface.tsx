@@ -4,7 +4,6 @@ import { useAuth } from '../../context/AuthContext';
 import { subscribeToMessages, sendMessage, subscribeToUsers } from '../../services/chat';
 import { CustomUser } from '../../types/user';
 import { Message } from '../../types/message';
-import ChatHeader from './ChatHeader';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
@@ -101,19 +100,17 @@ export default function ChatInterface() {
   const subtitle = userId ? (otherUser?.email || 'Loading...') : 'Public channel';
 
   return (
-    <div className={`
-      ${commonStyles.card}
-      flex-1 flex flex-col h-full
-      overflow-hidden
-    `}>
-      <ChatHeader 
-        title={userId ? `Chat with ${otherUserName}` : 'General Chat'}
-        subtitle={subtitle}
-        className={`
-          ${layout.flex.between}
-          p-4 border-b border-gray-200 dark:border-gray-700
-        `}
-      />
+    <div className="flex flex-col h-full">
+      <header className={commonStyles.header.wrapper}>
+        <div className={commonStyles.header.container}>
+          <div className={commonStyles.header.titleWrapper}>
+            <h2 className={commonStyles.header.title}>{userId ? `Chat with ${otherUserName}` : 'General Chat'}</h2>
+            {subtitle && (
+              <p className={commonStyles.header.subtitle}>{subtitle}</p>
+            )}
+          </div>
+        </div>
+      </header>
       
       <div className={`
         flex-1 overflow-y-auto
