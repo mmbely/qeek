@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { doc, updateDoc, collection, addDoc, getDocs, query, where, writeBatch, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { Ticket } from '../../types/ticket';
@@ -9,6 +9,17 @@ import { theme, commonStyles, typography, layout, animations } from '../../style
 import { X, Loader } from 'lucide-react';
 import { Modal } from 'react-responsive-modal';
 import 'react-responsive-modal/styles.css';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+// Define the CodeProps interface directly
+interface CodeProps {
+  node?: any;
+  inline?: boolean;
+  className?: string;
+  children?: React.ReactNode;
+}
 
 interface TicketModalProps {
   ticket?: Ticket;
@@ -27,6 +38,8 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<{[key: string]: any}>({});
   const [error, setError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Fetch users for the assignee dropdown
   useEffect(() => {
@@ -117,6 +130,87 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
     }
   };
 
+  const handlePreviewClick = () => {
+    setIsEditing(true);
+    // Focus the textarea when switching to edit mode
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
+  };
+
+  const handleEditBlur = () => {
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const target = e.target as HTMLTextAreaElement;
+    // If user types ``` and presses Enter
+    if (target.value.endsWith('```') && e.key === 'Enter') {
+      e.preventDefault();
+      const newValue = description + '\n\n```';
+      setDescription(newValue);
+      // Move cursor between the backticks
+      setTimeout(() => {
+        if (textareaRef.current) {
+          const position = newValue.length - 3;
+          textareaRef.current.setSelectionRange(position, position);
+        }
+      }, 0);
+    }
+  };
+
+  // Add this component for rendering the description preview
+  const DescriptionPreview = ({ text }: { text: string }) => {
+    return (
+      <ReactMarkdown
+        components={{
+          code: ({ node, inline, className, children, ...props }: CodeProps) => {
+            const match = /language-(\w+)/.exec(className || '');
+            return !inline ? (
+              <SyntaxHighlighter
+                style={tomorrow}
+                language={match ? match[1] : 'text'}
+                PreTag="div"
+                className="rounded-md"
+                {...props}
+              >
+                {String(children).replace(/\n$/, '')}
+              </SyntaxHighlighter>
+            ) : (
+              <code className="px-1 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-700 text-sm" {...props}>
+                {children}
+              </code>
+            );
+          },
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    );
+  };
+
+  const placeholderText = 
+`Description supports markdown and code blocks:
+
+# Heading 1
+## Heading 2
+
+- Bullet points
+- Another point
+
+Start a code block with \`\`\` and press Enter:
+
+\`\`\`javascript
+const hello = 'world';
+console.log(hello);
+\`\`\`
+
+Text after the code block.
+
+**Bold text** and *italic text*
+
+You can also use \`inline code\` with single backticks.`;
+
   if (!isOpen) return null;
 
   return (
@@ -172,12 +266,48 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
               <label className={`block mb-2 ${typography.small}`}>
                 Description
               </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className={`${commonStyles.input} w-full h-[calc(100vh-400px)] min-h-[200px] resize-none`}
-                required
-              />
+              <div className="relative border rounded-md dark:border-gray-700 min-h-[300px]">
+                {isEditing ? (
+                  <textarea
+                    ref={textareaRef}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    onBlur={handleEditBlur}
+                    onKeyDown={handleKeyDown}
+                    className={`
+                      ${commonStyles.input} 
+                      w-full h-[300px] 
+                      font-mono text-sm 
+                      resize-none
+                      border-none
+                      focus:ring-0
+                    `}
+                    placeholder={placeholderText}
+                    required
+                  />
+                ) : (
+                  <div 
+                    onClick={handlePreviewClick}
+                    className={`
+                      p-4 min-h-[300px] cursor-text
+                      ${description ? '' : 'text-gray-400 dark:text-gray-500'}
+                    `}
+                  >
+                    {description ? (
+                      <div className="prose dark:prose-invert max-w-none">
+                        <DescriptionPreview text={description} />
+                      </div>
+                    ) : (
+                      <p>Click to add description...</p>
+                    )}
+                  </div>
+                )}
+                <div className="absolute top-2 right-2">
+                  <div className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded">
+                    {isEditing ? 'Edit Mode' : 'Preview Mode'}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
