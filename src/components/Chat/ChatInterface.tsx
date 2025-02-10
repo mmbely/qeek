@@ -104,7 +104,9 @@ export default function ChatInterface() {
       <header className={commonStyles.header.wrapper}>
         <div className={commonStyles.header.container}>
           <div className={commonStyles.header.titleWrapper}>
-            <h2 className={commonStyles.header.title}>{userId ? `Chat with ${otherUserName}` : 'General Chat'}</h2>
+            <h2 className={commonStyles.header.title}>
+              {userId ? `Chat with ${otherUserName}` : 'General Chat'}
+            </h2>
             {subtitle && (
               <p className={commonStyles.header.subtitle}>{subtitle}</p>
             )}
@@ -114,7 +116,7 @@ export default function ChatInterface() {
       
       <div className={`
         flex-1 overflow-y-auto
-        bg-gray-50 dark:bg-gray-800/50
+        bg-gray-50 dark:bg-[${theme.colors.dark.background.primary}]
       `}>
         <MessageList 
           messages={messages}
@@ -130,8 +132,9 @@ export default function ChatInterface() {
         setMessage={setMessage}
         handleSendMessage={handleSendMessage}
         className={`
-          ${commonStyles.card}
-          p-4 border-t border-gray-200 dark:border-gray-700
+          bg-white dark:bg-[${theme.colors.dark.background.secondary}]
+          border-t border-gray-200 dark:border-gray-700
+          p-4
         `}
       />
     </div>
