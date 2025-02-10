@@ -317,9 +317,10 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
                   <div className={`${layout.flex.between} mb-4`}>
                     <h2 className={typography.h4}>{column.title}</h2>
                     <span className={`
-                      px-2.5 py-0.5 rounded-full text-sm
-                      bg-gray-100 dark:bg-[${theme.colors.dark.background.hover}]
-                      text-gray-600 dark:text-gray-300
+                      px-2.5 py-0.5 
+                      rounded-full text-sm
+                      bg-gray-100 dark:bg-gray-800
+                      text-gray-600 dark:text-gray-400
                     `}>
                       {column.tickets.length}
                     </span>
@@ -350,7 +351,14 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
                           >
                             {/* Ticket Content */}
                             <div className="space-y-2">
-                              <h3 className={typography.body}>{ticket.title}</h3>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                                  {ticket.ticket_id}
+                                </span>
+                                <span className="text-gray-900 dark:text-gray-100 truncate">
+                                  {ticket.title}
+                                </span>
+                              </div>
                               
                               <div className={`${layout.flex.between} gap-2`}>
                                 {/* Priority Badge */}

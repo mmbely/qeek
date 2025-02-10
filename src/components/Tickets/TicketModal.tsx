@@ -6,12 +6,13 @@ import { useAuth } from '../../context/AuthContext';
 import { ref, get } from 'firebase/database';
 import { database } from '../../services/firebase';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
-import { X, Loader } from 'lucide-react';
+import { X, Loader, Copy, Check } from 'lucide-react';
 import { Modal } from 'react-responsive-modal';
 import 'react-responsive-modal/styles.css';
 import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Components } from 'react-markdown';
 
 // Define the CodeProps interface directly
 interface CodeProps {
@@ -100,24 +101,28 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
     try {
       const ticket_id = ticket?.ticket_id || await getNextTicketNumber();
 
-      const ticketData: Omit<Ticket, 'id'> = {
+      const ticketData: Partial<Omit<Ticket, 'id'>> = {
         title,
         description,
         status,
         priority,
         assigneeId,
-        createdBy: user.uid,
-        createdAt: Date.now(),
         updatedAt: Date.now(),
-        order: Date.now(),
         ticket_id,
       };
+
+      // Only set these fields for new tickets
+      if (!ticket?.id) {
+        ticketData.createdBy = user.uid;
+        ticketData.createdAt = Date.now();
+        ticketData.order = Date.now();
+      }
 
       if (ticket?.id) {
         const ticketRef = doc(db, 'tickets', ticket.id);
         await updateDoc(ticketRef, ticketData);
       } else {
-        await addDoc(collection(db, 'tickets'), ticketData);
+        await addDoc(collection(db, 'tickets'), ticketData as Omit<Ticket, 'id'>);
       }
 
       onSave?.();
@@ -130,12 +135,41 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
     }
   };
 
+  // Adjust height whenever entering edit mode or content changes
+  const adjustTextareaHeight = () => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      // Reset height to auto first
+      textarea.style.height = 'auto';
+      // Then set to scrollHeight to match content
+      textarea.style.height = `${Math.max(300, textarea.scrollHeight)}px`;
+      console.log('Adjusting height to:', textarea.scrollHeight); // Debug log
+    }
+  };
+
+  // Call adjust height when entering edit mode
   const handlePreviewClick = () => {
     setIsEditing(true);
-    // Focus the textarea when switching to edit mode
+    // Focus and adjust height after the textarea is rendered
     setTimeout(() => {
-      textareaRef.current?.focus();
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        adjustTextareaHeight();
+      }
     }, 0);
+  };
+
+  // Call adjust height when content changes
+  useEffect(() => {
+    if (isEditing) {
+      adjustTextareaHeight();
+    }
+  }, [description, isEditing]);
+
+  // Handle content changes
+  const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setDescription(e.target.value);
+    adjustTextareaHeight();
   };
 
   const handleEditBlur = () => {
@@ -144,19 +178,56 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const target = e.target as HTMLTextAreaElement;
-    // If user types ``` and presses Enter
-    if (target.value.endsWith('```') && e.key === 'Enter') {
+    const cursorPosition = target.selectionStart;
+    const currentLine = target.value.slice(0, cursorPosition).split('\n').pop() || '';
+    
+    // Only add closing backticks if the current line is exactly ```
+    if (currentLine === '```' && e.key === 'Enter') {
       e.preventDefault();
-      const newValue = description + '\n\n```';
+      const textBeforeCursor = target.value.slice(0, cursorPosition);
+      const textAfterCursor = target.value.slice(cursorPosition);
+      
+      const newValue = textBeforeCursor + '\n\n```' + textAfterCursor;
       setDescription(newValue);
+      
       // Move cursor between the backticks
       setTimeout(() => {
         if (textareaRef.current) {
-          const position = newValue.length - 3;
-          textareaRef.current.setSelectionRange(position, position);
+          const newPosition = cursorPosition + 1; // Position after the first newline
+          textareaRef.current.setSelectionRange(newPosition, newPosition);
         }
       }, 0);
     }
+  };
+
+  // Add this helper function
+  const CopyButton = ({ text }: { text: string }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async (e: React.MouseEvent) => {
+      // Prevent the click from bubbling up to the preview div and modal
+      e.stopPropagation();
+      e.preventDefault();
+      
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+      <button
+        onClick={handleCopy}
+        onMouseDown={(e) => e.preventDefault()} // Prevent modal close on mousedown
+        className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        title="Copy code"
+      >
+        {copied ? (
+          <Check className="h-4 w-4" />
+        ) : (
+          <Copy className="h-4 w-4" />
+        )}
+      </button>
+    );
   };
 
   // Add this component for rendering the description preview
@@ -164,18 +235,31 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
     return (
       <ReactMarkdown
         components={{
-          code: ({ node, inline, className, children, ...props }: CodeProps) => {
+          code({ node, inline, className, children, ...props }: CodeProps) {
             const match = /language-(\w+)/.exec(className || '');
+            const language = match ? match[1] : 'text';
+            
             return !inline ? (
-              <SyntaxHighlighter
-                style={tomorrow}
-                language={match ? match[1] : 'text'}
-                PreTag="div"
-                className="rounded-md"
-                {...props}
-              >
-                {String(children).replace(/\n$/, '')}
-              </SyntaxHighlighter>
+              <div className="relative group" onClick={(e) => e.stopPropagation()}>
+                <div className="absolute right-2 top-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {language && (
+                    <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded px-2 py-1">
+                      {language}
+                    </span>
+                  )}
+                  <CopyButton text={String(children).replace(/\n$/, '')} />
+                </div>
+                <SyntaxHighlighter
+                  style={tomorrow as any}
+                  language={language}
+                  PreTag="div"
+                  customStyle={{}}
+                  className="rounded-md !mt-0"
+                  {...props}
+                >
+                  {String(children).replace(/\n$/, '')}
+                </SyntaxHighlighter>
+              </div>
             ) : (
               <code className="px-1 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-700 text-sm" {...props}>
                 {children}
@@ -266,21 +350,23 @@ You can also use \`inline code\` with single backticks.`;
               <label className={`block mb-2 ${typography.small}`}>
                 Description
               </label>
-              <div className="relative border rounded-md dark:border-gray-700 min-h-[300px]">
+              <div className="relative border rounded-md dark:border-gray-700">
                 {isEditing ? (
                   <textarea
                     ref={textareaRef}
                     value={description}
-                    onChange={(e) => setDescription(e.target.value)}
+                    onChange={handleDescriptionChange}
                     onBlur={handleEditBlur}
                     onKeyDown={handleKeyDown}
                     className={`
                       ${commonStyles.input} 
-                      w-full h-[300px] 
+                      w-full
+                      min-h-[300px]
                       font-mono text-sm 
                       resize-none
                       border-none
                       focus:ring-0
+                      overflow-hidden
                     `}
                     placeholder={placeholderText}
                     required
@@ -302,11 +388,6 @@ You can also use \`inline code\` with single backticks.`;
                     )}
                   </div>
                 )}
-                <div className="absolute top-2 right-2">
-                  <div className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded">
-                    {isEditing ? 'Edit Mode' : 'Preview Mode'}
-                  </div>
-                </div>
               </div>
             </div>
           </div>
