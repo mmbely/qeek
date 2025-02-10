@@ -53,3 +53,6 @@ yarn-error.log*
 
 # Firebase
 .firebase/
+code_prompt.txt
+code_prompt.txt
+package-lock.json

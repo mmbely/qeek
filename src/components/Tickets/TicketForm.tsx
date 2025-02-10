@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { Ticket } from '../../types/ticket';
@@ -21,15 +21,24 @@ export default function TicketForm() {
     try {
       const formData = new FormData(e.currentTarget);
       
-      // Get the current highest order in the BACKLOG_NEW status
+      // Get the current highest ticket_id
       const ticketsRef = collection(db, 'tickets');
-      const statusQuery = query(
-        ticketsRef, 
-        where('status', '==', 'BACKLOG_NEW')
+      const ticketsQuery = query(
+        ticketsRef,
+        orderBy('ticket_id', 'desc'),
+        limit(1)
       );
-      const statusSnapshot = await getDocs(statusQuery);
-      const maxOrder = statusSnapshot.docs.reduce((max, doc) => 
-        Math.max(max, doc.data().order || 0), -1);
+      
+      const ticketsSnapshot = await getDocs(ticketsQuery);
+      let nextNumber = 1;
+      
+      if (!ticketsSnapshot.empty) {
+        const lastTicket = ticketsSnapshot.docs[0].data();
+        const lastNumber = parseInt(lastTicket.ticket_id.split('-')[1]);
+        nextNumber = lastNumber + 1;
+      }
+
+      const ticket_id = `Q-${String(nextNumber).padStart(4, '0')}`;
 
       const ticketData: Omit<Ticket, 'id'> = {
         title: formData.get('title') as string,
@@ -39,7 +48,8 @@ export default function TicketForm() {
         createdBy: user.uid,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        order: maxOrder + 1,
+        order: nextNumber,
+        ticket_id,
       };
 
       await addDoc(collection(db, 'tickets'), ticketData);

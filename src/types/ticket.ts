@@ -1,5 +1,6 @@
 export interface Ticket {
-    id?: string;
+    id?: string;           // Firestore document ID
+    ticket_id: string;     // Human readable ID (e.g., Q-1, Q-2)
     title: string;
     description: string;
     status: TicketStatus;
@@ -9,6 +10,7 @@ export interface Ticket {
     updatedAt?: number;
     createdBy: string;
     order: number;
+    key?: string;
 }
 
 export type TicketStatus = 
