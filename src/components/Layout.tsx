@@ -73,7 +73,7 @@ export default function Layout() {
         handleLogout={handleLogout}
         handleStartDirectMessage={handleStartDirectMessage}
       />
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden bg-white dark:bg-[#262b3d]">
         <Outlet />
       </main>
     </div>

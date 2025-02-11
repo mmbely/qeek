@@ -232,6 +232,12 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
 
   // Add this component for rendering the description preview
   const DescriptionPreview = ({ text }: { text: string }) => {
+    // Function to convert URLs in text to markdown links
+    const addMarkdownLinks = (text: string) => {
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      return text.replace(urlRegex, (url) => `[${url}](${url})`);
+    };
+
     return (
       <ReactMarkdown
         components={{
@@ -266,9 +272,25 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
               </code>
             );
           },
+          a({ node, children, href, ...props }) {
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline"
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent edit mode activation
+                }}
+                {...props}
+              >
+                {children}
+              </a>
+            );
+          }
         }}
       >
-        {text}
+        {addMarkdownLinks(text)}
       </ReactMarkdown>
     );
   };

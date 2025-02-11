@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { Hash, Plus, Sun, Moon, ListTodo, Kanban, MessageSquare, LayoutGrid, LogOut, User } from "lucide-react"
+import { Hash, Plus, Sun, Moon, ListTodo, Kanban, MessageSquare, LayoutGrid, LogOut, User, Github, Settings, FolderOpen } from "lucide-react"
 import { ScrollArea } from "../ui/scroll-area"
 import { Button } from "../ui/button"
 import { CustomUser } from '../../types/user'
@@ -111,6 +111,39 @@ export function Sidebar({
           </ul>
         </div>
 
+        {/* Codebase Section */}
+        <div>
+          <h2 className={typography.sidebarHeader}>Codebase</h2>
+          <ul className="space-y-1">
+            <li>
+              <NavLink
+                to="/codebase/connect"
+                className={({ isActive }) =>
+                  `${commonStyles.sidebar.nav.item} ${
+                    isActive ? commonStyles.sidebar.nav.active : commonStyles.sidebar.nav.inactive
+                  }`
+                }
+              >
+                <Github className="h-5 w-5 mr-2" />
+                Connect
+              </NavLink>
+            </li>
+            <li>
+              <NavLink
+                to="/codebase/files"
+                className={({ isActive }) =>
+                  `${commonStyles.sidebar.nav.item} ${
+                    isActive ? commonStyles.sidebar.nav.active : commonStyles.sidebar.nav.inactive
+                  }`
+                }
+              >
+                <FolderOpen className="h-5 w-5 mr-2" />
+                View Files
+              </NavLink>
+            </li>
+          </ul>
+        </div>
+
         {/* Direct Messages Section */}
         <div>
           <div className="flex justify-between items-center mb-2">
@@ -176,8 +209,16 @@ export function Sidebar({
         </div>
       </nav>
 
-      {/* Footer with only Sign Out now */}
-      <div className="border-t border-gray-700 p-4">
+      {/* Footer with Settings and Sign Out */}
+      <div className="border-t border-gray-700 p-4 space-y-2">
+        <NavLink
+          to="/settings/github"
+          className="flex items-center w-full p-2 rounded-lg text-gray-300 hover:bg-[#313a55] transition-colors duration-200 gap-2"
+        >
+          <Settings className="w-5 h-5" />
+          <span>Settings</span>
+        </NavLink>
+
         <button
           onClick={handleLogout}
           className="flex items-center w-full p-2 rounded-lg text-gray-300 hover:bg-[#313a55] transition-colors duration-200 gap-2"
