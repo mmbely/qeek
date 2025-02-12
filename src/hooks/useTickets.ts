@@ -94,20 +94,39 @@ export function useTickets() {
       console.log('[useTickets] Fetching tickets for account:', currentAccount.id);
       
       const ticketsRef = collection(db, 'tickets');
-      const ticketsQuery = query(
-        ticketsRef,
-        where('accountId', '==', currentAccount.id),
-        orderBy('order')
-      );
-
-      const querySnapshot = await getDocs(ticketsQuery);
-      const tickets = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Ticket[];
-
-      console.log('[useTickets] Found tickets:', tickets.length);
-      return tickets;
+      
+      // First try with ordering
+      try {
+        const ticketsQuery = query(
+          ticketsRef,
+          where('accountId', '==', currentAccount.id),
+          orderBy('order')
+        );
+        const querySnapshot = await getDocs(ticketsQuery);
+        const tickets = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Ticket[];
+        console.log('[useTickets] Found tickets with ordering:', tickets.length);
+        return tickets;
+      } catch (orderError) {
+        console.warn('[useTickets] Error fetching ordered tickets, falling back to unordered:', orderError);
+        
+        // Fallback to just filtering by accountId without ordering
+        const fallbackQuery = query(
+          ticketsRef,
+          where('accountId', '==', currentAccount.id)
+        );
+        const fallbackSnapshot = await getDocs(fallbackQuery);
+        const fallbackTickets = fallbackSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Ticket[];
+        console.log('[useTickets] Found tickets without ordering:', fallbackTickets.length);
+        
+        // Sort in memory instead
+        return fallbackTickets.sort((a, b) => (a.order || 0) - (b.order || 0));
+      }
     } catch (error) {
       console.error('[useTickets] Error fetching tickets:', error);
       return [];

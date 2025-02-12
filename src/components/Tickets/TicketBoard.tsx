@@ -27,13 +27,15 @@ interface TicketBoardProps {
   mode?: BoardMode;
 }
 
+type ColumnsType = DevelopmentColumnsType | BacklogColumnsType;
+
 export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   const { user } = useAuth();
   const { currentAccount } = useAccount();
-  const { getTickets } = useTickets();
+  const { getTickets, updateTicket } = useTickets();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [users, setUsers] = useState<{[key: string]: any}>({});
-  const [columns, setColumns] = useState<DevelopmentColumnsType | BacklogColumnsType>(() => {
+  const [columns, setColumns] = useState<ColumnsType>(() => {
     return mode === 'development' ? { ...developmentColumns } : { ...backlogColumns };
   });
   const title = mode === 'development' ? 'Development Board' : 'Backlog Board';
@@ -42,6 +44,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     : 'Manage your upcoming tickets';
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [failedTicketId, setFailedTicketId] = useState<string | null>(null);
 
   // Fetch users
   useEffect(() => {
@@ -117,110 +120,91 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   };
 
   const handleDragEnd = async (result: DropResult) => {
-    const { destination, source, draggableId } = result;
-
+    const { source, destination, draggableId } = result;
     if (!destination) return;
 
-    if (
-      destination.droppableId === source.droppableId &&
-      destination.index === source.index
-    ) {
+    const sourceStatus = source.droppableId as TicketStatus;
+    const destStatus = destination.droppableId as TicketStatus;
+
+    // Create a new columns object to avoid mutating state
+    const newColumns = { ...columns };
+
+    // Type guard for development columns
+    const isDevelopmentColumns = (cols: ColumnsType): cols is DevelopmentColumnsType => {
+      return 'SELECTED_FOR_DEV' in cols;
+    };
+
+    // Type guard for backlog columns
+    const isBacklogColumns = (cols: ColumnsType): cols is BacklogColumnsType => {
+      return 'BACKLOG_ICEBOX' in cols;
+    };
+
+    // Ensure we're working with the correct column type and status
+    if (!isDevelopmentColumns(newColumns) && !isBacklogColumns(newColumns)) {
+      console.error('Invalid column type');
       return;
     }
 
-    try {
-      const sourceStatus = source.droppableId as TicketStatus;
-      const destStatus = destination.droppableId as TicketStatus;
-
-      // Validate status based on mode
-      const isValidMove = mode === 'development'
-        ? sourceStatus in developmentColumns && destStatus in developmentColumns
-        : sourceStatus in backlogColumns && destStatus in backlogColumns;
-
-      if (!isValidMove) {
-        console.error('Invalid status for current mode');
-        return;
-      }
-
-      // Find the moved ticket
-      const movedTicket = tickets.find(t => t.id === draggableId);
-      if (!movedTicket || !movedTicket.id) return;
-
-      // Create a batch for all updates
-      const batch = writeBatch(db);
-      const ticketRef = doc(db, 'tickets', movedTicket.id);
-
-      if (sourceStatus === destStatus) {
-        // Reordering within the same column
-        const columnTickets = [...tickets]
-          .filter(t => t.status === sourceStatus)
-          .sort((a, b) => (a.order || 0) - (b.order || 0));
-
-        // Update moved ticket's order
-        batch.update(ticketRef, {
-          order: destination.index,
-        });
-
-        // Update orders for affected tickets
-        if (destination.index < source.index) {
-          // Moving up: increment orders of tickets between new and old position
-          columnTickets.forEach((ticket, index) => {
-            if (ticket.id && ticket.id !== draggableId && 
-                index >= destination.index && index < source.index) {
-              const ref = doc(db, 'tickets', ticket.id);
-              batch.update(ref, { order: index + 1 });
-            }
-          });
-        } else {
-          // Moving down: decrement orders of tickets between old and new position
-          columnTickets.forEach((ticket, index) => {
-            if (ticket.id && ticket.id !== draggableId && 
-                index > source.index && index <= destination.index) {
-              const ref = doc(db, 'tickets', ticket.id);
-              batch.update(ref, { order: index - 1 });
-            }
-          });
-        }
-      } else {
-        // Moving between columns
-        const destColumnTickets = [...tickets]
-          .filter(t => t.status === destStatus)
-          .sort((a, b) => (a.order || 0) - (b.order || 0));
-
-        // Update moved ticket
-        batch.update(ticketRef, {
-          status: destStatus,
-          order: destination.index,
-        });
-
-        // Insert ticket at new position
-        destColumnTickets.splice(destination.index, 0, { id: draggableId } as Ticket);
-
-        // Update orders for destination column
-        destColumnTickets.forEach((ticket, index) => {
-          if (ticket.id && ticket.id !== draggableId) {
-            const ref = doc(db, 'tickets', ticket.id);
-            batch.update(ref, { order: index });
-          }
-        });
-
-        // Update orders for source column
-        const sourceColumnTickets = [...tickets]
-          .filter(t => t.status === sourceStatus && t.id !== draggableId)
-          .sort((a, b) => (a.order || 0) - (b.order || 0));
-
-        sourceColumnTickets.forEach((ticket, index) => {
-          if (ticket.id) {
-            const ref = doc(db, 'tickets', ticket.id);
-            batch.update(ref, { order: index });
-          }
-        });
-      }
-
-      await batch.commit();
-    } catch (error) {
-      console.error('Error updating ticket:', error);
+    // Type assertion for column access
+    type ValidColumnKey = keyof typeof newColumns;
+    
+    if (!(sourceStatus in newColumns) || !(destStatus in newColumns)) {
+      console.error('Invalid status transition');
+      return;
     }
+
+    const sourceColumn = newColumns[sourceStatus as ValidColumnKey] as Column;
+    const draggedTicket = sourceColumn.tickets.find((t: Ticket) => t.id === draggableId);
+    if (!draggedTicket) return;
+
+    // Immediately update UI state (optimistic update)
+    if (sourceStatus === destStatus) {
+      const columnTickets = [...sourceColumn.tickets];
+      columnTickets.splice(source.index, 1);
+      columnTickets.splice(destination.index, 0, draggedTicket);
+      (newColumns[sourceStatus as ValidColumnKey] as Column).tickets = columnTickets;
+    } else {
+      const destColumn = newColumns[destStatus as ValidColumnKey] as Column;
+      const sourceTickets = [...sourceColumn.tickets];
+      const destTickets = [...destColumn.tickets];
+
+      sourceTickets.splice(source.index, 1);
+      destTickets.splice(destination.index, 0, draggedTicket);
+
+      (newColumns[sourceStatus as ValidColumnKey] as Column).tickets = sourceTickets;
+      (newColumns[destStatus as ValidColumnKey] as Column).tickets = destTickets;
+    }
+
+    // Update UI immediately
+    setColumns(newColumns);
+
+    try {
+      const targetColumn = sourceStatus === destStatus 
+        ? newColumns[sourceStatus as ValidColumnKey] as Column
+        : newColumns[destStatus as ValidColumnKey] as Column;
+      
+      const newOrder = calculateNewOrder(
+        targetColumn.tickets[destination.index - 1]?.order || 0,
+        targetColumn.tickets[destination.index + 1]?.order || targetColumn.tickets[destination.index - 1]?.order + 2000
+      );
+
+      const updates: Partial<Ticket> = { order: newOrder };
+      if (sourceStatus !== destStatus) {
+        updates.status = destStatus;
+      }
+
+      await updateTicket(draggedTicket.id, updates);
+    } catch (error) {
+      console.error('Failed to update ticket:', error);
+      setFailedTicketId(draggedTicket.id);
+      setColumns(columns); // Revert on error
+      setTimeout(() => setFailedTicketId(null), 2000); // Clear error state after 2s
+    }
+  };
+
+  // Helper function to calculate new order
+  const calculateNewOrder = (prevOrder: number, nextOrder: number): number => {
+    return prevOrder + (nextOrder - prevOrder) / 2;
   };
 
   const handleTicketClick = (ticket: Ticket) => {
@@ -312,6 +296,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
                               hover:shadow-md dark:hover:bg-[${theme.colors.dark.background.hover}]
                               cursor-pointer
                               p-4
+                              ${failedTicketId === ticket.id ? 'opacity-50' : ''}
                             `}
                           >
                             {/* Ticket Content */}
