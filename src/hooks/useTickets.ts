@@ -1,10 +1,14 @@
-import { collection, doc, getDocs, updateDoc, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, doc, getDocs, updateDoc, query, where, orderBy, limit, addDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { Ticket } from '../types/ticket';
 import { useState, useCallback } from 'react';
+import { useAccount } from '../context/AccountContext';
 
 export function useTickets() {
+  const { currentAccount } = useAccount();
   const [cachedTickets, setCachedTickets] = useState<Ticket[] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const getNextTicketNumber = async () => {
     const ticketsRef = collection(db, 'tickets');
@@ -30,28 +34,26 @@ export function useTickets() {
     return nextNumber;
   };
 
-  const updateTicket = async (ticketId: string, updates: Partial<Ticket>) => {
+  const updateTicket = useCallback(async (
+    ticketId: string,
+    updates: Partial<Omit<Ticket, 'id' | 'accountId'>>
+  ) => {
+    if (!currentAccount?.id) {
+      console.error('[useTickets] Cannot update ticket: no account selected');
+      return;
+    }
+    
     try {
-      // If ticket_id is empty, generate a new one
-      if (!updates.ticket_id) {
-        const nextNumber = await getNextTicketNumber();
-        updates.ticket_id = `Q-${String(nextNumber).padStart(4, '0')}`;
-        console.log('Generated new ticket_id:', updates.ticket_id);
-      }
-
       const ticketRef = doc(db, 'tickets', ticketId);
       await updateDoc(ticketRef, {
         ...updates,
         updatedAt: Date.now()
       });
-      
-      setCachedTickets(null); // Clear cache after update
-      console.log('Ticket updated successfully with ID:', updates.ticket_id);
     } catch (error) {
-      console.error('Error updating ticket:', error);
+      console.error('[useTickets] Error updating ticket:', error);
       throw error;
     }
-  };
+  }, [currentAccount]);
 
   const generateMissingTicketIds = async () => {
     try {
@@ -82,45 +84,79 @@ export function useTickets() {
     }
   };
 
-  const getTickets = useCallback(async (status?: string) => {
-    if (cachedTickets) {
-      console.log('Using cached tickets');
-      return cachedTickets;
+  const getTickets = useCallback(async () => {
+    if (!currentAccount?.id) {
+      console.log('[useTickets] No current account, returning empty array');
+      return [];
     }
 
     try {
+      console.log('[useTickets] Fetching tickets for account:', currentAccount.id);
+      
       const ticketsRef = collection(db, 'tickets');
-      let q = query(
+      const ticketsQuery = query(
         ticketsRef,
-        orderBy('createdAt', 'desc')
+        where('accountId', '==', currentAccount.id),
+        orderBy('order')
       );
 
-      if (status) {
-        q = query(
-          ticketsRef,
-          where('status', '==', status),
-          orderBy('createdAt', 'desc')
-        );
-      }
-
-      const querySnapshot = await getDocs(q);
+      const querySnapshot = await getDocs(ticketsQuery);
       const tickets = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Ticket[];
 
-      console.log('Fetched tickets:', tickets);
-      setCachedTickets(tickets);
+      console.log('[useTickets] Found tickets:', tickets.length);
       return tickets;
     } catch (error) {
-      console.error('Error fetching tickets:', error);
+      console.error('[useTickets] Error fetching tickets:', error);
       return [];
     }
-  }, [cachedTickets]);
+  }, [currentAccount]);
+
+  const createTicket = useCallback(async (ticketData: Omit<Ticket, 'id' | 'accountId'>) => {
+    if (!currentAccount?.id) {
+      console.error('[useTickets] Cannot create ticket: no account selected');
+      return null;
+    }
+    
+    try {
+      const newTicket = {
+        ...ticketData,
+        accountId: currentAccount.id,
+      };
+      
+      const docRef = await addDoc(collection(db, 'tickets'), newTicket);
+      
+      return {
+        id: docRef.id,
+        ...newTicket
+      };
+    } catch (error) {
+      console.error('[useTickets] Error creating ticket:', error);
+      return null;
+    }
+  }, [currentAccount]);
+
+  const deleteTicket = useCallback(async (ticketId: string) => {
+    if (!currentAccount) return false;
+    
+    try {
+      await deleteDoc(doc(db, 'tickets', ticketId));
+      return true;
+    } catch (error) {
+      console.error('Error deleting ticket:', error);
+      return false;
+    }
+  }, [currentAccount]);
 
   return {
     getTickets,
+    createTicket,
     updateTicket,
+    deleteTicket,
     generateMissingTicketIds,
+    isLoading,
+    error
   };
 }

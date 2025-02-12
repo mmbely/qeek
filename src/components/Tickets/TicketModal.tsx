@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { doc, updateDoc, collection, addDoc, getDocs, query, where, writeBatch, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import { Ticket } from '../../types/ticket';
+import { Ticket, TicketStatus, TicketPriority } from '../../types/ticket';
 import { useAuth } from '../../context/AuthContext';
 import { ref, get } from 'firebase/database';
 import { database } from '../../services/firebase';
@@ -13,6 +13,9 @@ import ReactMarkdown from 'react-markdown';
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Components } from 'react-markdown';
+import { useAccount } from '../../context/AccountContext';
+import { useTickets } from '../../hooks/useTickets';
+import { COLUMN_STATUS_LABELS } from '../../types/board/columns';
 
 // Define the CodeProps interface directly
 interface CodeProps {
@@ -29,18 +32,55 @@ interface TicketModalProps {
   onSave?: () => void;
 }
 
+const DEFAULT_STATUS: TicketStatus = 'BACKLOG_NEW';
+const DEFAULT_PRIORITY: TicketPriority = 'medium';
+
+const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+  'BACKLOG_ICEBOX': 'Icebox',
+  'BACKLOG_NEW': 'New',
+  'BACKLOG_REFINED': 'Refined',
+  'BACKLOG_DEV_NEXT': 'Next for Development',
+  'SELECTED_FOR_DEV': 'Selected for Development',
+  'IN_PROGRESS': 'In Progress',
+  'READY_FOR_TESTING': 'Ready for Testing',
+  'DEPLOYED': 'Deployed'
+};
+
 export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketModalProps) {
   const { user } = useAuth();
+  const { currentAccount } = useAccount();
+  const { createTicket, updateTicket } = useTickets();
   const [title, setTitle] = useState(ticket?.title || '');
   const [description, setDescription] = useState(ticket?.description || '');
-  const [priority, setPriority] = useState<Ticket['priority']>(ticket?.priority || 'low');
-  const [status, setStatus] = useState<Ticket['status']>(ticket?.status || 'BACKLOG_NEW');
+  const [status, setStatus] = useState<TicketStatus>(ticket?.status || DEFAULT_STATUS);
+  const [priority, setPriority] = useState<TicketPriority>(ticket?.priority || DEFAULT_PRIORITY);
   const [assigneeId, setAssigneeId] = useState(ticket?.assigneeId || '');
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<{[key: string]: any}>({});
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Check authorization
+  const isAuthorized = React.useMemo(() => {
+    if (!user || !currentAccount) return false;
+    
+    // For new tickets, check if user is in current account
+    if (!ticket) {
+      return currentAccount.members[user.uid] != null;
+    }
+    
+    // For existing tickets, check if ticket belongs to current account
+    return ticket.accountId === currentAccount.id && currentAccount.members[user.uid] != null;
+  }, [user, currentAccount, ticket]);
+
+  // Redirect or close if not authorized
+  useEffect(() => {
+    if (isOpen && !isAuthorized) {
+      console.log('[TicketModal] Unauthorized access, closing modal');
+      onClose();
+    }
+  }, [isOpen, isAuthorized, onClose]);
 
   // Fetch users for the assignee dropdown
   useEffect(() => {
@@ -54,11 +94,12 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
     fetchUsers();
   }, []);
 
+  // Update form when ticket changes
   useEffect(() => {
     setTitle(ticket?.title || '');
     setDescription(ticket?.description || '');
-    setPriority(ticket?.priority || 'low');
-    setStatus(ticket?.status || 'BACKLOG_NEW');
+    setStatus(ticket?.status || DEFAULT_STATUS);
+    setPriority(ticket?.priority || DEFAULT_PRIORITY);
     setAssigneeId(ticket?.assigneeId || '');
   }, [ticket]);
 
@@ -91,44 +132,54 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
     return `Q-${String(nextNumber).padStart(4, '0')}`;
   };
 
+  // Handle submit with authorization check
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !currentAccount || !isAuthorized) {
+      console.error('[TicketModal] Unauthorized attempt to save ticket');
+      setError('You do not have permission to perform this action');
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
-      const ticket_id = ticket?.ticket_id || await getNextTicketNumber();
-
-      const ticketData: Partial<Omit<Ticket, 'id'>> = {
-        title,
-        description,
-        status,
-        priority,
-        assigneeId,
-        updatedAt: Date.now(),
-        ticket_id,
-      };
-
-      // Only set these fields for new tickets
-      if (!ticket?.id) {
-        ticketData.createdBy = user.uid;
-        ticketData.createdAt = Date.now();
-        ticketData.order = Date.now();
-      }
-
       if (ticket?.id) {
-        const ticketRef = doc(db, 'tickets', ticket.id);
-        await updateDoc(ticketRef, ticketData);
+        // Update existing ticket
+        await updateTicket(ticket.id, {
+          title,
+          description,
+          status,
+          priority,
+          assigneeId,
+          updatedAt: Date.now(),
+        });
       } else {
-        await addDoc(collection(db, 'tickets'), ticketData as Omit<Ticket, 'id'>);
+        // Create new ticket
+        const ticketId = `TICKET-${Date.now()}`;
+        const newTicket = await createTicket({
+          title,
+          description,
+          status,
+          priority,
+          assigneeId,
+          updatedAt: Date.now(),
+          createdBy: user.uid,
+          createdAt: Date.now(),
+          order: Date.now(),
+          ticket_id: ticketId, // Add the required ticket_id field
+        });
+        
+        if (!newTicket) {
+          throw new Error('Failed to create ticket');
+        }
       }
 
       onSave?.();
       onClose();
     } catch (error) {
-      console.error('Error saving ticket:', error);
+      console.error('[TicketModal] Error saving ticket:', error);
       setError('Failed to save ticket. Please try again.');
     } finally {
       setLoading(false);
@@ -317,11 +368,14 @@ Text after the code block.
 
 You can also use \`inline code\` with single backticks.`;
 
-  if (!isOpen) return null;
+  // Don't render anything if not authorized
+  if (!isAuthorized) {
+    return null;
+  }
 
   return (
     <Modal
-      open={isOpen}
+      open={isOpen && isAuthorized}
       onClose={onClose}
       center
       styles={{
@@ -421,23 +475,14 @@ You can also use \`inline code\` with single backticks.`;
               </label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as Ticket['status'])}
-                className={commonStyles.input}
+                onChange={(e) => setStatus(e.target.value as TicketStatus)}
+                className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
               >
-                {/* Backlog Statuses */}
-                <optgroup label="Backlog">
-                  <option value="BACKLOG_ICEBOX">Icebox</option>
-                  <option value="BACKLOG_NEW">New</option>
-                  <option value="BACKLOG_REFINED">Refined</option>
-                  <option value="BACKLOG_DEV_NEXT">Dev Next</option>
-                </optgroup>
-                {/* Development Statuses */}
-                <optgroup label="Development">
-                  <option value="SELECTED_FOR_DEV">Selected for Dev</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="READY_FOR_TESTING">Ready for Testing</option>
-                  <option value="DEPLOYED">Deployed</option>
-                </optgroup>
+                {Object.entries(COLUMN_STATUS_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -447,7 +492,7 @@ You can also use \`inline code\` with single backticks.`;
               </label>
               <select
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as Ticket['priority'])}
+                onChange={(e) => setPriority(e.target.value as TicketPriority)}
                 className={commonStyles.input}
               >
                 <option value="low">Low</option>

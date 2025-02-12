@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
 import type { Account } from '../types/account';
 
 interface AccountContextType {
@@ -16,61 +16,43 @@ const AccountContext = createContext<AccountContextType | undefined>(undefined);
 export function AccountProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [currentAccount, setCurrentAccount] = useState<Account | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user?.uid) {
+    if (!user) {
+      console.log('[AccountContext] No user, clearing accounts');
+      setAccounts([]);
       setCurrentAccount(null);
       setIsLoading(false);
       return;
     }
 
-    // First, find the user's primary account
-    const unsubscribe = onSnapshot(
-      doc(db, 'users', user.uid),
-      async (userDoc) => {
-        try {
-          const userData = userDoc.data();
-          if (!userData?.primaryAccountId) {
-            // Create a default account for the user
-            const newAccount: Account = {
-              id: user.uid, // Using user.uid as default account id
-              name: `${userData?.displayName || 'My'}'s Account`,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              ownerId: user.uid,
-              settings: {},
-              members: {
-                [user.uid]: {
-                  role: 'owner',
-                  joinedAt: new Date().toISOString()
-                }
-              }
-            };
-
-            await setDoc(doc(db, 'accounts', newAccount.id), newAccount);
-            await setDoc(doc(db, 'users', user.uid), {
-              ...userData,
-              primaryAccountId: newAccount.id
-            }, { merge: true });
-
-            setCurrentAccount(newAccount);
-          } else {
-            // Fetch the account data
-            const accountDoc = await getDoc(doc(db, 'accounts', userData.primaryAccountId));
-            if (accountDoc.exists()) {
-              setCurrentAccount(accountDoc.data() as Account);
-            }
-          }
-        } catch (err) {
-          console.error('Error setting up account:', err);
-          setError(err instanceof Error ? err.message : 'Failed to load account');
-        } finally {
-          setIsLoading(false);
-        }
-      }
+    console.log('[AccountContext] Fetching accounts for user:', user.uid);
+    
+    const accountsRef = collection(db, 'accounts');
+    const q = query(
+      accountsRef,
+      where(`members.${user.uid}`, '!=', null)
     );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const userAccounts = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Account[];
+
+      console.log('[AccountContext] Found accounts:', userAccounts);
+      setAccounts(userAccounts);
+      
+      if (!currentAccount && userAccounts.length > 0) {
+        console.log('[AccountContext] Setting current account:', userAccounts[0]);
+        setCurrentAccount(userAccounts[0]);
+      }
+      
+      setIsLoading(false);
+    });
 
     return () => unsubscribe();
   }, [user]);

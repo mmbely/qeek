@@ -4,16 +4,18 @@ import { collection, addDoc, query, where, getDocs, orderBy, limit } from 'fireb
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { Ticket } from '../../types/ticket';
+import { useAccount } from '../../context/AccountContext';
 
 export default function TicketForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { currentAccount } = useAccount();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!user) return;
+    if (!currentAccount) return;
 
     setLoading(true);
     setError(null);
@@ -45,11 +47,12 @@ export default function TicketForm() {
         description: formData.get('description') as string,
         status: 'BACKLOG_NEW',
         priority: formData.get('priority') as Ticket['priority'],
-        createdBy: user.uid,
+        createdBy: user?.uid || '',
         createdAt: Date.now(),
         updatedAt: Date.now(),
         order: nextNumber,
         ticket_id,
+        accountId: currentAccount.id
       };
 
       await addDoc(collection(db, 'tickets'), ticketData);

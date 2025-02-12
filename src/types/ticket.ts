@@ -1,24 +1,21 @@
+import { BoardStatus, BacklogStatus } from './board';
+
+// Use the same status types from board
+export type TicketStatus = BoardStatus | BacklogStatus;
+
+export type TicketPriority = 'low' | 'medium' | 'high';
+
 export interface Ticket {
-    id?: string;           // Firestore document ID
-    ticket_id: string;     // Human readable ID (e.g., Q-1, Q-2)
+    id: string;
+    ticket_id: string;
+    accountId: string;  // Add this field to tie tickets to accounts
     title: string;
     description: string;
     status: TicketStatus;
-    priority: 'low' | 'medium' | 'high';
+    priority: TicketPriority;
     assigneeId?: string;
-    createdAt: number;
-    updatedAt?: number;
     createdBy: string;
+    createdAt: number;
+    updatedAt: number;
     order: number;
-    key?: string;
 }
-
-export type TicketStatus = 
-  | 'BACKLOG_ICEBOX' 
-  | 'BACKLOG_NEW' 
-  | 'BACKLOG_REFINED' 
-  | 'BACKLOG_DEV_NEXT'
-  | 'SELECTED_FOR_DEV'
-  | 'IN_PROGRESS'
-  | 'READY_FOR_TESTING'
-  | 'DEPLOYED';

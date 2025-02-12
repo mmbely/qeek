@@ -1,61 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, updateDoc, writeBatch } from 'firebase/firestore';
-import { db } from '../../services/firebase';
-import { Ticket } from '../../types/ticket';
+import { doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { db } from '../../config/firebase';
+import { Ticket, TicketStatus } from '../../types/ticket';
 import { useAuth } from '../../context/AuthContext';
-import { database } from '../../services/firebase';
+import { database } from '../../config/firebase';
 import { ref, get } from 'firebase/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import TicketModal from './TicketModal';
 import { Plus, AlertCircle } from 'lucide-react';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
+import { useTickets } from '../../hooks/useTickets';
+import { useAccount } from '../../context/AccountContext';
+import { 
+  Column, 
+  BoardStatus, 
+  BacklogStatus, 
+  developmentColumns, 
+  backlogColumns,
+  DevelopmentColumnsType,
+  BacklogColumnsType
+} from '../../types/board';
 
-import { TicketStatus } from '../../types/ticket';
-
-type BoardStatus = Extract<TicketStatus, 'SELECTED_FOR_DEV' | 'IN_PROGRESS' | 'READY_FOR_TESTING' | 'DEPLOYED'>;
-type BacklogStatus = Extract<TicketStatus, 'BACKLOG_ICEBOX' | 'BACKLOG_NEW' | 'BACKLOG_REFINED' | 'BACKLOG_DEV_NEXT'>;
 type BoardMode = 'development' | 'backlog';
-
-interface ColumnType {
-  title: string;
-  tickets: Ticket[];
-}
 
 interface TicketBoardProps {
   mode?: BoardMode;
 }
 
-const developmentColumns: Record<BoardStatus, ColumnType> = {
-  'SELECTED_FOR_DEV': { title: 'Selected', tickets: [] },
-  'IN_PROGRESS': { title: 'In Progress', tickets: [] },
-  'READY_FOR_TESTING': { title: 'Testing', tickets: [] },
-  'DEPLOYED': { title: 'Deployed', tickets: [] },
-};
-
-const backlogColumns: Record<BacklogStatus, ColumnType> = {
-  'BACKLOG_ICEBOX': { title: 'Icebox', tickets: [] },
-  'BACKLOG_NEW': { title: 'New', tickets: [] },
-  'BACKLOG_REFINED': { title: 'Refined', tickets: [] },
-  'BACKLOG_DEV_NEXT': { title: 'Dev Next', tickets: [] },
-};
-
 export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   const { user } = useAuth();
+  const { currentAccount } = useAccount();
+  const { getTickets } = useTickets();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [users, setUsers] = useState<{[key: string]: any}>({});
-  const [columns, setColumns] = useState<typeof developmentColumns | typeof backlogColumns>(() => {
-    // Initialize with fresh column objects
-    if (mode === 'development') {
-      return Object.keys(developmentColumns).reduce((acc, key) => ({
-        ...acc,
-        [key]: { ...developmentColumns[key as BoardStatus], tickets: [] }
-      }), {} as typeof developmentColumns);
-    } else {
-      return Object.keys(backlogColumns).reduce((acc, key) => ({
-        ...acc,
-        [key]: { ...backlogColumns[key as BacklogStatus], tickets: [] }
-      }), {} as typeof backlogColumns);
-    }
+  const [columns, setColumns] = useState<DevelopmentColumnsType | BacklogColumnsType>(() => {
+    return mode === 'development' ? { ...developmentColumns } : { ...backlogColumns };
   });
   const title = mode === 'development' ? 'Development Board' : 'Backlog Board';
   const subtitle = mode === 'development' 
@@ -76,76 +55,68 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     fetchUsers();
   }, []);
 
-  // Fetch tickets and organize them into columns
+  // Fetch tickets using useTickets hook
   useEffect(() => {
-    if (!user) return;
+    const fetchTickets = async () => {
+      console.log('[TicketBoard] Fetching tickets for account:', currentAccount?.id);
+      const ticketsData = await getTickets();
+      console.log('[TicketBoard] Fetched tickets:', ticketsData);
 
-    const ticketsRef = collection(db, 'tickets');
-    const unsubscribe = onSnapshot(
-      query(ticketsRef),
-      (snapshot) => {
-        const ticketsData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          order: doc.data().order || 0,
-        })) as Ticket[];
+      // Create fresh columns
+      const newColumns = mode === 'development' 
+        ? { ...developmentColumns }
+        : { ...backlogColumns };
 
-        // Create a map to track processed tickets
-        const processedTickets = new Map<string, boolean>();
-        
-        // Sort tickets first
-        const sortedTickets = [...ticketsData].sort((a, b) => (a.order || 0) - (b.order || 0));
+      // Sort tickets by order
+      const sortedTickets = [...ticketsData].sort((a, b) => (a.order || 0) - (b.order || 0));
+      console.log('[TicketBoard] Sorted tickets:', sortedTickets);
 
-        // Create fresh columns with empty ticket arrays
-        const newColumns = mode === 'development'
-          ? Object.keys(developmentColumns).reduce((acc, key) => ({
-              ...acc,
-              [key]: { ...developmentColumns[key as BoardStatus], tickets: [] }
-            }), {} as typeof developmentColumns)
-          : Object.keys(backlogColumns).reduce((acc, key) => ({
-              ...acc,
-              [key]: { ...backlogColumns[key as BacklogStatus], tickets: [] }
-            }), {} as typeof backlogColumns);
-
-        // Create a map of tickets by status
-        const ticketsByStatus = sortedTickets.reduce((acc, ticket) => {
-          const status = ticket.status as BoardStatus | BacklogStatus;
-          if (!acc[status]) {
-            acc[status] = [];
-          }
-          acc[status].push({...ticket});
-          return acc;
-        }, {} as Record<string, Ticket[]>);
-
-        // Distribute tickets to appropriate columns
-        if (mode === 'development') {
-          Object.keys(developmentColumns).forEach(status => {
-            if (ticketsByStatus[status]) {
-              (newColumns as typeof developmentColumns)[status as BoardStatus].tickets = ticketsByStatus[status];
-            }
-          });
-        } else {
-          Object.keys(backlogColumns).forEach(status => {
-            if (ticketsByStatus[status]) {
-              (newColumns as typeof backlogColumns)[status as BacklogStatus].tickets = ticketsByStatus[status];
-            }
-          });
+      // Group tickets by status
+      const ticketsByStatus = sortedTickets.reduce((acc, ticket) => {
+        if (!acc[ticket.status]) {
+          acc[ticket.status] = [];
         }
+        acc[ticket.status].push(ticket);
+        return acc;
+      }, {} as Record<TicketStatus, Ticket[]>);
 
-        setTickets(ticketsData);
-        setColumns(newColumns);
+      console.log('[TicketBoard] Tickets by status:', ticketsByStatus);
+
+      // Distribute tickets to columns
+      if (mode === 'development') {
+        Object.entries(developmentColumns).forEach(([status, _]) => {
+          const typedStatus = status as BoardStatus;
+          if (ticketsByStatus[typedStatus]) {
+            (newColumns as DevelopmentColumnsType)[typedStatus].tickets = 
+              ticketsByStatus[typedStatus];
+          }
+        });
+      } else {
+        Object.entries(backlogColumns).forEach(([status, _]) => {
+          const typedStatus = status as BacklogStatus;
+          if (ticketsByStatus[typedStatus]) {
+            (newColumns as BacklogColumnsType)[typedStatus].tickets = 
+              ticketsByStatus[typedStatus];
+          }
+        });
       }
-    );
 
-    return () => unsubscribe();
-  }, [user, mode]);
+      console.log('[TicketBoard] Final columns:', newColumns);
+      setTickets(ticketsData);
+      setColumns(newColumns);
+    };
+
+    if (currentAccount?.id) {
+      fetchTickets();
+    }
+  }, [getTickets, mode, currentAccount]);
 
   const getUserName = (userId: string) => {
     const userInfo = users[userId];
     return userInfo?.displayName || userInfo?.email || 'Unknown User';
   };
 
-  const onDragEnd = async (result: DropResult) => {
+  const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
 
     if (!destination) return;
@@ -158,14 +129,8 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     }
 
     try {
-      // Type the statuses based on the current mode
-      const sourceStatus = mode === 'development'
-        ? source.droppableId as BoardStatus
-        : source.droppableId as BacklogStatus;
-      
-      const destStatus = mode === 'development'
-        ? destination.droppableId as BoardStatus
-        : destination.droppableId as BacklogStatus;
+      const sourceStatus = source.droppableId as TicketStatus;
+      const destStatus = destination.droppableId as TicketStatus;
 
       // Validate status based on mode
       const isValidMove = mode === 'development'
@@ -289,7 +254,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
       </header>
 
       {/* Board */}
-      <DragDropContext onDragEnd={onDragEnd}>
+      <DragDropContext onDragEnd={handleDragEnd}>
         <div className={`
           ${layout.grid.cols4}
           min-h-[calc(100vh-12rem)]

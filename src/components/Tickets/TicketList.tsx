@@ -1,7 +1,5 @@
 import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment, FormControl, Select, MenuItem } from '@mui/material';
-import React, { useState, useEffect, useCallback } from 'react';
-import { collection, query, onSnapshot, where, orderBy } from 'firebase/firestore';
-import { db } from '../../services/firebase';
+import React, { useState, useEffect } from 'react';
 import { Ticket, TicketStatus } from '../../types/ticket';
 import { useAuth } from '../../context/AuthContext';
 import { Plus, AlertCircle, ArrowRight, Search } from 'lucide-react';
@@ -28,32 +26,19 @@ export function TicketList({ showHeader = true }: TicketListProps) {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | TicketStatus>('all');
-  const { getTickets, updateTicket, generateMissingTicketIds } = useTickets();
+  const { getTickets, updateTicket } = useTickets();
   const { user } = useAuth();
   const [users, setUsers] = useState<{ [key: string]: CustomUser }>({});
-  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
-    // Create a query for tickets ordered by createdAt
-    const ticketsRef = collection(db, 'tickets');
-    const q = query(ticketsRef, orderBy('createdAt', 'desc'));
+    const fetchTickets = async () => {
+      const fetchedTickets = await getTickets();
+      console.log('[TicketList] Fetched tickets:', fetchedTickets.length);
+      setTickets(fetchedTickets);
+    };
 
-    // Set up real-time listener
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const updatedTickets = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Ticket[];
-      
-      console.log('Real-time tickets update:', updatedTickets);
-      setTickets(updatedTickets);
-    }, (error) => {
-      console.error("Error listening to tickets:", error);
-    });
-
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
-  }, []); // Empty dependency array since we want this to run once on mount
+    fetchTickets();
+  }, [getTickets]);
 
   useEffect(() => {
     console.log('Setting up users subscription');
@@ -88,22 +73,6 @@ export function TicketList({ showHeader = true }: TicketListProps) {
     if (filterStatus === 'all') return matchesSearch;
     return matchesSearch && ticket.status === filterStatus;
   });
-
-  const handleGenerateIds = async () => {
-    setIsGenerating(true);
-    try {
-      const updatedCount = await generateMissingTicketIds();
-      console.log(`Updated ${updatedCount} tickets with new IDs`);
-      // Refresh the ticket list
-      await getTickets();
-    } catch (error) {
-      console.error('Error generating ticket IDs:', error);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  console.log('Tickets being rendered:', tickets);
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900">
@@ -189,16 +158,6 @@ export function TicketList({ showHeader = true }: TicketListProps) {
             </Select>
           </FormControl>
         </div>
-
-        {/* <div className="mb-4 flex justify-end">
-          <button
-            onClick={handleGenerateIds}
-            disabled={isGenerating}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isGenerating ? 'Generating...' : 'Generate Missing Ticket IDs'}
-          </button>
-        </div> */}
 
         {filteredTickets.length > 0 ? (
           <TableContainer 

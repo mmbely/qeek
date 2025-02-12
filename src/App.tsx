@@ -14,6 +14,10 @@ import { FolderOpen } from 'lucide-react';
 import CodebaseViewer from './components/Codebase/CodebaseViewer';
 import { CodebaseProvider } from './context/CodebaseContext';
 import { AccountProvider } from './context/AccountContext';
+import SettingsLayout from './components/Settings/SettingsLayout';
+import UserManagement from './components/Settings/UserManagement';
+import UserProfile from './components/Settings/UserProfile';
+import AdminSettings from './components/Settings/AdminSettings';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -92,7 +96,13 @@ function AppContent() {
         <Route path="/codebase/connect" element={<Connect />} />
         <Route path="/codebase/files" element={<CodebaseViewer />} />
         <Route path="/codebase/files/:repositoryName" element={<CodebaseViewer />} />
-        <Route path="/settings/github" element={<GitHubSettings />} />
+        <Route path="/settings" element={<SettingsLayout />}>
+          <Route index element={<UserProfile />} />
+          <Route path="profile" element={<UserProfile />} />
+          <Route path="github" element={<GitHubSettings />} />
+          <Route path="users" element={<UserManagement />} />
+          <Route path="admin" element={<AdminSettings />} />
+        </Route>
       </Route>
     </Routes>
   );
