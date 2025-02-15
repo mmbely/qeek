@@ -5,6 +5,8 @@ export type TicketStatus = BoardStatus | BacklogStatus;
 
 export type TicketPriority = 'low' | 'medium' | 'high';
 
+export type TicketType = 'bug' | 'task' | 'story';
+
 export interface Ticket {
     id: string;
     ticket_id: string;
@@ -14,6 +16,7 @@ export interface Ticket {
     status: TicketStatus;
     priority: TicketPriority;
     assigneeId?: string;
+    type: TicketType;
     createdBy: string;
     createdAt: number;
     updatedAt: number;

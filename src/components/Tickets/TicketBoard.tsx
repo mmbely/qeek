@@ -365,28 +365,43 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
                           >
                             {/* Ticket Content */}
                             <div className="space-y-2">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-start gap-2">
                                 <span className="text-sm font-medium text-gray-400 dark:text-gray-500 whitespace-nowrap">
                                   {ticket.ticket_id}
                                 </span>
-                                <span className="text-gray-900 dark:text-gray-100 truncate">
+                                <span className="text-gray-900 dark:text-gray-100 line-clamp-2">
                                   {ticket.title}
                                 </span>
                               </div>
                               
-                              <div className={`${layout.flex.between} gap-2`}>
-                                {/* Priority Badge */}
-                                <span className={`
-                                  px-2 py-1 rounded-md text-xs font-medium
-                                  ${ticket.priority === 'high' 
-                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                    : ticket.priority === 'medium'
-                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                    : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                  }
-                                `}>
-                                  {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
-                                </span>
+                              <div className={`${layout.flex.between} gap-2 flex-wrap`}>
+                                <div className="flex gap-2 items-center">
+                                  {/* Type Badge */}
+                                  <span className={`
+                                    px-2 py-1 rounded-md text-xs font-medium
+                                    ${(ticket.type || 'task') === 'bug' 
+                                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                      : (ticket.type || 'task') === 'story'
+                                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                      : 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
+                                    }
+                                  `}>
+                                    {(ticket.type || 'task').charAt(0).toUpperCase() + (ticket.type || 'task').slice(1)}
+                                  </span>
+
+                                  {/* Priority Badge */}
+                                  <span className={`
+                                    px-2 py-1 rounded-md text-xs font-medium
+                                    ${ticket.priority === 'high' 
+                                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                      : ticket.priority === 'medium'
+                                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                      : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                    }
+                                  `}>
+                                    {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
+                                  </span>
+                                </div>
 
                                 {/* Assignee */}
                                 {ticket.assigneeId && (

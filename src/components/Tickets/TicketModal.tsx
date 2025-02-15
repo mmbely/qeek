@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { doc, updateDoc, collection, addDoc, getDocs, query, where, writeBatch, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import { Ticket, TicketStatus, TicketPriority } from '../../types/ticket';
+import { Ticket, TicketStatus, TicketPriority, TicketType } from '../../types/ticket';
 import { useAuth } from '../../context/AuthContext';
 import { ref, get } from 'firebase/database';
 import { database } from '../../services/firebase';
@@ -61,6 +61,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
   const [isEditing, setIsEditing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [ticketType, setTicketType] = useState<TicketType>(ticket?.type || 'task');
 
   // Check authorization
   const isAuthorized = React.useMemo(() => {
@@ -102,6 +103,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
     setStatus(ticket?.status || DEFAULT_STATUS);
     setPriority(ticket?.priority || DEFAULT_PRIORITY);
     setAssigneeId(ticket?.assigneeId || '');
+    setTicketType(ticket?.type || 'task');
   }, [ticket]);
 
   const getUserName = (userId: string) => {
@@ -154,6 +156,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
           status,
           priority,
           assigneeId,
+          type: ticketType,
           updatedAt: Date.now(),
         });
       } else {
@@ -165,6 +168,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
           status,
           priority,
           assigneeId,
+          type: ticketType,
           updatedAt: Date.now(),
           createdBy: user.uid,
           createdAt: Date.now(),
@@ -444,9 +448,10 @@ You can also use \`inline code\` with single backticks.`;
       open={isOpen && isAuthorized}
       onClose={onClose}
       center
+      closeIcon={<></>}
       styles={{
         modal: {
-          maxWidth: '90%',  // This will make the modal 90% of the viewport width
+          maxWidth: '90%',
           width: '90%',
         }
       }}
@@ -467,9 +472,9 @@ You can also use \`inline code\` with single backticks.`;
           </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 ml-4"
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
           >
-            <X className="h-5 w-5" />
+            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
@@ -535,6 +540,21 @@ You can also use \`inline code\` with single backticks.`;
           </div>
 
           <div className="flex-1 space-y-6">
+            <div>
+              <label className={`block mb-2 ${typography.small}`}>
+                Type
+              </label>
+              <select
+                value={ticketType}
+                onChange={(e) => setTicketType(e.target.value as TicketType)}
+                className={commonStyles.input}
+              >
+                <option value="bug">Bug</option>
+                <option value="task">Task</option>
+                <option value="story">Story</option>
+              </select>
+            </div>
+
             <div>
               <label className={`block mb-2 ${typography.small}`}>
                 Status
