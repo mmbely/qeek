@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Message } from '../../types/message';
 import { CustomUser } from '../../types/user';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
 import { Loader, User } from 'lucide-react';
+import { format } from 'date-fns';
 
 export interface MessageListProps {
   messages: Message[];
@@ -12,31 +13,41 @@ export interface MessageListProps {
   className?: string;
 }
 
-const UserAvatar = ({ user }: { user: CustomUser }) => {
-  if (user.photoURL) {
+const UserAvatar = ({ userData, size = "small" }: { 
+  userData: { displayName?: string; email?: string; photoURL?: string; }; 
+  size?: "small" | "medium" 
+}) => {
+  const [imageError, setImageError] = useState(false);
+  const initials = userData?.displayName 
+    ? userData.displayName.split(' ').map(n => n[0]).join('').toUpperCase()
+    : userData?.email?.charAt(0).toUpperCase() || '?';
+
+  const sizeClasses = size === "small" ? "w-8 h-8" : "w-10 h-10";
+
+  if (!userData || imageError) {
     return (
-      <div className="w-10 h-10 rounded-md overflow-hidden">
-        <img
-          src={user.photoURL}
-          alt={user.displayName || user.email || 'User avatar'}
-          className="w-full h-full object-cover"
-        />
+      <div className={`${sizeClasses} rounded-full flex items-center justify-center
+                    bg-gray-600 text-gray-300`}>
+        <span className="text-sm font-medium">{initials}</span>
       </div>
     );
   }
 
-  // Fallback avatar with first letter of email or name
-  const initial = (user.displayName || user.email || '?')[0].toUpperCase();
-  
   return (
-    <div className={`
-      ${layout.flex.center}
-      w-10 h-10 rounded-md
-      bg-blue-100 dark:bg-blue-900
-      text-blue-700 dark:text-blue-300
-      font-medium text-lg
-    `}>
-      {initial}
+    <div className={`${sizeClasses} rounded-full flex items-center justify-center overflow-hidden
+                  bg-gray-600`}>
+      {userData.photoURL ? (
+        <img 
+          src={userData.photoURL} 
+          alt={userData.displayName || userData.email || ''}
+          className="w-full h-full object-cover"
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <span className="text-sm font-medium text-gray-300">
+          {initials}
+        </span>
+      )}
     </div>
   );
 };
@@ -94,6 +105,13 @@ export default function MessageList({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  console.log('[MessageList] Rendering with:', {
+    messageCount: messages.length,
+    userCount: Object.keys(users).length,
+    users: users, // Log full users object
+    currentUser: currentUser?.uid
+  });
 
   if (isLoading) {
     return (
@@ -155,15 +173,23 @@ export default function MessageList({
             <div className="space-y-6 px-4">
               {dateGroups.map((group, groupIndex) => {
                 const firstMessage = group[0];
-                const sender = users[firstMessage.userId];
-                const senderName = sender?.displayName || sender?.email || 'Unknown User';
+                const messageUser = users[firstMessage.userId];
+                console.log('[MessageList] Message user data:', {
+                  messageUserId: firstMessage.userId,
+                  foundUser: messageUser,
+                  displayName: messageUser?.displayName
+                });
+                const senderName = messageUser?.displayName || messageUser?.email || 'Unknown User';
 
                 return (
                   <div key={groupIndex} className="flex items-start gap-3 group">
                     {/* User Avatar */}
                     <div className="flex-shrink-0 mt-1">
-                      {sender ? (
-                        <UserAvatar user={sender} />
+                      {messageUser ? (
+                        <UserAvatar 
+                          userData={messageUser} 
+                          size="medium"
+                        />
                       ) : (
                         <div className={`
                           ${layout.flex.center}

@@ -23,19 +23,25 @@ export default function Layout() {
       return;
     }
 
-    console.log('Fetching users...');
-    const unsubscribe = subscribeToUsers(currentAccount.id, (fetchedUsers: { [key: string]: CustomUser }) => {
-      console.log('Received users:', fetchedUsers);
-      const filteredUsers = Object.fromEntries(
-        Object.entries(fetchedUsers).filter(([id]) => id !== user?.uid)
-      ) as { [key: string]: CustomUser };
-      
-      console.log('Filtered users:', filteredUsers);
-      setUsers(filteredUsers);
-    });
+    const memberIds = Object.keys(currentAccount.members);
+    console.log('Fetching users for members:', memberIds);
+    
+    const unsubscribe = subscribeToUsers(
+      currentAccount.id,
+      memberIds,
+      (fetchedUsers: { [key: string]: CustomUser }) => {
+        console.log('Received users:', fetchedUsers);
+        const filteredUsers = Object.fromEntries(
+          Object.entries(fetchedUsers).filter(([id]) => id !== user?.uid)
+        ) as { [key: string]: CustomUser };
+        
+        console.log('Filtered users:', filteredUsers);
+        setUsers(filteredUsers);
+      }
+    );
 
     return () => unsubscribe();
-  }, [user?.uid, currentAccount]);
+  }, [currentAccount, user?.uid]);
 
   const handleLogout = async () => {
     try {

@@ -10,6 +10,8 @@ import { typography } from '../../styles/theme'
 import { subscribeToUsers } from '../../services/chat'
 import { useAccount } from '../../context/AccountContext'
 import { useAuth } from '../../context/AuthContext'
+import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import { db } from '../../config/firebase'
 
 interface SidebarProps {
   user: CustomUser | null;
@@ -26,6 +28,46 @@ interface SidebarProps {
   handleLogout: () => void;
   handleStartDirectMessage: (userId: string) => void;
 }
+
+// Add UserAvatar component
+const UserAvatar = ({ userData, size = "small" }: { 
+  userData: { displayName?: string; email?: string; photoURL?: string; }; 
+  size?: "small" | "medium" 
+}) => {
+  const [imageError, setImageError] = useState(false);
+  const initials = userData?.displayName 
+    ? userData.displayName.split(' ').map(n => n[0]).join('').toUpperCase()
+    : userData?.email?.charAt(0).toUpperCase() || '?';
+
+  const sizeClasses = size === "small" ? "w-5 h-5" : "w-8 h-8";
+
+  if (!userData || imageError) {
+    return (
+      <div className={`${sizeClasses} rounded-full flex items-center justify-center
+                    bg-gray-600 text-gray-300`}>
+        <span className="text-sm font-medium">{initials}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${sizeClasses} rounded-full flex items-center justify-center overflow-hidden
+                  bg-gray-600`}>
+      {userData.photoURL ? (
+        <img 
+          src={userData.photoURL} 
+          alt={userData.displayName || userData.email || ''}
+          className="w-full h-full object-cover"
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <span className="text-sm font-medium text-gray-300">
+          {initials}
+        </span>
+      )}
+    </div>
+  );
+};
 
 export function Sidebar({
   user,
@@ -51,16 +93,23 @@ export function Sidebar({
   useEffect(() => {
     if (!currentAccount?.id) {
       console.log('[Sidebar] No current account, skipping users subscription');
+      setAccountUsers({});
       setIsLoading(false);
       return;
     }
 
-    console.log('[Sidebar] Setting up users subscription for account:', currentAccount.id);
-    const unsubscribe = subscribeToUsers(currentAccount.id, (fetchedUsers) => {
-      console.log('[Sidebar] Received users:', fetchedUsers);
-      setAccountUsers(fetchedUsers);
-      setIsLoading(false);
-    });
+    const memberIds = Object.keys(currentAccount.members);
+    console.log('[Sidebar] Setting up users subscription for members:', memberIds);
+
+    const unsubscribe = subscribeToUsers(
+      currentAccount.id,
+      memberIds,
+      (fetchedUsers) => {
+        console.log('[Sidebar] Received users:', fetchedUsers);
+        setAccountUsers(fetchedUsers);
+        setIsLoading(false);
+      }
+    );
 
     return () => {
       console.log('[Sidebar] Cleaning up users subscription');
@@ -173,7 +222,7 @@ export function Sidebar({
             <h2 className={typography.sidebarHeader}>Direct Messages</h2>
             <button
               onClick={() => setIsDirectMessageModalOpen(true)}
-              className="p-1 hover:bg-gray-700 rounded"
+              className="p-1 hover:bg-gray-700 rounded text-gray-300"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -181,31 +230,46 @@ export function Sidebar({
           {isLoading ? (
             <div className="text-sm text-gray-400 p-2">Loading users...</div>
           ) : Object.keys(accountUsers).length > 0 ? (
-            <ul className="space-y-1">
-              {Object.entries(accountUsers).map(([userId, userData]) => (
-                <li key={userId}>
-                  <button
-                    onClick={() => handleStartDirectMessage(userId)}
-                    className={`
-                      flex items-center w-full p-2 rounded-lg text-left
-                      ${location.pathname === `/chat/${userId}` 
-                        ? 'bg-gray-700 text-white' 
-                        : 'text-gray-300 hover:bg-gray-700'
+            <ScrollArea className="h-[200px]">
+              <ul className="space-y-1">
+                {Object.entries(accountUsers).map(([userId, userData]) => {
+                  const isCurrentUser = userId === authUser?.uid;
+                  const userDataToShow = isCurrentUser 
+                    ? { 
+                        displayName: userData.displayName,
+                        email: userData.email,
+                        photoURL: authUser?.photoURL
                       }
-                    `}
-                  >
-                    <User className="h-5 w-5 mr-2 text-gray-400" />
-                    <span className="truncate">
-                      {userData.displayName || userData.email || 'Unknown User'}
-                      {userId === authUser?.uid && ' (you)'}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                    : userData;
+                  
+                  return (
+                    <li key={userId}>
+                      <button
+                        onClick={() => handleStartDirectMessage(userId)}
+                        className={`
+                          flex items-center w-full p-2 rounded-lg text-left
+                          ${location.pathname === `/chat/dm/${userId}` 
+                            ? 'bg-gray-700 text-white' 
+                            : 'text-gray-300 hover:bg-gray-700'
+                          }
+                        `}
+                      >
+                        <div className="mr-2">
+                          <UserAvatar userData={userDataToShow} size="small" />
+                        </div>
+                        <span className="truncate">
+                          {userData.displayName || userData.email || 'Unknown User'}
+                          {isCurrentUser && ' (You)'}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </ScrollArea>
           ) : (
             <div className="text-sm text-gray-400 p-2">
-              No other users in this account
+              No users in this account
             </div>
           )}
         </div>

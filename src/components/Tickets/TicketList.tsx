@@ -44,17 +44,26 @@ export function TicketList({ showHeader = true }: TicketListProps) {
 
   useEffect(() => {
     if (!currentAccount?.id) {
-      console.log('No current account, skipping users subscription');
+      console.log('[TicketList] No current account, skipping users subscription');
       return;
     }
 
-    console.log('Setting up users subscription');
-    const unsubscribe = subscribeToUsers(currentAccount.id, (fetchedUsers: { [key: string]: CustomUser }) => {
-      console.log('Received users:', fetchedUsers);
-      setUsers(fetchedUsers);
-    });
+    const memberIds = Object.keys(currentAccount.members);
+    console.log('[TicketList] Setting up users subscription for members:', memberIds);
+    
+    const unsubscribe = subscribeToUsers(
+      currentAccount.id,
+      memberIds,
+      (fetchedUsers: { [key: string]: CustomUser }) => {
+        console.log('[TicketList] Received users:', fetchedUsers);
+        setUsers(fetchedUsers);
+      }
+    );
 
-    return () => unsubscribe();
+    return () => {
+      console.log('[TicketList] Cleaning up users subscription');
+      unsubscribe();
+    };
   }, [currentAccount]);
 
   const getAssigneeName = (assigneeId: string | undefined) => {
