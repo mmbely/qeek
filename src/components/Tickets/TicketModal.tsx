@@ -112,27 +112,50 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
   };
 
   const getNextTicketNumber = async () => {
-    const ticketsRef = collection(db, 'tickets');
-    const q = query(
-      ticketsRef,
-      orderBy('ticket_id', 'desc'),
-      limit(1)
-    );
-    
-    const snapshot = await getDocs(q);
-    let nextNumber = 1;
-    
-    if (!snapshot.empty) {
-      const lastTicket = snapshot.docs[0].data();
-      if (lastTicket.ticket_id) {
-        const match = lastTicket.ticket_id.match(/Q-(\d+)/);
-        if (match) {
-          nextNumber = parseInt(match[1]) + 1;
-        }
-      }
+    if (!currentAccount?.id) {
+      console.error('[TicketModal] No current account when generating ticket number');
+      return 'Q-001'; // Fallback
     }
     
-    return `Q-${String(nextNumber).padStart(4, '0')}`;
+    const prefix = 'Q';
+    
+    try {
+      // Get all tickets for this account to ensure we don't miss any
+      const ticketsRef = collection(db, 'tickets');
+      const q = query(
+        ticketsRef,
+        where('accountId', '==', currentAccount.id),
+        where('ticket_id', '>=', 'Q-'), // Ensure we only get Q- prefixed tickets
+        orderBy('ticket_id', 'desc')  // Remove limit to get all tickets
+      );
+      
+      console.log('[TicketModal] Querying for last ticket number');
+      const snapshot = await getDocs(q);
+      let maxNumber = 0;
+      
+      // Iterate through all tickets to find the highest number
+      snapshot.forEach((doc) => {
+        const ticketData = doc.data();
+        if (ticketData.ticket_id) {
+          const match = ticketData.ticket_id.match(/Q-(\d{3})/);
+          if (match) {
+            const number = parseInt(match[1], 10);
+            maxNumber = Math.max(maxNumber, number);
+          }
+        }
+      });
+
+      console.log('[TicketModal] Highest ticket number found:', maxNumber);
+      const nextNumber = maxNumber + 1;
+      const newTicketId = `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+      
+      console.log('[TicketModal] Generated new ticket ID:', newTicketId);
+      return newTicketId;
+      
+    } catch (error) {
+      console.error('[TicketModal] Error generating ticket number:', error);
+      return 'Q-001'; // Fallback in case of error
+    }
   };
 
   // Handle submit with authorization check
@@ -161,7 +184,21 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
         });
       } else {
         // Create new ticket
-        const ticketId = `TICKET-${Date.now()}`;
+        const nextTicketId = await getNextTicketNumber();
+        
+        // Double check that this ticket ID doesn't already exist
+        const ticketsRef = collection(db, 'tickets');
+        const existingTicketQuery = query(
+          ticketsRef,
+          where('accountId', '==', currentAccount.id),
+          where('ticket_id', '==', nextTicketId)
+        );
+        
+        const existingTicket = await getDocs(existingTicketQuery);
+        if (!existingTicket.empty) {
+          throw new Error('Duplicate ticket ID generated. Please try again.');
+        }
+
         const newTicket = await createTicket({
           title,
           description,
@@ -173,7 +210,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
           createdBy: user.uid,
           createdAt: Date.now(),
           order: Date.now(),
-          ticket_id: ticketId, // Add the required ticket_id field
+          ticket_id: nextTicketId,
         });
         
         if (!newTicket) {
@@ -185,7 +222,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
       onClose();
     } catch (error) {
       console.error('[TicketModal] Error saving ticket:', error);
-      setError('Failed to save ticket. Please try again.');
+      setError(error instanceof Error ? error.message : 'Failed to save ticket. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -675,3 +712,4 @@ You can also use \`inline code\` with single backticks.`;
     </Modal>
   );
 }
+
