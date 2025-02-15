@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { doc, updateDoc, collection, addDoc, getDocs, query, where, writeBatch, orderBy, limit } from 'firebase/firestore';
+import { doc, updateDoc, collection, addDoc, getDocs, query, where, writeBatch, orderBy, limit, getDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { Ticket, TicketStatus, TicketPriority, TicketType } from '../../types/ticket';
+import { CustomUser } from '../../types/user';
 import { useAuth } from '../../context/AuthContext';
-import { ref, get } from 'firebase/database';
-import { database } from '../../services/firebase';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
 import { X, Loader, Copy, Check, Trash2 } from 'lucide-react';
 import { Modal } from 'react-responsive-modal';
@@ -15,7 +14,11 @@ import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Components } from 'react-markdown';
 import { useAccount } from '../../context/AccountContext';
 import { useTickets } from '../../hooks/useTickets';
-import { COLUMN_STATUS_LABELS } from '../../types/board/columns';
+import { 
+  COLUMN_STATUS_LABELS,
+  BacklogStatus,
+  BoardStatus
+} from '../../types/board';
 
 // Define the CodeProps interface directly
 interface CodeProps {
@@ -35,16 +38,22 @@ interface TicketModalProps {
 const DEFAULT_STATUS: TicketStatus = 'BACKLOG_NEW';
 const DEFAULT_PRIORITY: TicketPriority = 'medium';
 
-const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
-  'BACKLOG_ICEBOX': 'Icebox',
-  'BACKLOG_NEW': 'New',
-  'BACKLOG_REFINED': 'Refined',
-  'BACKLOG_DEV_NEXT': 'Next for Development',
-  'SELECTED_FOR_DEV': 'Selected for Development',
-  'IN_PROGRESS': 'In Progress',
-  'READY_FOR_TESTING': 'Ready for Testing',
-  'DEPLOYED': 'Deployed'
-};
+const TICKET_STATUS_LABELS: Record<TicketStatus, string> = COLUMN_STATUS_LABELS;
+
+// Define the backlog and development status options
+const BACKLOG_OPTIONS: BacklogStatus[] = [
+  'BACKLOG_ICEBOX',
+  'BACKLOG_NEW',
+  'BACKLOG_REFINED',
+  'BACKLOG_DEV_NEXT'
+];
+
+const DEVELOPMENT_OPTIONS: BoardStatus[] = [
+  'SELECTED_FOR_DEV',
+  'IN_PROGRESS',
+  'READY_FOR_TESTING',
+  'DEPLOYED'
+];
 
 export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketModalProps) {
   const { user } = useAuth();
@@ -56,7 +65,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
   const [priority, setPriority] = useState<TicketPriority>(ticket?.priority || DEFAULT_PRIORITY);
   const [assigneeId, setAssigneeId] = useState(ticket?.assigneeId || '');
   const [loading, setLoading] = useState(false);
-  const [users, setUsers] = useState<{[key: string]: any}>({});
+  const [users, setUsers] = useState<{[key: string]: CustomUser}>({});
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -87,14 +96,38 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
   // Fetch users for the assignee dropdown
   useEffect(() => {
     const fetchUsers = async () => {
-      const usersRef = ref(database, 'users');
-      const snapshot = await get(usersRef);
-      if (snapshot.exists()) {
-        setUsers(snapshot.val());
+      if (!currentAccount) return;
+      
+      try {
+        const userPromises = Object.keys(currentAccount.members).map(async (userId) => {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            if (userDoc.exists()) {
+              return { userId, userData: userDoc.data() as CustomUser };
+            }
+          } catch (error) {
+            console.error(`Failed to load user ${userId}:`, error);
+          }
+          return null;
+        });
+
+        const usersData = await Promise.all(userPromises);
+        const newUsers: Record<string, CustomUser> = {};
+        
+        usersData.forEach(user => {
+          if (user) {
+            newUsers[user.userId] = user.userData;
+          }
+        });
+
+        setUsers(newUsers);
+      } catch (error) {
+        console.error('Failed to load users:', error);
       }
     };
+
     fetchUsers();
-  }, []);
+  }, [currentAccount]);
 
   // Update form when ticket changes
   useEffect(() => {
@@ -599,13 +632,22 @@ You can also use \`inline code\` with single backticks.`;
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as TicketStatus)}
-                className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                className={commonStyles.input}
               >
-                {Object.entries(COLUMN_STATUS_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
+                <optgroup label="Backlog">
+                  {BACKLOG_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {COLUMN_STATUS_LABELS[value]}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Development">
+                  {DEVELOPMENT_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {COLUMN_STATUS_LABELS[value]}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
 
@@ -634,9 +676,9 @@ You can also use \`inline code\` with single backticks.`;
                 className={commonStyles.input}
               >
                 <option value="">Unassigned</option>
-                {Object.entries(users).map(([userId, userInfo]: [string, any]) => (
+                {Object.entries(users).map(([userId, userInfo]) => (
                   <option key={userId} value={userId}>
-                    {userInfo.displayName || userInfo.email}
+                    {userInfo.displayName || userInfo.email || 'Unknown User'}
                   </option>
                 ))}
               </select>

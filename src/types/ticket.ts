@@ -1,6 +1,6 @@
-import { BoardStatus, BacklogStatus } from './board';
+import type { BoardStatus, BacklogStatus } from './board';
 
-// Use the same status types from board
+// Use the union type directly instead of importing TicketStatus
 export type TicketStatus = BoardStatus | BacklogStatus;
 
 export type TicketPriority = 'low' | 'medium' | 'high';

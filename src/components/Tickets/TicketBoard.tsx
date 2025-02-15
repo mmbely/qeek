@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { Ticket, TicketStatus } from '../../types/ticket';
+import { Ticket } from '../../types/ticket';
 import { useAuth } from '../../context/AuthContext';
 import { database } from '../../config/firebase';
 import { ref, get } from 'firebase/database';
@@ -12,15 +12,14 @@ import { theme, commonStyles, typography, layout, animations } from '../../style
 import { useTickets } from '../../hooks/useTickets';
 import { useAccount } from '../../context/AccountContext';
 import { 
-  Column, 
-  BoardStatus, 
-  BacklogStatus, 
-  developmentColumns, 
-  backlogColumns,
+  COLUMN_STATUS_LABELS,
+  Column,
+  BacklogColumnsType,
   DevelopmentColumnsType,
-  BacklogColumnsType
+  backlogColumns,
+  developmentColumns
 } from '../../types/board';
-import { organizeTickets } from '../../utils/board';
+import { TicketStatus } from '../../types/board';
 
 type BoardMode = 'development' | 'backlog';
 
@@ -28,7 +27,8 @@ interface TicketBoardProps {
   mode?: BoardMode;
 }
 
-type ColumnsType = DevelopmentColumnsType | BacklogColumnsType;
+// Define ColumnsType as union of both column types
+type ColumnsType = BacklogColumnsType | DevelopmentColumnsType;
 
 export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   const { user } = useAuth();
@@ -36,7 +36,9 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   const { getTickets, updateTicket } = useTickets();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [users, setUsers] = useState<{[key: string]: any}>({});
-  const [columns, setColumns] = useState<ColumnsType>(mode === 'development' ? developmentColumns : backlogColumns);
+  const [columns, setColumns] = useState<ColumnsType>(
+    mode === 'development' ? developmentColumns : backlogColumns
+  );
   const title = mode === 'development' ? 'Development Board' : 'Backlog Board';
   const subtitle = mode === 'development' 
     ? "Manage your team's tickets"
@@ -69,58 +71,42 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   // Fetch tickets using useTickets hook
   useEffect(() => {
     const fetchTickets = async () => {
-      console.log('[TicketBoard] Fetching tickets for account:', currentAccount?.id);
-      const ticketsData = await getTickets();
-      console.log('[TicketBoard] Fetched tickets:', ticketsData);
+      if (!currentAccount?.id) return;
+      
+      try {
+        const ticketsData = await getTickets();
+        console.log('[TicketBoard] Fetched tickets:', ticketsData);
 
-      // Create fresh columns
-      const newColumns = mode === 'development' 
-        ? { ...developmentColumns }
-        : { ...backlogColumns };
+        // Sort tickets by order
+        const sortedTickets = [...ticketsData].sort((a, b) => (a.order || 0) - (b.order || 0));
+        
+        // Create fresh columns with proper typing
+        const newColumns = mode === 'development' 
+          ? { ...developmentColumns } as DevelopmentColumnsType
+          : { ...backlogColumns } as BacklogColumnsType;
 
-      // Sort tickets by order
-      const sortedTickets = [...ticketsData].sort((a, b) => (a.order || 0) - (b.order || 0));
-      console.log('[TicketBoard] Sorted tickets:', sortedTickets);
-
-      // Group tickets by status
-      const ticketsByStatus = sortedTickets.reduce((acc, ticket) => {
-        if (!acc[ticket.status]) {
-          acc[ticket.status] = [];
-        }
-        acc[ticket.status].push(ticket);
-        return acc;
-      }, {} as Record<TicketStatus, Ticket[]>);
-
-      console.log('[TicketBoard] Tickets by status:', ticketsByStatus);
-
-      // Distribute tickets to columns
-      if (mode === 'development') {
-        Object.entries(developmentColumns).forEach(([status, _]) => {
-          const typedStatus = status as BoardStatus;
-          if (ticketsByStatus[typedStatus]) {
-            (newColumns as DevelopmentColumnsType)[typedStatus].tickets = 
-              ticketsByStatus[typedStatus];
+        // Distribute tickets to columns
+        sortedTickets.forEach(ticket => {
+          if (isDevelopmentColumns(newColumns)) {
+            if (ticket.status in newColumns) {
+              newColumns[ticket.status as keyof DevelopmentColumnsType].tickets.push(ticket);
+            }
+          } else {
+            if (ticket.status in newColumns) {
+              newColumns[ticket.status as keyof BacklogColumnsType].tickets.push(ticket);
+            }
           }
         });
-      } else {
-        Object.entries(backlogColumns).forEach(([status, _]) => {
-          const typedStatus = status as BacklogStatus;
-          if (ticketsByStatus[typedStatus]) {
-            (newColumns as BacklogColumnsType)[typedStatus].tickets = 
-              ticketsByStatus[typedStatus];
-          }
-        });
+
+        setTickets(ticketsData);
+        setColumns(newColumns);
+      } catch (error) {
+        console.error('Error fetching tickets:', error);
       }
-
-      console.log('[TicketBoard] Final columns:', newColumns);
-      setTickets(ticketsData);
-      setColumns(newColumns);
     };
 
-    if (currentAccount?.id) {
-      fetchTickets();
-    }
-  }, [getTickets, mode, currentAccount]);
+    fetchTickets();
+  }, [currentAccount?.id, getTickets, mode]);
 
   const getUserName = (userId: string) => {
     const userInfo = users[userId];
@@ -137,7 +123,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     // Create a new columns object to avoid mutating state
     const newColumns = { ...columns };
 
-    // Ensure we're working with the correct column type and status
+    // Use type guards to ensure proper column access
     if (!isDevelopmentColumns(newColumns) && !isBacklogColumns(newColumns)) {
       console.error('Invalid column type');
       return;
@@ -235,19 +221,86 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     }
   };
 
-  // Add refreshTickets function
+  const organizeTicketsIntoColumns = useCallback((tickets: Ticket[]) => {
+    // Create fresh columns with proper typing
+    const newColumns = mode === 'development' 
+      ? { ...developmentColumns } as DevelopmentColumnsType
+      : { ...backlogColumns } as BacklogColumnsType;
+
+    // Clear existing tickets
+    if (isDevelopmentColumns(newColumns)) {
+      Object.values(newColumns).forEach(column => {
+        column.tickets = [];
+      });
+    } else if (isBacklogColumns(newColumns)) {
+      Object.values(newColumns).forEach(column => {
+        column.tickets = [];
+      });
+    }
+
+    // Sort tickets by order
+    const sortedTickets = [...tickets].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    // Distribute tickets to columns
+    sortedTickets.forEach(ticket => {
+      if (isDevelopmentColumns(newColumns)) {
+        if (ticket.status in newColumns) {
+          newColumns[ticket.status as keyof DevelopmentColumnsType].tickets.push(ticket);
+        }
+      } else if (isBacklogColumns(newColumns)) {
+        if (ticket.status in newColumns) {
+          newColumns[ticket.status as keyof BacklogColumnsType].tickets.push(ticket);
+        }
+      }
+    });
+
+    return newColumns;
+  }, [mode]);
+
+  // Add useEffect to listen for tickets changes
+  useEffect(() => {
+    const loadTickets = async () => {
+      if (!currentAccount?.id) return;
+      
+      try {
+        const ticketsData = await getTickets();
+        setTickets(ticketsData);
+        const newColumns = organizeTicketsIntoColumns(ticketsData);
+        setColumns(newColumns);
+      } catch (error) {
+        console.error('Error loading tickets:', error);
+      }
+    };
+
+    loadTickets();
+  }, [currentAccount?.id, getTickets, organizeTicketsIntoColumns]);
+
+  // Update refreshTickets to use the new helper
   const refreshTickets = useCallback(async () => {
     if (!currentAccount?.id) return;
     
     try {
       const ticketsData = await getTickets();
       console.log('[TicketBoard] Refreshing tickets:', ticketsData);
-      const newColumns = organizeTickets(ticketsData, mode);
+      const newColumns = organizeTicketsIntoColumns(ticketsData);
       setColumns(newColumns);
     } catch (error) {
       console.error('Error refreshing tickets:', error);
     }
-  }, [currentAccount?.id, getTickets, mode]);
+  }, [currentAccount?.id, getTickets, organizeTicketsIntoColumns]);
+
+  const refreshBoard = useCallback(async () => {
+    if (!currentAccount?.id) return;
+    
+    try {
+      const ticketsData = await getTickets();
+      setTickets(ticketsData);
+      const newColumns = organizeTicketsIntoColumns(ticketsData);
+      setColumns(newColumns);
+    } catch (error) {
+      console.error('Error refreshing tickets:', error);
+    }
+  }, [currentAccount?.id, getTickets, organizeTicketsIntoColumns]);
 
   // Update modal handlers
   const handleModalClose = () => {
@@ -297,7 +350,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
           bg-white dark:bg-[${theme.colors.dark.background.primary}]
         `}>
           {Object.entries(columns).map(([status, column]) => (
-            <Droppable droppableId={status} key={status}>
+            <Droppable droppableId={status} key={`column-${status}`}>
               {(provided, snapshot) => (
                 <div
                   ref={provided.innerRef}
@@ -343,8 +396,8 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
                   <div className="space-y-3">
                     {column.tickets.map((ticket, index) => (
                       <Draggable
-                        key={ticket.id}
-                        draggableId={ticket.id!}
+                        key={`${ticket.id}-${status}`}
+                        draggableId={ticket.id}
                         index={index}
                       >
                         {(provided, snapshot) => (
@@ -445,7 +498,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
           ticket={selectedTicket}
           isOpen={!!selectedTicket}
           onClose={handleModalClose}
-          onSave={handleModalSave}
+          onSave={refreshBoard}
         />
       )}
       <TicketModal

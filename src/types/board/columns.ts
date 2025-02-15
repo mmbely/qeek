@@ -1,30 +1,28 @@
-import { TicketStatus } from '../ticket';
-import { DevelopmentColumnsType, BacklogColumnsType } from './index';
+import { Column, BacklogColumnsType, DevelopmentColumnsType } from './index';
 
-export const developmentColumns: DevelopmentColumnsType = {
-  'SELECTED_FOR_DEV': { title: 'Selected for Development', tickets: [] },
-  'IN_PROGRESS': { title: 'In Progress', tickets: [] },
-  'READY_FOR_TESTING': { title: 'Ready for Testing', tickets: [] },
-  'DEPLOYED': { title: 'Deployed', tickets: [] }
-};
-
-export const backlogColumns: BacklogColumnsType = {
-  'BACKLOG_ICEBOX': { title: 'Icebox', tickets: [] },
-  'BACKLOG_NEW': { title: 'New', tickets: [] },
-  'BACKLOG_REFINED': { title: 'Refined', tickets: [] },
-  'BACKLOG_DEV_NEXT': { title: 'Next for Development', tickets: [] }
-};
-
-export const COLUMN_STATUS_LABELS: Record<TicketStatus, string> = {
-  // Development statuses
-  'SELECTED_FOR_DEV': 'Selected for Development',
-  'IN_PROGRESS': 'In Progress',
-  'READY_FOR_TESTING': 'Ready for Testing',
-  'DEPLOYED': 'Deployed',
-  
+export const COLUMN_STATUS_LABELS = {
   // Backlog statuses
   'BACKLOG_ICEBOX': 'Icebox',
   'BACKLOG_NEW': 'New',
   'BACKLOG_REFINED': 'Refined',
-  'BACKLOG_DEV_NEXT': 'Next for Development'
+  'BACKLOG_DEV_NEXT': 'Next for Development',
+  // Development statuses
+  'SELECTED_FOR_DEV': 'Selected for Development',
+  'IN_PROGRESS': 'In Progress',
+  'READY_FOR_TESTING': 'Ready for Testing',
+  'DEPLOYED': 'Deployed'
 } as const;
+
+export const backlogColumns: BacklogColumnsType = {
+  'BACKLOG_ICEBOX': { title: COLUMN_STATUS_LABELS['BACKLOG_ICEBOX'], tickets: [] },
+  'BACKLOG_NEW': { title: COLUMN_STATUS_LABELS['BACKLOG_NEW'], tickets: [] },
+  'BACKLOG_REFINED': { title: COLUMN_STATUS_LABELS['BACKLOG_REFINED'], tickets: [] },
+  'BACKLOG_DEV_NEXT': { title: COLUMN_STATUS_LABELS['BACKLOG_DEV_NEXT'], tickets: [] }
+};
+
+export const developmentColumns: DevelopmentColumnsType = {
+  'SELECTED_FOR_DEV': { title: COLUMN_STATUS_LABELS['SELECTED_FOR_DEV'], tickets: [] },
+  'IN_PROGRESS': { title: COLUMN_STATUS_LABELS['IN_PROGRESS'], tickets: [] },
+  'READY_FOR_TESTING': { title: COLUMN_STATUS_LABELS['READY_FOR_TESTING'], tickets: [] },
+  'DEPLOYED': { title: COLUMN_STATUS_LABELS['DEPLOYED'], tickets: [] }
+};
