@@ -4,7 +4,7 @@ import { db } from '../../config/firebase';
 import { Ticket } from '../../types/ticket';
 import { useAuth } from '../../context/AuthContext';
 import { database } from '../../config/firebase';
-import { ref, get } from 'firebase/database';
+import { ref, get, onValue } from 'firebase/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import TicketModal from './TicketModal';
 import { Plus, AlertCircle } from 'lucide-react';
@@ -20,6 +20,7 @@ import {
   developmentColumns
 } from '../../types/board';
 import { TicketStatus } from '../../types/board';
+import { getAuth } from 'firebase/auth';
 
 type BoardMode = 'development' | 'backlog';
 
@@ -46,6 +47,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | undefined>();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [failedTicketId, setFailedTicketId] = useState<string | null>(null);
+  const [authUsers, setAuthUsers] = useState<{[key: string]: any}>({});
 
   // Type guards
   const isDevelopmentColumns = (cols: ColumnsType): cols is DevelopmentColumnsType => {
@@ -56,16 +58,32 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     return 'BACKLOG_DEV_NEXT' in cols;
   };
 
-  // Fetch users
+  // Fetch auth users
   useEffect(() => {
-    const fetchUsers = async () => {
+    const auth = getAuth();
+    const fetchAuthUsers = async () => {
+      console.log('[TicketBoard] Starting auth user fetch');
+      // First get realtime database users for online status
       const usersRef = ref(database, 'users');
       const snapshot = await get(usersRef);
-      if (snapshot.exists()) {
-        setUsers(snapshot.val());
+      const realtimeUsers = snapshot.exists() ? snapshot.val() : {};
+      
+      // Then merge with auth user data
+      const mergedUsers = { ...realtimeUsers };
+      if (auth.currentUser) {
+        mergedUsers[auth.currentUser.uid] = {
+          ...mergedUsers[auth.currentUser.uid],
+          displayName: auth.currentUser.displayName,
+          email: auth.currentUser.email,
+          photoURL: auth.currentUser.photoURL,
+        };
       }
+      
+      console.log('[TicketBoard] Merged users:', mergedUsers);
+      setUsers(mergedUsers);
     };
-    fetchUsers();
+    
+    fetchAuthUsers();
   }, []);
 
   // Fetch tickets using useTickets hook
@@ -109,8 +127,12 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   }, [currentAccount?.id, getTickets, mode]);
 
   const getUserName = (userId: string) => {
+    if (!userId) return 'Unassigned';
+    
     const userInfo = users[userId];
-    return userInfo?.displayName || userInfo?.email || 'Unknown User';
+    if (!userInfo) return 'Unknown User';
+    
+    return userInfo.displayName || userInfo.email || 'Unknown User';
   };
 
   const handleDragEnd = async (result: DropResult) => {

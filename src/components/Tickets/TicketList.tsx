@@ -1,4 +1,4 @@
-import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment, FormControl, Select, MenuItem } from '@mui/material';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment, FormControl, Select, MenuItem, ListSubheader } from '@mui/material';
 import React, { useState, useEffect } from 'react';
 import { Ticket, TicketStatus } from '../../types/ticket';
 import { useAuth } from '../../context/AuthContext';
@@ -90,6 +90,21 @@ export function TicketList({ showHeader = true }: TicketListProps) {
     return matchesSearch && ticket.status === filterStatus;
   });
 
+  const getStatusGroups = () => ({
+    'Development Board': [
+      'SELECTED_FOR_DEV',
+      'IN_PROGRESS',
+      'READY_FOR_TESTING',
+      'DEPLOYED'
+    ],
+    'Backlog': [
+      'BACKLOG_ICEBOX',
+      'BACKLOG_NEW',
+      'BACKLOG_REFINED',
+      'BACKLOG_DEV_NEXT'
+    ]
+  });
+
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900">
       {showHeader && (
@@ -101,7 +116,7 @@ export function TicketList({ showHeader = true }: TicketListProps) {
             </div>
             <button
               onClick={() => setIsCreateModalOpen(true)}
-              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors duration-150"
             >
               Create Ticket
             </button>
@@ -150,6 +165,21 @@ export function TicketList({ showHeader = true }: TicketListProps) {
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as 'all' | TicketStatus)}
               className="dark:bg-gray-800 dark:text-white"
+              MenuProps={{
+                PaperProps: {
+                  className: 'dark:bg-gray-800',
+                  sx: {
+                    '& .MuiMenuItem-root': {
+                      '&:hover': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      },
+                    },
+                    '& .MuiListSubheader-root': {
+                      lineHeight: '32px',
+                    },
+                  },
+                },
+              }}
               sx={{
                 '& .MuiOutlinedInput-notchedOutline': {
                   borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -162,15 +192,26 @@ export function TicketList({ showHeader = true }: TicketListProps) {
                 },
               }}
             >
-              <MenuItem value="all">All Status</MenuItem>
-              <MenuItem value="BACKLOG_ICEBOX">Backlog - Icebox</MenuItem>
-              <MenuItem value="BACKLOG_NEW">Backlog - New</MenuItem>
-              <MenuItem value="BACKLOG_REFINED">Backlog - Refined</MenuItem>
-              <MenuItem value="BACKLOG_DEV_NEXT">Backlog - Dev Next</MenuItem>
-              <MenuItem value="SELECTED_FOR_DEV">Selected for Dev</MenuItem>
-              <MenuItem value="IN_PROGRESS">In Progress</MenuItem>
-              <MenuItem value="READY_FOR_TESTING">Ready for Testing</MenuItem>
-              <MenuItem value="DEPLOYED">Deployed</MenuItem>
+              <MenuItem value="all" className="dark:text-gray-200">All Status</MenuItem>
+              {Object.entries(getStatusGroups()).map(([groupName, statuses]) => [
+                <ListSubheader
+                  key={groupName}
+                  className="dark:bg-gray-700/50 dark:text-gray-100 bg-gray-200 text-gray-700 sticky top-0 z-10 font-medium border-t border-b dark:border-gray-600"
+                >
+                  {groupName}
+                </ListSubheader>,
+                ...statuses.map((status) => (
+                  <MenuItem 
+                    key={status} 
+                    value={status}
+                    className="dark:text-gray-200 dark:hover:bg-gray-700 dark:bg-gray-800"
+                  >
+                    {status.split('_').map(word => 
+                      word.charAt(0) + word.slice(1).toLowerCase()
+                    ).join(' ')}
+                  </MenuItem>
+                ))
+              ])}
             </Select>
           </FormControl>
         </div>
