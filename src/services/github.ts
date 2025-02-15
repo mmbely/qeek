@@ -1,5 +1,5 @@
 import { db } from './firebase';
-import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 
 export interface GitHubRepo {
@@ -101,3 +101,23 @@ export class GitHubService {
 }
 
 export const githubService = new GitHubService();
+
+export const syncRepository = async (accountId: string, repoName: string) => {
+  try {
+    const repoRef = doc(db, 'repositories', repoName.replace('/', '_'));
+    
+    // Update or create the repository document with accountId
+    await setDoc(repoRef, {
+      name: repoName,
+      accountId: accountId,
+      sync_status: 'syncing',
+      last_synced: serverTimestamp()
+    }, { merge: true });
+
+    // ... rest of sync logic ...
+
+  } catch (error) {
+    console.error('Error syncing repository:', error);
+    throw error;
+  }
+};

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Ticket, TicketStatus } from '../../types/ticket';
@@ -20,6 +20,7 @@ import {
   DevelopmentColumnsType,
   BacklogColumnsType
 } from '../../types/board';
+import { organizeTickets } from '../../utils/board';
 
 type BoardMode = 'development' | 'backlog';
 
@@ -35,16 +36,23 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   const { getTickets, updateTicket } = useTickets();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [users, setUsers] = useState<{[key: string]: any}>({});
-  const [columns, setColumns] = useState<ColumnsType>(() => {
-    return mode === 'development' ? { ...developmentColumns } : { ...backlogColumns };
-  });
+  const [columns, setColumns] = useState<ColumnsType>(mode === 'development' ? developmentColumns : backlogColumns);
   const title = mode === 'development' ? 'Development Board' : 'Backlog Board';
   const subtitle = mode === 'development' 
     ? "Manage your team's tickets"
     : 'Manage your upcoming tickets';
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | undefined>();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [failedTicketId, setFailedTicketId] = useState<string | null>(null);
+
+  // Type guards
+  const isDevelopmentColumns = (cols: ColumnsType): cols is DevelopmentColumnsType => {
+    return 'SELECTED_FOR_DEV' in cols;
+  };
+
+  const isBacklogColumns = (cols: ColumnsType): cols is BacklogColumnsType => {
+    return 'BACKLOG_DEV_NEXT' in cols;
+  };
 
   // Fetch users
   useEffect(() => {
@@ -129,16 +137,6 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     // Create a new columns object to avoid mutating state
     const newColumns = { ...columns };
 
-    // Type guard for development columns
-    const isDevelopmentColumns = (cols: ColumnsType): cols is DevelopmentColumnsType => {
-      return 'SELECTED_FOR_DEV' in cols;
-    };
-
-    // Type guard for backlog columns
-    const isBacklogColumns = (cols: ColumnsType): cols is BacklogColumnsType => {
-      return 'BACKLOG_ICEBOX' in cols;
-    };
-
     // Ensure we're working with the correct column type and status
     if (!isDevelopmentColumns(newColumns) && !isBacklogColumns(newColumns)) {
       console.error('Invalid column type');
@@ -211,6 +209,57 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     setSelectedTicket(ticket);
   };
 
+  const handleMoveToBoard = async () => {
+    if (!isBacklogColumns(columns)) return;
+    
+    const nextForDevTickets = columns.BACKLOG_DEV_NEXT.tickets;
+    if (nextForDevTickets.length === 0) return;
+
+    try {
+      // Update all tickets in the column
+      const updatePromises = nextForDevTickets.map((ticket: Ticket) =>
+        updateTicket(ticket.id, {
+          status: 'SELECTED_FOR_DEV' as TicketStatus,
+          order: calculateNewOrder(0, 2000) // Place at the beginning of the new column
+        })
+      );
+
+      await Promise.all(updatePromises);
+
+      // Update local state
+      const newColumns = { ...columns } as BacklogColumnsType;
+      newColumns.BACKLOG_DEV_NEXT.tickets = [];
+      setColumns(newColumns);
+    } catch (error) {
+      console.error('Failed to move tickets to board:', error);
+    }
+  };
+
+  // Add refreshTickets function
+  const refreshTickets = useCallback(async () => {
+    if (!currentAccount?.id) return;
+    
+    try {
+      const ticketsData = await getTickets();
+      console.log('[TicketBoard] Refreshing tickets:', ticketsData);
+      const newColumns = organizeTickets(ticketsData, mode);
+      setColumns(newColumns);
+    } catch (error) {
+      console.error('Error refreshing tickets:', error);
+    }
+  }, [currentAccount?.id, getTickets, mode]);
+
+  // Update modal handlers
+  const handleModalClose = () => {
+    setSelectedTicket(undefined);
+    setIsCreateModalOpen(false);
+  };
+
+  const handleModalSave = async () => {
+    await refreshTickets();
+    handleModalClose();
+  };
+
   return (
     <div className={`
       flex flex-col h-full
@@ -265,14 +314,29 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
                   {/* Column Header */}
                   <div className={`${layout.flex.between} mb-4`}>
                     <h2 className={typography.h4}>{column.title}</h2>
-                    <span className={`
-                      px-2.5 py-0.5 
-                      rounded-full text-sm
-                      bg-gray-100 dark:bg-gray-800
-                      text-gray-600 dark:text-gray-400
-                    `}>
-                      {column.tickets.length}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {/* Add Move to Board button for Next for Development column */}
+                      {mode === 'backlog' && status === 'BACKLOG_DEV_NEXT' && (
+                        <button
+                          onClick={handleMoveToBoard}
+                          className={`
+                            ${commonStyles.button.base}
+                            ${commonStyles.button.secondary}
+                            text-sm
+                          `}
+                        >
+                          Move to Board
+                        </button>
+                      )}
+                      <span className={`
+                        px-2.5 py-0.5 
+                        rounded-full text-sm
+                        bg-gray-100 dark:bg-gray-800
+                        text-gray-600 dark:text-gray-400
+                      `}>
+                        {column.tickets.length}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Tickets */}
@@ -365,12 +429,14 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
         <TicketModal
           ticket={selectedTicket}
           isOpen={!!selectedTicket}
-          onClose={() => setSelectedTicket(null)}
+          onClose={handleModalClose}
+          onSave={handleModalSave}
         />
       )}
       <TicketModal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={handleModalClose}
+        onSave={handleModalSave}
       />
     </div>
   );

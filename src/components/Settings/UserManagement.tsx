@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAccount } from '../../context/AccountContext';
 import { Mail, UserPlus, Trash2, Shield, CheckCircle, XCircle } from 'lucide-react';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { sendEmailInvitation } from '../../services/email';
 
 interface UserData {
   displayName: string;
@@ -52,13 +53,36 @@ export default function UserManagement() {
 
     setIsInviting(true);
     setError(null);
+    setSuccessMessage(null);
     
     try {
-      // TODO: Implement invitation logic
+      // Create invitation document
+      const invitationRef = collection(db, 'invitations');
+      const invitation = {
+        email: inviteEmail.toLowerCase(),
+        role: inviteRole,
+        accountId: currentAccount.id,
+        accountName: currentAccount.name,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+      };
+
+      const docRef = await addDoc(invitationRef, invitation);
+
+      // Send email invitation
+      await sendEmailInvitation({
+        email: inviteEmail,
+        accountName: currentAccount.name,
+        role: inviteRole,
+        invitationId: docRef.id
+      });
+
       setSuccessMessage(`Invitation sent to ${inviteEmail}`);
       setInviteEmail('');
     } catch (err) {
-      setError('Failed to send invitation');
+      console.error('Failed to send invitation:', err);
+      setError('Failed to send invitation. Please try again.');
     } finally {
       setIsInviting(false);
     }

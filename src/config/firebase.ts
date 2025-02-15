@@ -1,7 +1,8 @@
 import { initializeApp } from 'firebase/app';
-import { getDatabase } from 'firebase/database';
-import { getAuth } from 'firebase/auth';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { getDatabase } from 'firebase/database';
 
 const firebaseConfig = {
   // Your Firebase config here
@@ -15,6 +16,24 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const database = getDatabase(app);
-export const db = getFirestore(app);
+const functions = getFunctions(app);
+const firestore = getFirestore(app);
+const auth = getAuth(app);
+const database = getDatabase(app);
+
+// For backward compatibility
+const db = firestore;
+
+// Only connect Functions to emulator in development
+if (process.env.NODE_ENV === 'development') {
+  connectFunctionsEmulator(functions, '127.0.0.1', 5003);
+}
+
+export { 
+  app, 
+  functions, 
+  firestore, 
+  auth, 
+  database,
+  db  // For backward compatibility
+};

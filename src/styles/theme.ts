@@ -112,6 +112,14 @@ export const commonStyles = {
       bg-[${theme.colors.dark.background.hover}] hover:bg-[${theme.colors.dark.secondary}]
       text-gray-200
     `,
+    danger: `
+      bg-red-600 
+      text-white 
+      hover:bg-red-700 
+      dark:bg-red-500 
+      dark:hover:bg-red-600
+      flex items-center
+    `,
   },
 
   navLink: {

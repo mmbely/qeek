@@ -157,17 +157,20 @@ export function useTickets() {
     }
   }, [currentAccount]);
 
-  const deleteTicket = useCallback(async (ticketId: string) => {
-    if (!currentAccount) return false;
-    
+  const deleteTicket = async (ticketId: string) => {
+    if (!currentAccount?.id) {
+      throw new Error('No account selected');
+    }
+
     try {
-      await deleteDoc(doc(db, 'tickets', ticketId));
+      const ticketRef = doc(db, 'tickets', ticketId);
+      await deleteDoc(ticketRef);
       return true;
     } catch (error) {
       console.error('Error deleting ticket:', error);
-      return false;
+      throw error;
     }
-  }, [currentAccount]);
+  };
 
   return {
     getTickets,

@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ref, get } from 'firebase/database';
 import { database } from '../../services/firebase';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
-import { X, Loader, Copy, Check } from 'lucide-react';
+import { X, Loader, Copy, Check, Trash2 } from 'lucide-react';
 import { Modal } from 'react-responsive-modal';
 import 'react-responsive-modal/styles.css';
 import ReactMarkdown from 'react-markdown';
@@ -49,7 +49,7 @@ const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
 export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketModalProps) {
   const { user } = useAuth();
   const { currentAccount } = useAccount();
-  const { createTicket, updateTicket } = useTickets();
+  const { createTicket, updateTicket, deleteTicket } = useTickets();
   const [title, setTitle] = useState(ticket?.title || '');
   const [description, setDescription] = useState(ticket?.description || '');
   const [status, setStatus] = useState<TicketStatus>(ticket?.status || DEFAULT_STATUS);
@@ -60,6 +60,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   // Check authorization
   const isAuthorized = React.useMemo(() => {
@@ -176,7 +177,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
         }
       }
 
-      onSave?.();
+      await onSave?.();
       onClose();
     } catch (error) {
       console.error('[TicketModal] Error saving ticket:', error);
@@ -368,6 +369,71 @@ Text after the code block.
 
 You can also use \`inline code\` with single backticks.`;
 
+  // Add delete handler
+  const handleDelete = async () => {
+    if (!ticket?.id) return;
+    
+    setLoading(true);
+    setError(null);
+
+    try {
+      await deleteTicket(ticket.id);
+      await onSave?.();
+      onClose();
+    } catch (error) {
+      console.error('[TicketModal] Error deleting ticket:', error);
+      setError('Failed to delete ticket. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add delete confirmation modal
+  const DeleteConfirmation = () => (
+    <Modal
+      open={isDeleteConfirmOpen}
+      onClose={() => setIsDeleteConfirmOpen(false)}
+      center
+      classNames={{
+        modal: 'bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6',
+        overlay: 'bg-black bg-opacity-50'
+      }}
+    >
+      <div className="space-y-4">
+        <h3 className={typography.h3}>Delete Ticket</h3>
+        <p className="text-gray-600 dark:text-gray-400">
+          Are you sure you want to delete ticket {ticket?.ticket_id}? This action cannot be undone.
+        </p>
+        <div className="flex justify-end gap-3 pt-4">
+          <button
+            onClick={() => setIsDeleteConfirmOpen(false)}
+            className={`${commonStyles.button.base} ${commonStyles.button.secondary}`}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={loading}
+            className={`
+              ${commonStyles.button.base} 
+              ${commonStyles.button.danger}
+              disabled:opacity-50
+            `}
+          >
+            {loading ? (
+              <span className={layout.flex.center}>
+                <Loader className="w-4 h-4 animate-spin mr-2" />
+                Deleting...
+              </span>
+            ) : (
+              'Delete Ticket'
+            )}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+
   // Don't render anything if not authorized
   if (!isAuthorized) {
     return null;
@@ -537,35 +603,55 @@ You can also use \`inline code\` with single backticks.`;
           </div>
         </form>
 
-        <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-          <button
-            type="button"
-            onClick={onClose}
-            className={`${commonStyles.button.base} ${commonStyles.button.secondary}`}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            form="ticketForm"
-            disabled={loading}
-            className={`
-              ${commonStyles.button.base} 
-              ${commonStyles.button.primary}
-              disabled:opacity-50
-            `}
-          >
-            {loading ? (
-              <span className={layout.flex.center}>
-                <Loader className="w-4 h-4 animate-spin mr-2" />
-                Saving...
-              </span>
-            ) : (
-              'Save Changes'
-            )}
-          </button>
+        <div className="flex justify-between gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+          {/* Add delete button (only show for existing tickets) */}
+          {ticket?.id && (
+            <button
+              type="button"
+              onClick={() => setIsDeleteConfirmOpen(true)}
+              className={`
+                ${commonStyles.button.base} 
+                ${commonStyles.button.danger}
+              `}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Ticket
+            </button>
+          )}
+          
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className={`${commonStyles.button.base} ${commonStyles.button.secondary}`}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="ticketForm"
+              disabled={loading}
+              className={`
+                ${commonStyles.button.base} 
+                ${commonStyles.button.primary}
+                disabled:opacity-50
+              `}
+            >
+              {loading ? (
+                <span className={layout.flex.center}>
+                  <Loader className="w-4 h-4 animate-spin mr-2" />
+                  Saving...
+                </span>
+              ) : (
+                'Save Changes'
+              )}
+            </button>
+          </div>
         </div>
       </div>
+      
+      {/* Render delete confirmation modal */}
+      <DeleteConfirmation />
     </Modal>
   );
 }

@@ -2,6 +2,7 @@ import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination
 import React, { useState, useEffect } from 'react';
 import { Ticket, TicketStatus } from '../../types/ticket';
 import { useAuth } from '../../context/AuthContext';
+import { useAccount } from '../../context/AccountContext';
 import { Plus, AlertCircle, ArrowRight, Search } from 'lucide-react';
 import TicketModal from './TicketModal';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
@@ -28,6 +29,7 @@ export function TicketList({ showHeader = true }: TicketListProps) {
   const [filterStatus, setFilterStatus] = useState<'all' | TicketStatus>('all');
   const { getTickets, updateTicket } = useTickets();
   const { user } = useAuth();
+  const { currentAccount } = useAccount();
   const [users, setUsers] = useState<{ [key: string]: CustomUser }>({});
 
   useEffect(() => {
@@ -41,14 +43,19 @@ export function TicketList({ showHeader = true }: TicketListProps) {
   }, [getTickets]);
 
   useEffect(() => {
+    if (!currentAccount?.id) {
+      console.log('No current account, skipping users subscription');
+      return;
+    }
+
     console.log('Setting up users subscription');
-    const unsubscribe = subscribeToUsers((fetchedUsers) => {
+    const unsubscribe = subscribeToUsers(currentAccount.id, (fetchedUsers: { [key: string]: CustomUser }) => {
       console.log('Received users:', fetchedUsers);
       setUsers(fetchedUsers);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [currentAccount]);
 
   const getAssigneeName = (assigneeId: string | undefined) => {
     if (!assigneeId) return 'Unassigned';

@@ -7,10 +7,12 @@ import { Message } from '../../types/message';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
+import { useAccount } from '../../context/AccountContext';
 
 export default function ChatInterface() {
   const { userId } = useParams();
   const { user } = useAuth();
+  const { currentAccount } = useAccount();
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -31,17 +33,19 @@ export default function ChatInterface() {
 
   // Subscribe to users
   useEffect(() => {
-    console.log('Setting up users subscription');
-    const unsubscribe = subscribeToUsers((fetchedUsers) => {
-      console.log('Fetched users for chat:', fetchedUsers);
+    if (!currentAccount?.id) {
+      console.log('[Chat] No current account, skipping users subscription');
+      return;
+    }
+
+    console.log('[Chat] Setting up users subscription for account:', currentAccount.id);
+    const unsubscribe = subscribeToUsers(currentAccount.id, (fetchedUsers) => {
+      console.log('[Chat] Fetched users:', fetchedUsers);
       setUsers(fetchedUsers);
     });
 
-    return () => {
-      console.log('Cleaning up users subscription');
-      unsubscribe();
-    };
-  }, []);
+    return () => unsubscribe();
+  }, [currentAccount]);
 
   // Subscribe to messages
   useEffect(() => {

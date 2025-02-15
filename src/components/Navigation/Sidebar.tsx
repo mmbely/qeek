@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Hash, Plus, Sun, Moon, ListTodo, Kanban, MessageSquare, LayoutGrid, LogOut, User, Github, Settings, FolderOpen } from "lucide-react"
 import { ScrollArea } from "../ui/scroll-area"
@@ -7,6 +7,9 @@ import { CustomUser } from '../../types/user'
 import { commonStyles } from '../../styles/theme'
 import { animations } from '../../styles/animations'
 import { typography } from '../../styles/theme'
+import { subscribeToUsers } from '../../services/chat'
+import { useAccount } from '../../context/AccountContext'
+import { useAuth } from '../../context/AuthContext'
 
 interface SidebarProps {
   user: CustomUser | null;
@@ -40,10 +43,30 @@ export function Sidebar({
   handleStartDirectMessage,
 }: SidebarProps) {
   const location = useLocation();
-  const currentPath = location.pathname;
-  const currentUserId = currentPath.startsWith('/chat/dm/') 
-    ? currentPath.split('/chat/dm/')[1]
-    : null;
+  const { currentAccount } = useAccount();
+  const { user: authUser } = useAuth();
+  const [accountUsers, setAccountUsers] = useState<{ [key: string]: CustomUser }>({});
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!currentAccount?.id) {
+      console.log('[Sidebar] No current account, skipping users subscription');
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('[Sidebar] Setting up users subscription for account:', currentAccount.id);
+    const unsubscribe = subscribeToUsers(currentAccount.id, (fetchedUsers) => {
+      console.log('[Sidebar] Received users:', fetchedUsers);
+      setAccountUsers(fetchedUsers);
+      setIsLoading(false);
+    });
+
+    return () => {
+      console.log('[Sidebar] Cleaning up users subscription');
+      unsubscribe();
+    };
+  }, [currentAccount]);
 
   // Debug log to check users data
   console.log('Users in Sidebar:', users);
@@ -155,23 +178,36 @@ export function Sidebar({
               <Plus className="h-4 w-4" />
             </button>
           </div>
-          <ul className="space-y-1">
-            {Object.entries(users).map(([userId, userData]) => (
-              <li key={userId}>
-                <button
-                  onClick={() => handleStartDirectMessage(userId)}
-                  className={`flex items-center p-2 rounded-lg w-full text-left ${
-                    currentUserId === userId
-                      ? 'bg-gray-700 text-white'
-                      : 'text-gray-300 hover:bg-gray-700'
-                  }`}
-                >
-                  <User className="h-5 w-5 mr-2" />
-                  {userData.displayName || userData.email || 'Unknown User'}
-                </button>
-              </li>
-            ))}
-          </ul>
+          {isLoading ? (
+            <div className="text-sm text-gray-400 p-2">Loading users...</div>
+          ) : Object.keys(accountUsers).length > 0 ? (
+            <ul className="space-y-1">
+              {Object.entries(accountUsers).map(([userId, userData]) => (
+                <li key={userId}>
+                  <button
+                    onClick={() => handleStartDirectMessage(userId)}
+                    className={`
+                      flex items-center w-full p-2 rounded-lg text-left
+                      ${location.pathname === `/chat/${userId}` 
+                        ? 'bg-gray-700 text-white' 
+                        : 'text-gray-300 hover:bg-gray-700'
+                      }
+                    `}
+                  >
+                    <User className="h-5 w-5 mr-2 text-gray-400" />
+                    <span className="truncate">
+                      {userData.displayName || userData.email || 'Unknown User'}
+                      {userId === authUser?.uid && ' (you)'}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="text-sm text-gray-400 p-2">
+              No other users in this account
+            </div>
+          )}
         </div>
 
         {/* Channels Section */}
@@ -195,7 +231,7 @@ export function Sidebar({
                     window.location.href = '/chat';
                   }}
                   className={`flex items-center p-2 rounded-lg w-full text-left ${
-                    currentPath === '/chat' && currentChannel === channel
+                    location.pathname === '/chat' && currentChannel === channel
                       ? 'bg-gray-700 text-white'
                       : 'text-gray-300 hover:bg-gray-700'
                   }`}

@@ -236,7 +236,23 @@ export default function CodebaseViewer() {
           return;
         }
 
+        // Get the repository document first to check ownership
         const repoRef = doc(db, 'repositories', repoName.replace('/', '_'));
+        const repoDoc = await getDoc(repoRef);
+
+        if (!repoDoc.exists()) {
+          setError('Repository not found');
+          return;
+        }
+
+        // Check if this repository belongs to the current account
+        const repoData = repoDoc.data();
+        if (repoData.accountId && repoData.accountId !== currentAccount.id) {
+          setError('You do not have access to this repository');
+          return;
+        }
+
+        // Fetch files from the repository
         const filesCollectionRef = collection(repoRef, 'files');
         const filesSnapshot = await getDocs(filesCollectionRef);
 

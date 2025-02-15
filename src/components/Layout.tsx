@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Navigation/Sidebar';
 import { useAuth } from '../context/AuthContext';
+import { useAccount } from '../context/AccountContext';
 import { CustomUser } from '../types/user';
 import { subscribeToUsers } from '../services/chat';
 
 export default function Layout() {
   const { user, logout, isDarkMode, toggleDarkMode } = useAuth();
+  const { currentAccount } = useAccount();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDirectMessageModalOpen, setIsDirectMessageModalOpen] = useState(false);
@@ -16,20 +18,24 @@ export default function Layout() {
   const [users, setUsers] = useState<{ [key: string]: CustomUser }>({});
 
   useEffect(() => {
-    if (!user) return;
+    if (!currentAccount?.id) {
+      console.log('No current account, skipping users subscription');
+      return;
+    }
 
     console.log('Fetching users...');
-    const unsubscribe = subscribeToUsers((fetchedUsers) => {
+    const unsubscribe = subscribeToUsers(currentAccount.id, (fetchedUsers: { [key: string]: CustomUser }) => {
       console.log('Received users:', fetchedUsers);
       const filteredUsers = Object.fromEntries(
         Object.entries(fetchedUsers).filter(([id]) => id !== user?.uid)
-      );
+      ) as { [key: string]: CustomUser };
+      
       console.log('Filtered users:', filteredUsers);
       setUsers(filteredUsers);
     });
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [user?.uid, currentAccount]);
 
   const handleLogout = async () => {
     try {
