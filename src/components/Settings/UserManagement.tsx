@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAccount } from '../../context/AccountContext';
 import { Mail, UserPlus, Trash2, Shield, CheckCircle, XCircle } from 'lucide-react';
-import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, addDoc, collection, serverTimestamp, setDoc, updateDoc, query, getDocs, where } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { sendEmailInvitation } from '../../services/email';
 
@@ -18,74 +18,140 @@ interface InviteData {
 
 export default function UserManagement() {
   const { currentAccount } = useAccount();
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
-  const [isInviting, setIsInviting] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'member'>('member');
+  const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [userDetails, setUserDetails] = useState<Record<string, UserData>>({});
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
 
-  // Fetch user details for all members
+  // Improved useEffect for loading user details
   useEffect(() => {
-    const fetchUserDetails = async () => {
+    const loadUserDetails = async () => {
       if (!currentAccount) return;
-
-      const details: Record<string, UserData> = {};
-      for (const userId of Object.keys(currentAccount.members)) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', userId));
-          if (userDoc.exists()) {
-            details[userId] = userDoc.data() as UserData;
+      
+      setIsLoadingUsers(true);
+      try {
+        const userPromises = Object.keys(currentAccount.members).map(async (userId) => {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            if (userDoc.exists()) {
+              return { userId, userData: userDoc.data() as UserData };
+            }
+          } catch (error) {
+            console.error(`Failed to load user ${userId}:`, error);
           }
-        } catch (error) {
-          console.error(`Error fetching user ${userId}:`, error);
-        }
+          return null;
+        });
+
+        const users = await Promise.all(userPromises);
+        const newUserDetails: Record<string, UserData> = {};
+        
+        users.forEach(user => {
+          if (user) {
+            newUserDetails[user.userId] = user.userData;
+          }
+        });
+
+        setUserDetails(newUserDetails);
+      } catch (error) {
+        console.error('Failed to load user details:', error);
+      } finally {
+        setIsLoadingUsers(false);
       }
-      setUserDetails(details);
     };
 
-    fetchUserDetails();
+    loadUserDetails();
   }, [currentAccount]);
 
-  const handleInviteUser = async (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentAccount) return;
 
-    setIsInviting(true);
+    setIsAdding(true);
     setError(null);
     setSuccessMessage(null);
     
     try {
-      // Create invitation document
-      const invitationRef = collection(db, 'invitations');
-      const invitation = {
-        email: inviteEmail.toLowerCase(),
-        role: inviteRole,
-        accountId: currentAccount.id,
-        accountName: currentAccount.name,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-      };
+      // Check if user exists in Firebase
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', newUserEmail.toLowerCase()));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        throw new Error('User not found. Please ensure the email is correct.');
+      }
 
-      const docRef = await addDoc(invitationRef, invitation);
+      const userDoc = querySnapshot.docs[0];
+      const userId = userDoc.id;
 
-      // Send email invitation
-      await sendEmailInvitation({
-        email: inviteEmail,
-        accountName: currentAccount.name,
-        role: inviteRole,
-        invitationId: docRef.id
+      // Check if user is already a member
+      if (currentAccount.members[userId]) {
+        throw new Error('User is already a member of this account');
+      }
+
+      // Add user to account
+      const accountRef = doc(db, 'accounts', currentAccount.id);
+      await updateDoc(accountRef, {
+        [`members.${userId}`]: {
+          role: newUserRole,
+          joinedAt: Date.now()
+        }
       });
 
-      setSuccessMessage(`Invitation sent to ${inviteEmail}`);
-      setInviteEmail('');
+      setSuccessMessage(`User ${newUserEmail} added successfully`);
+      setNewUserEmail('');
+
+      // Refresh user details
+      const updatedUserDoc = await getDoc(doc(db, 'users', userId));
+      if (updatedUserDoc.exists()) {
+        setUserDetails(prev => ({
+          ...prev,
+          [userId]: updatedUserDoc.data() as UserData
+        }));
+      }
     } catch (err) {
-      console.error('Failed to send invitation:', err);
-      setError('Failed to send invitation. Please try again.');
+      console.error('Failed to add user:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add user. Please try again.');
     } finally {
-      setIsInviting(false);
+      setIsAdding(false);
     }
+  };
+
+  // User Avatar Component
+  const UserAvatar = ({ userData }: { userData?: UserData }) => {
+    const [imageError, setImageError] = useState(false);
+    const initials = userData?.displayName 
+      ? userData.displayName.split(' ').map(n => n[0]).join('').toUpperCase()
+      : '?';
+
+    if (!userData || imageError) {
+      return (
+        <div className="w-8 h-8 rounded-full flex items-center justify-center
+                      bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+          <span className="text-sm font-medium">{initials}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden
+                    bg-gray-200 dark:bg-gray-700">
+        {userData.photoURL ? (
+          <img 
+            src={userData.photoURL} 
+            alt={userData.displayName || ''}
+            className="w-full h-full object-cover"
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+            {initials}
+          </span>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -97,16 +163,16 @@ export default function UserManagement() {
         </p>
       </div>
 
-      {/* Invite Users Form */}
+      {/* Add User Form */}
       <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
-            Invite New User
+            Add New User
           </h3>
         </div>
 
-        <form onSubmit={handleInviteUser} className="p-4 space-y-4">
+        <form onSubmit={handleAddUser} className="p-4 space-y-4">
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -114,8 +180,8 @@ export default function UserManagement() {
               </label>
               <input
                 type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md 
                          bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 placeholder="user@example.com"
@@ -127,8 +193,8 @@ export default function UserManagement() {
                 Role
               </label>
               <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as 'admin' | 'member')}
+                value={newUserRole}
+                onChange={(e) => setNewUserRole(e.target.value as 'admin' | 'member')}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md 
                          bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               >
@@ -154,11 +220,11 @@ export default function UserManagement() {
 
           <button
             type="submit"
-            disabled={isInviting || !inviteEmail}
+            disabled={isAdding || !newUserEmail}
             className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 
                      disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isInviting ? 'Sending Invitation...' : 'Send Invitation'}
+            {isAdding ? 'Adding User...' : 'Add User'}
           </button>
         </form>
       </div>
@@ -171,28 +237,29 @@ export default function UserManagement() {
         <div className="divide-y divide-gray-200 dark:divide-gray-700">
           {currentAccount && Object.entries(currentAccount.members).map(([userId, member]) => {
             const userData = userDetails[userId];
+
             return (
               <div key={userId} className="px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center overflow-hidden">
-                    {userData?.photoURL ? (
-                      <img 
-                        src={userData.photoURL} 
-                        alt={userData.displayName} 
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <Mail className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    )}
-                  </div>
+                  <UserAvatar userData={userData} />
                   <div>
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {userData?.displayName || 'Loading...'}
+                      {isLoadingUsers ? (
+                        <span className="animate-pulse bg-gray-200 dark:bg-gray-700 rounded h-4 w-24 inline-block" />
+                      ) : (
+                        userData?.displayName || 'Unknown User'
+                      )}
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {userData?.email || 'Loading...'}
-                      <span className="mx-1">•</span>
-                      Joined {new Date(member.joinedAt).toLocaleDateString()}
+                      {isLoadingUsers ? (
+                        <span className="animate-pulse bg-gray-200 dark:bg-gray-700 rounded h-3 w-32 inline-block" />
+                      ) : (
+                        <>
+                          {userData?.email || 'No email'}
+                          <span className="mx-1">•</span>
+                          Joined {new Date(member.joinedAt).toLocaleDateString()}
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
