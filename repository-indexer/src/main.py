@@ -29,8 +29,8 @@ def sanitize_path(path: str) -> str:
     # Replace invalid characters and normalize path
     return path.replace('/', '_').replace('.', '_')
 
-def main(repo_full_name: str, user_id: str):
-    global repo_ref  # Make repo_ref accessible to signal handler
+def main(repo_full_name: str, user_id: str, account_id: str):
+    global repo_ref
     try:
         # Load environment variables from repository-indexer/.env
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -39,14 +39,7 @@ def main(repo_full_name: str, user_id: str):
         print(f"Looking for .env at: {env_path}")
         load_dotenv(env_path)
         
-        # Get GitHub token
-        github_token = os.getenv('GITHUB_TOKEN')
-        if not github_token:
-            raise Exception(f"GitHub token not found in environment variables at {env_path}")
-
-        print(f"Found GitHub token: {github_token[:4]}...{github_token[-4:]}")  # Show first/last 4 chars for verification
-
-        # Reset any existing sync status first
+        # Initialize Firebase
         if not firebase_admin._apps:
             print("Initializing Firebase...")
             cred_path = os.path.join(os.path.dirname(repo_indexer_dir), 'firebase-credentials.json')
@@ -56,6 +49,20 @@ def main(repo_full_name: str, user_id: str):
             })
         
         db = firestore.client()
+        
+        # Get GitHub token from Firebase account document
+        print(f"Fetching GitHub token from Firebase for account: {account_id}...")
+        account_doc = db.collection('accounts').document(account_id).get()
+        if not account_doc.exists:
+            raise Exception("Account document not found")
+            
+        account_data = account_doc.to_dict()
+        github_token = account_data.get('settings', {}).get('githubToken')
+        if not github_token:
+            raise Exception("GitHub token not found in account settings")
+
+        print(f"Found GitHub token: {github_token[:4]}...{github_token[-4:]}")
+
         repo_ref = db.collection('repositories').document(repo_full_name.replace('/', '_'))
         
         # Reset the sync status
@@ -68,7 +75,7 @@ def main(repo_full_name: str, user_id: str):
             }
         }, merge=True)
         
-        # Initialize GitHub with token
+        # Initialize GitHub with user's token
         g = Github(github_token)
         print(f"Authenticated with GitHub. Rate limit remaining: {g.get_rate_limit().core.remaining}")
         repo = g.get_repo(repo_full_name)
@@ -185,8 +192,8 @@ def main(repo_full_name: str, user_id: str):
         return 1
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python main.py <repository_name> <user_id>")
+    if len(sys.argv) != 4:
+        print("Usage: python main.py <repository_name> <user_id> <account_id>")
         sys.exit(1)
     
-    sys.exit(main(sys.argv[1], sys.argv[2]))
+    sys.exit(main(sys.argv[1], sys.argv[2], sys.argv[3]))

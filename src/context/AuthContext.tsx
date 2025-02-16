@@ -58,11 +58,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log("Auth state changed. User:", user);
+      console.log('Auth State Changed:', user?.uid);
       setUser(user as CustomUser);
       setLoading(false);
     });
-    return unsubscribe;
+
+    return () => unsubscribe();
   }, []);
 
   const saveUserToDatabase = async (user: User) => {

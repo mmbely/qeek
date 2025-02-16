@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { db } from '../../services/firebase';
-import { collection, query, getDocs, doc, getDoc } from 'firebase/firestore';
-import { Loader2, FolderIcon, XCircle, Search, FileIcon, FileTextIcon, FileCodeIcon, FileJsonIcon, ImageIcon, FileTypeIcon, PackageIcon, Settings2Icon, DatabaseIcon, LockIcon } from 'lucide-react';
+import { collection, query, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { Loader2, FolderIcon, XCircle, Search, FileIcon, FileTextIcon, FileCodeIcon, FileJsonIcon, ImageIcon, FileTypeIcon, PackageIcon, Settings2Icon, DatabaseIcon, LockIcon, Github, Settings } from 'lucide-react';
 import { useAccount } from '../../context/AccountContext';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment } from '@mui/material';
 import { 
@@ -24,6 +25,7 @@ import {
   SiDocker,
   SiGit
 } from 'react-icons/si';
+import { syncRepository } from '../../services/github';
 
 interface RepositoryFile {
   path: string;
@@ -203,23 +205,77 @@ const FileViewer = ({ file, onClose }: { file: RepositoryFile; onClose: () => vo
 type SortColumn = 'path' | 'type' | 'size' | 'indexed_at';
 type SortDirection = 'asc' | 'desc';
 
+// Add this new component for the not connected state
+const NotConnectedState = () => {
+  const navigate = useNavigate();
+  
+  return (
+    <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] gap-6 p-8">
+      <div className="flex flex-col items-center gap-2">
+        <Github className="h-12 w-12 text-gray-400 dark:text-gray-600" />
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-200">
+          Connect to GitHub
+        </h2>
+        <p className="text-center text-gray-600 dark:text-gray-400 max-w-md">
+          To view your codebase, you'll need to connect your GitHub account and select a repository.
+        </p>
+      </div>
+      
+      <div className="flex flex-col gap-4 w-full max-w-md">
+        <button
+          onClick={() => navigate('/settings/github')}
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-[#2b2f44] hover:bg-[#363b52] text-gray-200 rounded-lg transition-colors duration-200"
+        >
+          <Settings className="h-5 w-5" />
+          Configure GitHub Settings
+        </button>
+        
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-center">You'll need to:</p>
+          <ol className="list-decimal list-inside space-y-1 mt-2">
+            <li>Add your GitHub Personal Access Token</li>
+            <li>Select a repository to analyze</li>
+            <li>Wait for the initial sync to complete</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function CodebaseViewer() {
+  const { user } = useAuth();
+  const { currentAccount, isLoading: accountLoading } = useAccount();
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<RepositoryFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<RepositoryFile | null>(null);
-  const { currentAccount, isLoading: accountLoading } = useAccount();
   const navigate = useNavigate();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortColumn, setSortColumn] = useState<SortColumn>('path');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [syncStatus, setSyncStatus] = useState<{
+    status: 'idle' | 'syncing' | 'completed' | 'failed';
+    lastSynced?: Date;
+    error?: string;
+  }>({ status: 'idle' });
+
+  // Add debug logging
+  useEffect(() => {
+    console.log('CodebaseViewer - Account state:', {
+      isLoading: accountLoading,
+      currentAccount,
+      githubRepo: currentAccount?.settings?.githubRepository
+    });
+  }, [accountLoading, currentAccount]);
 
   useEffect(() => {
     if (accountLoading) return;
 
     if (!currentAccount?.settings?.githubRepository) {
+      console.log('No repository selected in account settings');
       setLoading(false);
       setError('No repository selected');
       return;
@@ -231,6 +287,8 @@ export default function CodebaseViewer() {
         setError(null);
 
         const repoName = currentAccount.settings.githubRepository;
+        console.log('Fetching repository:', repoName);
+
         if (!repoName) {
           setError('No repository selected');
           return;
@@ -279,6 +337,46 @@ export default function CodebaseViewer() {
 
     fetchRepository();
   }, [currentAccount, accountLoading]);
+
+  // Monitor repository sync status
+  useEffect(() => {
+    if (!currentAccount?.settings?.githubRepository || !user?.uid) return;
+
+    const repoId = currentAccount.settings.githubRepository.replace('/', '_');
+    const unsubscribe = onSnapshot(
+      doc(db, 'repositories', repoId),
+      (doc) => {
+        if (doc.exists()) {
+          const data = doc.data();
+          setSyncStatus({
+            status: data.metadata.sync_status,
+            lastSynced: data.metadata.last_synced?.toDate(),
+            error: data.metadata.error
+          });
+        }
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentAccount?.settings?.githubRepository, user]);
+
+  // Handle manual sync
+  const handleSync = async () => {
+    if (!currentAccount?.settings?.githubRepository || !currentAccount.id) return;
+
+    try {
+      setLoading(true);
+      await syncRepository(
+        currentAccount.settings.githubRepository,
+        currentAccount.id
+      );
+    } catch (error) {
+      console.error('Failed to sync repository:', error);
+      setError('Failed to sync repository. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -374,26 +472,42 @@ export default function CodebaseViewer() {
     return null;
   };
 
+  // Modify the early return for when no repository is selected
+  if (!currentAccount?.settings?.githubRepository) {
+    return <NotConnectedState />;
+  }
+
+  // Modify the loading state to be more informative
   if (accountLoading || loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-6 h-6 animate-spin" />
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+        <p className="text-gray-600 dark:text-gray-400">
+          {accountLoading ? 'Loading account...' : 'Loading repository...'}
+        </p>
       </div>
     );
   }
 
-  if (!currentAccount?.settings?.githubRepository) {
+  // Modify the error state to be more helpful
+  if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4">
-        <p className="text-gray-500 dark:text-gray-400">
-          No repository selected
-        </p>
-        <button
-          onClick={() => navigate('/settings/github')}
-          className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
-        >
-          Go to GitHub Settings to select a repository
-        </button>
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] gap-4">
+        <XCircle className="w-12 h-12 text-red-500" />
+        <div className="text-center">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-200 mb-2">
+            {error}
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            There was an error loading your repository.
+          </p>
+          <button
+            onClick={() => navigate('/settings/github')}
+            className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline"
+          >
+            Check GitHub Settings
+          </button>
+        </div>
       </div>
     );
   }
@@ -404,15 +518,34 @@ export default function CodebaseViewer() {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Repository: {currentAccount.settings.githubRepository}
+              Repository: {currentAccount?.settings?.githubRepository}
             </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Browse repository files</p>
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <span>
+                Last synced: {syncStatus.lastSynced?.toLocaleString() || 'Never'}
+              </span>
+              {syncStatus.status === 'syncing' && (
+                <span className="flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Syncing...
+                </span>
+              )}
+            </div>
           </div>
+          
           <button
-            onClick={() => navigate('/codebase/connect')}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+            onClick={handleSync}
+            disabled={syncStatus.status === 'syncing'}
+            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Sync Repository
+            {syncStatus.status === 'syncing' ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Syncing...
+              </span>
+            ) : (
+              'Sync Now'
+            )}
           </button>
         </div>
       </header>

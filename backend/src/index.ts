@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import repositoryRoutes from './routes/repository';
+import repositoryRouter from './routes/repository';
 import { onCall } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import * as nodemailer from 'nodemailer';
@@ -16,11 +16,11 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.use('/api/repository', repositoryRoutes);
+app.use('/api/repository', repositoryRouter);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.status(200).json({ status: 'ok' });
 });
 
 admin.initializeApp();
