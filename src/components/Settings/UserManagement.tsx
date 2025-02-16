@@ -25,6 +25,7 @@ export default function UserManagement() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [userDetails, setUserDetails] = useState<Record<string, UserData>>({});
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [isDeletingUser, setIsDeletingUser] = useState<string | null>(null);
 
   // Improved useEffect for loading user details
   useEffect(() => {
@@ -116,6 +117,39 @@ export default function UserManagement() {
       setError(err instanceof Error ? err.message : 'Failed to add user. Please try again.');
     } finally {
       setIsAdding(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!currentAccount || !window.confirm('Are you sure you want to remove this user?')) return;
+
+    setIsDeletingUser(userId);
+    setError(null);
+    
+    try {
+      const accountRef = doc(db, 'accounts', currentAccount.id);
+      
+      // Create new members object without the deleted user
+      const updatedMembers = { ...currentAccount.members };
+      delete updatedMembers[userId];
+      
+      await updateDoc(accountRef, {
+        members: updatedMembers
+      });
+
+      // Update local state
+      setUserDetails(prev => {
+        const updated = { ...prev };
+        delete updated[userId];
+        return updated;
+      });
+
+      setSuccessMessage('User removed successfully');
+    } catch (err) {
+      console.error('Failed to remove user:', err);
+      setError(err instanceof Error ? err.message : 'Failed to remove user. Please try again.');
+    } finally {
+      setIsDeletingUser(null);
     }
   };
 
@@ -271,6 +305,8 @@ export default function UserManagement() {
                   <button 
                     className="text-red-500 hover:text-red-600 p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
                     title="Remove user"
+                    onClick={() => handleDeleteUser(userId)}
+                    disabled={isDeletingUser === userId}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
