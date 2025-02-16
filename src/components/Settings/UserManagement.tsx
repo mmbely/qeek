@@ -92,13 +92,17 @@ export default function UserManagement() {
         throw new Error('User is already a member of this account');
       }
 
-      // Add user to account
+      // Add user to account by updating the entire members object
       const accountRef = doc(db, 'accounts', currentAccount.id);
-      await updateDoc(accountRef, {
-        [`members.${userId}`]: {
+      const updatedMembers = {
+        ...currentAccount.members,
+        [userId]: {
           role: newUserRole,
           joinedAt: Date.now()
         }
+      };
+      await updateDoc(accountRef, {
+        members: updatedMembers
       });
 
       setSuccessMessage(`User ${newUserEmail} added successfully`);

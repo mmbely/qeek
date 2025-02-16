@@ -12,7 +12,7 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 
-import { db } from '../config/firebase';
+import { db, auth, functions } from '../config/firebase';
 import { Message } from '../types/message';
 import { CustomUser } from '../types/user';
 
@@ -32,10 +32,14 @@ export const subscribeToUsers = (
   const usersRef = collection(db, 'users');
   const q = firestoreQuery(
     usersRef,
-    where('uid', 'in', memberIds)
+    where('__name__', 'in', memberIds)
   );
+
+  console.log('[Chat Service] Setting up users subscription:', memberIds);
   
-  return onSnapshot(q, 
+  // Set up real-time listener
+  const unsubscribe = onSnapshot(
+    q,
     (snapshot) => {
       const users: { [key: string]: CustomUser } = {};
       snapshot.forEach((doc) => {
@@ -46,15 +50,16 @@ export const subscribeToUsers = (
           displayName: userData.displayName || userData.email || 'Unknown User',
         };
       });
-
-      console.log('[Chat Service] Snapshot received with users:', users);
+      console.log('[Chat Service] Users snapshot received:', users);
       callback(users);
-    }, 
+    },
     (error) => {
       console.error('[Chat Service] Error in users subscription:', error);
       callback({});
     }
   );
+  
+  return unsubscribe;
 };
 
 // Subscribe to channel messages

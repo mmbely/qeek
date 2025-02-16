@@ -535,19 +535,25 @@ export default function Layout() {
       return;
     }
 
-    console.log('Fetching users...');
-    const unsubscribe = subscribeToUsers(currentAccount.id, (fetchedUsers: { [key: string]: CustomUser }) => {
-      console.log('Received users:', fetchedUsers);
-      const filteredUsers = Object.fromEntries(
-        Object.entries(fetchedUsers).filter(([id]) => id !== user?.uid)
-      ) as { [key: string]: CustomUser };
-      
-      console.log('Filtered users:', filteredUsers);
-      setUsers(filteredUsers);
-    });
+    const memberIds = Object.keys(currentAccount.members);
+    console.log('Fetching users for members:', memberIds);
+    
+    const unsubscribe = subscribeToUsers(
+      currentAccount.id,
+      memberIds,
+      (fetchedUsers: { [key: string]: CustomUser }) => {
+        console.log('Received users:', fetchedUsers);
+        const filteredUsers = Object.fromEntries(
+          Object.entries(fetchedUsers).filter(([id]) => id !== user?.uid)
+        ) as { [key: string]: CustomUser };
+        
+        console.log('Filtered users:', filteredUsers);
+        setUsers(filteredUsers);
+      }
+    );
 
     return () => unsubscribe();
-  }, [user?.uid, currentAccount]);
+  }, [currentAccount, user?.uid]);
 
   const handleLogout = async () => {
     try {
@@ -969,6 +975,7 @@ export default function UserManagement() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [userDetails, setUserDetails] = useState<Record<string, UserData>>({});
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [isDeletingUser, setIsDeletingUser] = useState<string | null>(null);
 
   // Improved useEffect for loading user details
   useEffect(() => {
@@ -1060,6 +1067,39 @@ export default function UserManagement() {
       setError(err instanceof Error ? err.message : 'Failed to add user. Please try again.');
     } finally {
       setIsAdding(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!currentAccount || !window.confirm('Are you sure you want to remove this user?')) return;
+
+    setIsDeletingUser(userId);
+    setError(null);
+    
+    try {
+      const accountRef = doc(db, 'accounts', currentAccount.id);
+      
+      // Create new members object without the deleted user
+      const updatedMembers = { ...currentAccount.members };
+      delete updatedMembers[userId];
+      
+      await updateDoc(accountRef, {
+        members: updatedMembers
+      });
+
+      // Update local state
+      setUserDetails(prev => {
+        const updated = { ...prev };
+        delete updated[userId];
+        return updated;
+      });
+
+      setSuccessMessage('User removed successfully');
+    } catch (err) {
+      console.error('Failed to remove user:', err);
+      setError(err instanceof Error ? err.message : 'Failed to remove user. Please try again.');
+    } finally {
+      setIsDeletingUser(null);
     }
   };
 
@@ -1215,6 +1255,8 @@ export default function UserManagement() {
                   <button 
                     className="text-red-500 hover:text-red-600 p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
                     title="Remove user"
+                    onClick={() => handleDeleteUser(userId)}
+                    disabled={isDeletingUser === userId}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -2279,10 +2321,10 @@ export { default as TicketBoard } from './TicketBoard';
 import React, { useState, useEffect, useCallback } from 'react';
 import { doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { Ticket, TicketStatus } from '../../types/ticket';
+import { Ticket } from '../../types/ticket';
 import { useAuth } from '../../context/AuthContext';
 import { database } from '../../config/firebase';
-import { ref, get } from 'firebase/database';
+import { ref, get, onValue } from 'firebase/database';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import TicketModal from './TicketModal';
 import { Plus, AlertCircle } from 'lucide-react';
@@ -2290,15 +2332,15 @@ import { theme, commonStyles, typography, layout, animations } from '../../style
 import { useTickets } from '../../hooks/useTickets';
 import { useAccount } from '../../context/AccountContext';
 import { 
-  Column, 
-  BoardStatus, 
-  BacklogStatus, 
-  developmentColumns, 
-  backlogColumns,
+  COLUMN_STATUS_LABELS,
+  Column,
+  BacklogColumnsType,
   DevelopmentColumnsType,
-  BacklogColumnsType
+  backlogColumns,
+  developmentColumns
 } from '../../types/board';
-import { organizeTickets } from '../../utils/board';
+import { TicketStatus } from '../../types/board';
+import { getAuth } from 'firebase/auth';
 
 type BoardMode = 'development' | 'backlog';
 
@@ -2306,7 +2348,8 @@ interface TicketBoardProps {
   mode?: BoardMode;
 }
 
-type ColumnsType = DevelopmentColumnsType | BacklogColumnsType;
+// Define ColumnsType as union of both column types
+type ColumnsType = BacklogColumnsType | DevelopmentColumnsType;
 
 export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   const { user } = useAuth();
@@ -2314,7 +2357,9 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   const { getTickets, updateTicket } = useTickets();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [users, setUsers] = useState<{[key: string]: any}>({});
-  const [columns, setColumns] = useState<ColumnsType>(mode === 'development' ? developmentColumns : backlogColumns);
+  const [columns, setColumns] = useState<ColumnsType>(
+    mode === 'development' ? developmentColumns : backlogColumns
+  );
   const title = mode === 'development' ? 'Development Board' : 'Backlog Board';
   const subtitle = mode === 'development' 
     ? "Manage your team's tickets"
@@ -2322,6 +2367,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | undefined>();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [failedTicketId, setFailedTicketId] = useState<string | null>(null);
+  const [authUsers, setAuthUsers] = useState<{[key: string]: any}>({});
 
   // Type guards
   const isDevelopmentColumns = (cols: ColumnsType): cols is DevelopmentColumnsType => {
@@ -2332,77 +2378,81 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     return 'BACKLOG_DEV_NEXT' in cols;
   };
 
-  // Fetch users
+  // Fetch auth users
   useEffect(() => {
-    const fetchUsers = async () => {
+    const auth = getAuth();
+    const fetchAuthUsers = async () => {
+      console.log('[TicketBoard] Starting auth user fetch');
+      // First get realtime database users for online status
       const usersRef = ref(database, 'users');
       const snapshot = await get(usersRef);
-      if (snapshot.exists()) {
-        setUsers(snapshot.val());
+      const realtimeUsers = snapshot.exists() ? snapshot.val() : {};
+      
+      // Then merge with auth user data
+      const mergedUsers = { ...realtimeUsers };
+      if (auth.currentUser) {
+        mergedUsers[auth.currentUser.uid] = {
+          ...mergedUsers[auth.currentUser.uid],
+          displayName: auth.currentUser.displayName,
+          email: auth.currentUser.email,
+          photoURL: auth.currentUser.photoURL,
+        };
       }
+      
+      console.log('[TicketBoard] Merged users:', mergedUsers);
+      setUsers(mergedUsers);
     };
-    fetchUsers();
+    
+    fetchAuthUsers();
   }, []);
 
   // Fetch tickets using useTickets hook
   useEffect(() => {
     const fetchTickets = async () => {
-      console.log('[TicketBoard] Fetching tickets for account:', currentAccount?.id);
-      const ticketsData = await getTickets();
-      console.log('[TicketBoard] Fetched tickets:', ticketsData);
+      if (!currentAccount?.id) return;
+      
+      try {
+        const ticketsData = await getTickets();
+        console.log('[TicketBoard] Fetched tickets:', ticketsData);
 
-      // Create fresh columns
-      const newColumns = mode === 'development' 
-        ? { ...developmentColumns }
-        : { ...backlogColumns };
+        // Sort tickets by order
+        const sortedTickets = [...ticketsData].sort((a, b) => (a.order || 0) - (b.order || 0));
+        
+        // Create fresh columns with proper typing
+        const newColumns = mode === 'development' 
+          ? { ...developmentColumns } as DevelopmentColumnsType
+          : { ...backlogColumns } as BacklogColumnsType;
 
-      // Sort tickets by order
-      const sortedTickets = [...ticketsData].sort((a, b) => (a.order || 0) - (b.order || 0));
-      console.log('[TicketBoard] Sorted tickets:', sortedTickets);
-
-      // Group tickets by status
-      const ticketsByStatus = sortedTickets.reduce((acc, ticket) => {
-        if (!acc[ticket.status]) {
-          acc[ticket.status] = [];
-        }
-        acc[ticket.status].push(ticket);
-        return acc;
-      }, {} as Record<TicketStatus, Ticket[]>);
-
-      console.log('[TicketBoard] Tickets by status:', ticketsByStatus);
-
-      // Distribute tickets to columns
-      if (mode === 'development') {
-        Object.entries(developmentColumns).forEach(([status, _]) => {
-          const typedStatus = status as BoardStatus;
-          if (ticketsByStatus[typedStatus]) {
-            (newColumns as DevelopmentColumnsType)[typedStatus].tickets = 
-              ticketsByStatus[typedStatus];
+        // Distribute tickets to columns
+        sortedTickets.forEach(ticket => {
+          if (isDevelopmentColumns(newColumns)) {
+            if (ticket.status in newColumns) {
+              newColumns[ticket.status as keyof DevelopmentColumnsType].tickets.push(ticket);
+            }
+          } else {
+            if (ticket.status in newColumns) {
+              newColumns[ticket.status as keyof BacklogColumnsType].tickets.push(ticket);
+            }
           }
         });
-      } else {
-        Object.entries(backlogColumns).forEach(([status, _]) => {
-          const typedStatus = status as BacklogStatus;
-          if (ticketsByStatus[typedStatus]) {
-            (newColumns as BacklogColumnsType)[typedStatus].tickets = 
-              ticketsByStatus[typedStatus];
-          }
-        });
+
+        setTickets(ticketsData);
+        setColumns(newColumns);
+      } catch (error) {
+        console.error('Error fetching tickets:', error);
       }
-
-      console.log('[TicketBoard] Final columns:', newColumns);
-      setTickets(ticketsData);
-      setColumns(newColumns);
     };
 
-    if (currentAccount?.id) {
-      fetchTickets();
-    }
-  }, [getTickets, mode, currentAccount]);
+    fetchTickets();
+  }, [currentAccount?.id, getTickets, mode]);
 
   const getUserName = (userId: string) => {
+    if (!userId) return 'Unassigned';
+    
     const userInfo = users[userId];
-    return userInfo?.displayName || userInfo?.email || 'Unknown User';
+    if (!userInfo) return 'Unknown User';
+    
+    return userInfo.displayName || userInfo.email || 'Unknown User';
   };
 
   const handleDragEnd = async (result: DropResult) => {
@@ -2415,7 +2465,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     // Create a new columns object to avoid mutating state
     const newColumns = { ...columns };
 
-    // Ensure we're working with the correct column type and status
+    // Use type guards to ensure proper column access
     if (!isDevelopmentColumns(newColumns) && !isBacklogColumns(newColumns)) {
       console.error('Invalid column type');
       return;
@@ -2513,19 +2563,86 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     }
   };
 
-  // Add refreshTickets function
+  const organizeTicketsIntoColumns = useCallback((tickets: Ticket[]) => {
+    // Create fresh columns with proper typing
+    const newColumns = mode === 'development' 
+      ? { ...developmentColumns } as DevelopmentColumnsType
+      : { ...backlogColumns } as BacklogColumnsType;
+
+    // Clear existing tickets
+    if (isDevelopmentColumns(newColumns)) {
+      Object.values(newColumns).forEach(column => {
+        column.tickets = [];
+      });
+    } else if (isBacklogColumns(newColumns)) {
+      Object.values(newColumns).forEach(column => {
+        column.tickets = [];
+      });
+    }
+
+    // Sort tickets by order
+    const sortedTickets = [...tickets].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    // Distribute tickets to columns
+    sortedTickets.forEach(ticket => {
+      if (isDevelopmentColumns(newColumns)) {
+        if (ticket.status in newColumns) {
+          newColumns[ticket.status as keyof DevelopmentColumnsType].tickets.push(ticket);
+        }
+      } else if (isBacklogColumns(newColumns)) {
+        if (ticket.status in newColumns) {
+          newColumns[ticket.status as keyof BacklogColumnsType].tickets.push(ticket);
+        }
+      }
+    });
+
+    return newColumns;
+  }, [mode]);
+
+  // Add useEffect to listen for tickets changes
+  useEffect(() => {
+    const loadTickets = async () => {
+      if (!currentAccount?.id) return;
+      
+      try {
+        const ticketsData = await getTickets();
+        setTickets(ticketsData);
+        const newColumns = organizeTicketsIntoColumns(ticketsData);
+        setColumns(newColumns);
+      } catch (error) {
+        console.error('Error loading tickets:', error);
+      }
+    };
+
+    loadTickets();
+  }, [currentAccount?.id, getTickets, organizeTicketsIntoColumns]);
+
+  // Update refreshTickets to use the new helper
   const refreshTickets = useCallback(async () => {
     if (!currentAccount?.id) return;
     
     try {
       const ticketsData = await getTickets();
       console.log('[TicketBoard] Refreshing tickets:', ticketsData);
-      const newColumns = organizeTickets(ticketsData, mode);
+      const newColumns = organizeTicketsIntoColumns(ticketsData);
       setColumns(newColumns);
     } catch (error) {
       console.error('Error refreshing tickets:', error);
     }
-  }, [currentAccount?.id, getTickets, mode]);
+  }, [currentAccount?.id, getTickets, organizeTicketsIntoColumns]);
+
+  const refreshBoard = useCallback(async () => {
+    if (!currentAccount?.id) return;
+    
+    try {
+      const ticketsData = await getTickets();
+      setTickets(ticketsData);
+      const newColumns = organizeTicketsIntoColumns(ticketsData);
+      setColumns(newColumns);
+    } catch (error) {
+      console.error('Error refreshing tickets:', error);
+    }
+  }, [currentAccount?.id, getTickets, organizeTicketsIntoColumns]);
 
   // Update modal handlers
   const handleModalClose = () => {
@@ -2575,7 +2692,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
           bg-white dark:bg-[${theme.colors.dark.background.primary}]
         `}>
           {Object.entries(columns).map(([status, column]) => (
-            <Droppable droppableId={status} key={status}>
+            <Droppable droppableId={status} key={`column-${status}`}>
               {(provided, snapshot) => (
                 <div
                   ref={provided.innerRef}
@@ -2621,8 +2738,8 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
                   <div className="space-y-3">
                     {column.tickets.map((ticket, index) => (
                       <Draggable
-                        key={ticket.id}
-                        draggableId={ticket.id!}
+                        key={`${ticket.id}-${status}`}
+                        draggableId={ticket.id}
                         index={index}
                       >
                         {(provided, snapshot) => (
@@ -2723,7 +2840,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
           ticket={selectedTicket}
           isOpen={!!selectedTicket}
           onClose={handleModalClose}
-          onSave={handleModalSave}
+          onSave={refreshBoard}
         />
       )}
       <TicketModal
@@ -2740,7 +2857,7 @@ export default TicketBoard;
 
 --- File: ./src/components/Tickets/TicketList.tsx ---
 
-import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment, FormControl, Select, MenuItem } from '@mui/material';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment, FormControl, Select, MenuItem, ListSubheader } from '@mui/material';
 import React, { useState, useEffect } from 'react';
 import { Ticket, TicketStatus } from '../../types/ticket';
 import { useAuth } from '../../context/AuthContext';
@@ -2786,17 +2903,26 @@ export function TicketList({ showHeader = true }: TicketListProps) {
 
   useEffect(() => {
     if (!currentAccount?.id) {
-      console.log('No current account, skipping users subscription');
+      console.log('[TicketList] No current account, skipping users subscription');
       return;
     }
 
-    console.log('Setting up users subscription');
-    const unsubscribe = subscribeToUsers(currentAccount.id, (fetchedUsers: { [key: string]: CustomUser }) => {
-      console.log('Received users:', fetchedUsers);
-      setUsers(fetchedUsers);
-    });
+    const memberIds = Object.keys(currentAccount.members);
+    console.log('[TicketList] Setting up users subscription for members:', memberIds);
+    
+    const unsubscribe = subscribeToUsers(
+      currentAccount.id,
+      memberIds,
+      (fetchedUsers: { [key: string]: CustomUser }) => {
+        console.log('[TicketList] Received users:', fetchedUsers);
+        setUsers(fetchedUsers);
+      }
+    );
 
-    return () => unsubscribe();
+    return () => {
+      console.log('[TicketList] Cleaning up users subscription');
+      unsubscribe();
+    };
   }, [currentAccount]);
 
   const getAssigneeName = (assigneeId: string | undefined) => {
@@ -2823,6 +2949,21 @@ export function TicketList({ showHeader = true }: TicketListProps) {
     return matchesSearch && ticket.status === filterStatus;
   });
 
+  const getStatusGroups = () => ({
+    'Development Board': [
+      'SELECTED_FOR_DEV',
+      'IN_PROGRESS',
+      'READY_FOR_TESTING',
+      'DEPLOYED'
+    ],
+    'Backlog': [
+      'BACKLOG_ICEBOX',
+      'BACKLOG_NEW',
+      'BACKLOG_REFINED',
+      'BACKLOG_DEV_NEXT'
+    ]
+  });
+
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900">
       {showHeader && (
@@ -2834,7 +2975,7 @@ export function TicketList({ showHeader = true }: TicketListProps) {
             </div>
             <button
               onClick={() => setIsCreateModalOpen(true)}
-              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors duration-150"
             >
               Create Ticket
             </button>
@@ -2883,6 +3024,21 @@ export function TicketList({ showHeader = true }: TicketListProps) {
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as 'all' | TicketStatus)}
               className="dark:bg-gray-800 dark:text-white"
+              MenuProps={{
+                PaperProps: {
+                  className: 'dark:bg-gray-800',
+                  sx: {
+                    '& .MuiMenuItem-root': {
+                      '&:hover': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      },
+                    },
+                    '& .MuiListSubheader-root': {
+                      lineHeight: '32px',
+                    },
+                  },
+                },
+              }}
               sx={{
                 '& .MuiOutlinedInput-notchedOutline': {
                   borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -2895,15 +3051,26 @@ export function TicketList({ showHeader = true }: TicketListProps) {
                 },
               }}
             >
-              <MenuItem value="all">All Status</MenuItem>
-              <MenuItem value="BACKLOG_ICEBOX">Backlog - Icebox</MenuItem>
-              <MenuItem value="BACKLOG_NEW">Backlog - New</MenuItem>
-              <MenuItem value="BACKLOG_REFINED">Backlog - Refined</MenuItem>
-              <MenuItem value="BACKLOG_DEV_NEXT">Backlog - Dev Next</MenuItem>
-              <MenuItem value="SELECTED_FOR_DEV">Selected for Dev</MenuItem>
-              <MenuItem value="IN_PROGRESS">In Progress</MenuItem>
-              <MenuItem value="READY_FOR_TESTING">Ready for Testing</MenuItem>
-              <MenuItem value="DEPLOYED">Deployed</MenuItem>
+              <MenuItem value="all" className="dark:text-gray-200">All Status</MenuItem>
+              {Object.entries(getStatusGroups()).map(([groupName, statuses]) => [
+                <ListSubheader
+                  key={groupName}
+                  className="dark:bg-gray-700/50 dark:text-gray-100 bg-gray-200 text-gray-700 sticky top-0 z-10 font-medium border-t border-b dark:border-gray-600"
+                >
+                  {groupName}
+                </ListSubheader>,
+                ...statuses.map((status) => (
+                  <MenuItem 
+                    key={status} 
+                    value={status}
+                    className="dark:text-gray-200 dark:hover:bg-gray-700 dark:bg-gray-800"
+                  >
+                    {status.split('_').map(word => 
+                      word.charAt(0) + word.slice(1).toLowerCase()
+                    ).join(' ')}
+                  </MenuItem>
+                ))
+              ])}
             </Select>
           </FormControl>
         </div>
@@ -3084,12 +3251,11 @@ export function TicketsContainer() {
 --- File: ./src/components/Tickets/TicketModal.tsx ---
 
 import React, { useState, useEffect, useRef } from 'react';
-import { doc, updateDoc, collection, addDoc, getDocs, query, where, writeBatch, orderBy, limit } from 'firebase/firestore';
+import { doc, updateDoc, collection, addDoc, getDocs, query, where, writeBatch, orderBy, limit, getDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { Ticket, TicketStatus, TicketPriority, TicketType } from '../../types/ticket';
+import { CustomUser } from '../../types/user';
 import { useAuth } from '../../context/AuthContext';
-import { ref, get } from 'firebase/database';
-import { database } from '../../services/firebase';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
 import { X, Loader, Copy, Check, Trash2 } from 'lucide-react';
 import { Modal } from 'react-responsive-modal';
@@ -3100,7 +3266,11 @@ import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Components } from 'react-markdown';
 import { useAccount } from '../../context/AccountContext';
 import { useTickets } from '../../hooks/useTickets';
-import { COLUMN_STATUS_LABELS } from '../../types/board/columns';
+import { 
+  COLUMN_STATUS_LABELS,
+  BacklogStatus,
+  BoardStatus
+} from '../../types/board';
 
 // Define the CodeProps interface directly
 interface CodeProps {
@@ -3120,16 +3290,22 @@ interface TicketModalProps {
 const DEFAULT_STATUS: TicketStatus = 'BACKLOG_NEW';
 const DEFAULT_PRIORITY: TicketPriority = 'medium';
 
-const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
-  'BACKLOG_ICEBOX': 'Icebox',
-  'BACKLOG_NEW': 'New',
-  'BACKLOG_REFINED': 'Refined',
-  'BACKLOG_DEV_NEXT': 'Next for Development',
-  'SELECTED_FOR_DEV': 'Selected for Development',
-  'IN_PROGRESS': 'In Progress',
-  'READY_FOR_TESTING': 'Ready for Testing',
-  'DEPLOYED': 'Deployed'
-};
+const TICKET_STATUS_LABELS: Record<TicketStatus, string> = COLUMN_STATUS_LABELS;
+
+// Define the backlog and development status options
+const BACKLOG_OPTIONS: BacklogStatus[] = [
+  'BACKLOG_ICEBOX',
+  'BACKLOG_NEW',
+  'BACKLOG_REFINED',
+  'BACKLOG_DEV_NEXT'
+];
+
+const DEVELOPMENT_OPTIONS: BoardStatus[] = [
+  'SELECTED_FOR_DEV',
+  'IN_PROGRESS',
+  'READY_FOR_TESTING',
+  'DEPLOYED'
+];
 
 export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketModalProps) {
   const { user } = useAuth();
@@ -3141,7 +3317,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
   const [priority, setPriority] = useState<TicketPriority>(ticket?.priority || DEFAULT_PRIORITY);
   const [assigneeId, setAssigneeId] = useState(ticket?.assigneeId || '');
   const [loading, setLoading] = useState(false);
-  const [users, setUsers] = useState<{[key: string]: any}>({});
+  const [users, setUsers] = useState<{[key: string]: CustomUser}>({});
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -3172,14 +3348,38 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
   // Fetch users for the assignee dropdown
   useEffect(() => {
     const fetchUsers = async () => {
-      const usersRef = ref(database, 'users');
-      const snapshot = await get(usersRef);
-      if (snapshot.exists()) {
-        setUsers(snapshot.val());
+      if (!currentAccount) return;
+      
+      try {
+        const userPromises = Object.keys(currentAccount.members).map(async (userId) => {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            if (userDoc.exists()) {
+              return { userId, userData: userDoc.data() as CustomUser };
+            }
+          } catch (error) {
+            console.error(`Failed to load user ${userId}:`, error);
+          }
+          return null;
+        });
+
+        const usersData = await Promise.all(userPromises);
+        const newUsers: Record<string, CustomUser> = {};
+        
+        usersData.forEach(user => {
+          if (user) {
+            newUsers[user.userId] = user.userData;
+          }
+        });
+
+        setUsers(newUsers);
+      } catch (error) {
+        console.error('Failed to load users:', error);
       }
     };
+
     fetchUsers();
-  }, []);
+  }, [currentAccount]);
 
   // Update form when ticket changes
   useEffect(() => {
@@ -3197,27 +3397,50 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
   };
 
   const getNextTicketNumber = async () => {
-    const ticketsRef = collection(db, 'tickets');
-    const q = query(
-      ticketsRef,
-      orderBy('ticket_id', 'desc'),
-      limit(1)
-    );
-    
-    const snapshot = await getDocs(q);
-    let nextNumber = 1;
-    
-    if (!snapshot.empty) {
-      const lastTicket = snapshot.docs[0].data();
-      if (lastTicket.ticket_id) {
-        const match = lastTicket.ticket_id.match(/Q-(\d+)/);
-        if (match) {
-          nextNumber = parseInt(match[1]) + 1;
-        }
-      }
+    if (!currentAccount?.id) {
+      console.error('[TicketModal] No current account when generating ticket number');
+      return 'Q-001'; // Fallback
     }
     
-    return `Q-${String(nextNumber).padStart(4, '0')}`;
+    const prefix = 'Q';
+    
+    try {
+      // Get all tickets for this account to ensure we don't miss any
+      const ticketsRef = collection(db, 'tickets');
+      const q = query(
+        ticketsRef,
+        where('accountId', '==', currentAccount.id),
+        where('ticket_id', '>=', 'Q-'), // Ensure we only get Q- prefixed tickets
+        orderBy('ticket_id', 'desc')  // Remove limit to get all tickets
+      );
+      
+      console.log('[TicketModal] Querying for last ticket number');
+      const snapshot = await getDocs(q);
+      let maxNumber = 0;
+      
+      // Iterate through all tickets to find the highest number
+      snapshot.forEach((doc) => {
+        const ticketData = doc.data();
+        if (ticketData.ticket_id) {
+          const match = ticketData.ticket_id.match(/Q-(\d{3})/);
+          if (match) {
+            const number = parseInt(match[1], 10);
+            maxNumber = Math.max(maxNumber, number);
+          }
+        }
+      });
+
+      console.log('[TicketModal] Highest ticket number found:', maxNumber);
+      const nextNumber = maxNumber + 1;
+      const newTicketId = `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+      
+      console.log('[TicketModal] Generated new ticket ID:', newTicketId);
+      return newTicketId;
+      
+    } catch (error) {
+      console.error('[TicketModal] Error generating ticket number:', error);
+      return 'Q-001'; // Fallback in case of error
+    }
   };
 
   // Handle submit with authorization check
@@ -3246,7 +3469,21 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
         });
       } else {
         // Create new ticket
-        const ticketId = `TICKET-${Date.now()}`;
+        const nextTicketId = await getNextTicketNumber();
+        
+        // Double check that this ticket ID doesn't already exist
+        const ticketsRef = collection(db, 'tickets');
+        const existingTicketQuery = query(
+          ticketsRef,
+          where('accountId', '==', currentAccount.id),
+          where('ticket_id', '==', nextTicketId)
+        );
+        
+        const existingTicket = await getDocs(existingTicketQuery);
+        if (!existingTicket.empty) {
+          throw new Error('Duplicate ticket ID generated. Please try again.');
+        }
+
         const newTicket = await createTicket({
           title,
           description,
@@ -3258,7 +3495,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
           createdBy: user.uid,
           createdAt: Date.now(),
           order: Date.now(),
-          ticket_id: ticketId, // Add the required ticket_id field
+          ticket_id: nextTicketId,
         });
         
         if (!newTicket) {
@@ -3270,7 +3507,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
       onClose();
     } catch (error) {
       console.error('[TicketModal] Error saving ticket:', error);
-      setError('Failed to save ticket. Please try again.');
+      setError(error instanceof Error ? error.message : 'Failed to save ticket. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -3647,13 +3884,22 @@ You can also use \`inline code\` with single backticks.`;
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as TicketStatus)}
-                className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                className={commonStyles.input}
               >
-                {Object.entries(COLUMN_STATUS_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
+                <optgroup label="Backlog">
+                  {BACKLOG_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {COLUMN_STATUS_LABELS[value]}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Development">
+                  {DEVELOPMENT_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {COLUMN_STATUS_LABELS[value]}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
 
@@ -3682,9 +3928,9 @@ You can also use \`inline code\` with single backticks.`;
                 className={commonStyles.input}
               >
                 <option value="">Unassigned</option>
-                {Object.entries(users).map(([userId, userInfo]: [string, any]) => (
+                {Object.entries(users).map(([userId, userInfo]) => (
                   <option key={userId} value={userId}>
-                    {userInfo.displayName || userInfo.email}
+                    {userInfo.displayName || userInfo.email || 'Unknown User'}
                   </option>
                 ))}
               </select>
@@ -3760,6 +4006,7 @@ You can also use \`inline code\` with single backticks.`;
     </Modal>
   );
 }
+
 
 
 --- File: ./src/components/Codebase/Connect.tsx ---
@@ -5015,12 +5262,12 @@ import { useAccount } from '../../context/AccountContext';
 
 export default function ChatInterface() {
   const { userId } = useParams();
-  const { user: currentUser } = useAuth();
+  const { user } = useAuth();
   const { currentAccount } = useAccount();
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [users, setUsers] = useState<{[key: string]: CustomUser}>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [users, setUsers] = useState<{ [key: string]: CustomUser }>({});
 
   // Create a consistent channel ID for DMs by sorting user IDs
   const getDMChannelId = (user1Id: string, user2Id: string) => {
@@ -5029,15 +5276,15 @@ export default function ChatInterface() {
   };
 
   // Determine the channel ID based on whether it's a DM or general chat
-  const channelId = userId && currentUser?.uid 
-    ? getDMChannelId(currentUser.uid, userId)
+  const channelId = userId && user?.uid 
+    ? getDMChannelId(user.uid, userId)
     : 'general';
 
   console.log('Current channel ID:', channelId); // Debug log
 
   // Subscribe to messages
   useEffect(() => {
-    if (!currentUser || !currentAccount?.id) {
+    if (!user || !currentAccount?.id) {
       console.log('No user or account, skipping message subscription');
       return;
     }
@@ -5055,29 +5302,45 @@ export default function ChatInterface() {
       console.log('Cleaning up message subscription');
       unsubscribe();
     };
-  }, [currentUser, channelId, currentAccount]);
+  }, [user, channelId, currentAccount]);
 
   // Subscribe to users
   useEffect(() => {
-    if (!currentAccount?.id) return;
-    
-    const unsubscribe = subscribeToUsers(currentAccount.id, (fetchedUsers) => {
-      console.log('Fetched users for chat:', fetchedUsers);
-      setUsers(fetchedUsers);
-    });
+    if (!currentAccount?.id) {
+      console.log('[ChatInterface] No current account, skipping users subscription');
+      setUsers({});
+      setIsLoading(false);
+      return;
+    }
 
-    return () => unsubscribe();
+    const memberIds = Object.keys(currentAccount.members);
+    console.log('[ChatInterface] Setting up users subscription for members:', memberIds);
+
+    const unsubscribe = subscribeToUsers(
+      currentAccount.id,
+      memberIds,
+      (fetchedUsers) => {
+        console.log('[ChatInterface] Received users data:', fetchedUsers);
+        setUsers(fetchedUsers);
+        setIsLoading(false);
+      }
+    );
+
+    return () => {
+      console.log('[ChatInterface] Cleaning up users subscription');
+      unsubscribe();
+    };
   }, [currentAccount]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || !currentUser || !currentAccount?.id) return;
+    if (!message.trim() || !user || !currentAccount?.id) return;
 
     try {
       const newMessage = {
         content: message,
         timestamp: Date.now(),
-        userId: currentUser.uid,
+        userId: user.uid,
         channelId: channelId,
         accountId: currentAccount.id
       };
@@ -5123,7 +5386,7 @@ export default function ChatInterface() {
         <MessageList 
           messages={messages}
           isLoading={isLoading}
-          currentUser={currentUser}
+          currentUser={user}
           users={users}
           className="p-4 space-y-4"
         />
@@ -5141,11 +5404,12 @@ export default function ChatInterface() {
 
 --- File: ./src/components/Chat/MessageList.tsx ---
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Message } from '../../types/message';
 import { CustomUser } from '../../types/user';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
 import { Loader, User } from 'lucide-react';
+import { format } from 'date-fns';
 
 export interface MessageListProps {
   messages: Message[];
@@ -5155,31 +5419,41 @@ export interface MessageListProps {
   className?: string;
 }
 
-const UserAvatar = ({ user }: { user: CustomUser }) => {
-  if (user.photoURL) {
+const UserAvatar = ({ userData, size = "small" }: { 
+  userData: { displayName?: string; email?: string; photoURL?: string; }; 
+  size?: "small" | "medium" 
+}) => {
+  const [imageError, setImageError] = useState(false);
+  const initials = userData?.displayName 
+    ? userData.displayName.split(' ').map(n => n[0]).join('').toUpperCase()
+    : userData?.email?.charAt(0).toUpperCase() || '?';
+
+  const sizeClasses = size === "small" ? "w-8 h-8" : "w-10 h-10";
+
+  if (!userData || imageError) {
     return (
-      <div className="w-10 h-10 rounded-md overflow-hidden">
-        <img
-          src={user.photoURL}
-          alt={user.displayName || user.email || 'User avatar'}
-          className="w-full h-full object-cover"
-        />
+      <div className={`${sizeClasses} rounded-full flex items-center justify-center
+                    bg-gray-600 text-gray-300`}>
+        <span className="text-sm font-medium">{initials}</span>
       </div>
     );
   }
 
-  // Fallback avatar with first letter of email or name
-  const initial = (user.displayName || user.email || '?')[0].toUpperCase();
-  
   return (
-    <div className={`
-      ${layout.flex.center}
-      w-10 h-10 rounded-md
-      bg-blue-100 dark:bg-blue-900
-      text-blue-700 dark:text-blue-300
-      font-medium text-lg
-    `}>
-      {initial}
+    <div className={`${sizeClasses} rounded-full flex items-center justify-center overflow-hidden
+                  bg-gray-600`}>
+      {userData.photoURL ? (
+        <img 
+          src={userData.photoURL} 
+          alt={userData.displayName || userData.email || ''}
+          className="w-full h-full object-cover"
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <span className="text-sm font-medium text-gray-300">
+          {initials}
+        </span>
+      )}
     </div>
   );
 };
@@ -5237,6 +5511,13 @@ export default function MessageList({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  console.log('[MessageList] Rendering with:', {
+    messageCount: messages.length,
+    userCount: Object.keys(users).length,
+    users: users, // Log full users object
+    currentUser: currentUser?.uid
+  });
 
   if (isLoading) {
     return (
@@ -5298,15 +5579,23 @@ export default function MessageList({
             <div className="space-y-6 px-4">
               {dateGroups.map((group, groupIndex) => {
                 const firstMessage = group[0];
-                const sender = users[firstMessage.userId];
-                const senderName = sender?.displayName || sender?.email || 'Unknown User';
+                const messageUser = users[firstMessage.userId];
+                console.log('[MessageList] Message user data:', {
+                  messageUserId: firstMessage.userId,
+                  foundUser: messageUser,
+                  displayName: messageUser?.displayName
+                });
+                const senderName = messageUser?.displayName || messageUser?.email || 'Unknown User';
 
                 return (
                   <div key={groupIndex} className="flex items-start gap-3 group">
                     {/* User Avatar */}
                     <div className="flex-shrink-0 mt-1">
-                      {sender ? (
-                        <UserAvatar user={sender} />
+                      {messageUser ? (
+                        <UserAvatar 
+                          userData={messageUser} 
+                          size="medium"
+                        />
                       ) : (
                         <div className={`
                           ${layout.flex.center}
@@ -5786,6 +6075,46 @@ interface SidebarProps {
   handleStartDirectMessage: (userId: string) => void;
 }
 
+// Add UserAvatar component
+const UserAvatar = ({ userData, size = "small" }: { 
+  userData: { displayName?: string; email?: string; photoURL?: string; }; 
+  size?: "small" | "medium" 
+}) => {
+  const [imageError, setImageError] = useState(false);
+  const initials = userData?.displayName 
+    ? userData.displayName.split(' ').map(n => n[0]).join('').toUpperCase()
+    : userData?.email?.charAt(0).toUpperCase() || '?';
+
+  const sizeClasses = size === "small" ? "w-5 h-5" : "w-8 h-8";
+
+  if (!userData || imageError) {
+    return (
+      <div className={`${sizeClasses} rounded-full flex items-center justify-center
+                    bg-gray-600 text-gray-300`}>
+        <span className="text-sm font-medium">{initials}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${sizeClasses} rounded-full flex items-center justify-center overflow-hidden
+                  bg-gray-600`}>
+      {userData.photoURL ? (
+        <img 
+          src={userData.photoURL} 
+          alt={userData.displayName || userData.email || ''}
+          className="w-full h-full object-cover"
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <span className="text-sm font-medium text-gray-300">
+          {initials}
+        </span>
+      )}
+    </div>
+  );
+};
+
 export function Sidebar({
   user,
   channels,
@@ -5810,34 +6139,23 @@ export function Sidebar({
   useEffect(() => {
     if (!currentAccount?.id) {
       console.log('[Sidebar] No current account, skipping users subscription');
+      setAccountUsers({});
       setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
-    console.log('[Sidebar] Setting up users subscription for account:', currentAccount.id);
-    
-    // Get all member IDs from the current account
     const memberIds = Object.keys(currentAccount.members);
-    console.log('[Sidebar] Member IDs:', memberIds);
+    console.log('[Sidebar] Setting up users subscription for members:', memberIds);
 
-    // Create a query to get all users that are members of the account
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('uid', 'in', memberIds));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedUsers: { [key: string]: CustomUser } = {};
-      snapshot.forEach((doc) => {
-        fetchedUsers[doc.id] = doc.data() as CustomUser;
-      });
-      
-      console.log('[Sidebar] Received users:', fetchedUsers);
-      setAccountUsers(fetchedUsers);
-      setIsLoading(false);
-    }, (error) => {
-      console.error('[Sidebar] Error fetching users:', error);
-      setIsLoading(false);
-    });
+    const unsubscribe = subscribeToUsers(
+      currentAccount.id,
+      memberIds,
+      (fetchedUsers) => {
+        console.log('[Sidebar] Received users:', fetchedUsers);
+        setAccountUsers(fetchedUsers);
+        setIsLoading(false);
+      }
+    );
 
     return () => {
       console.log('[Sidebar] Cleaning up users subscription');
@@ -5962,36 +6280,33 @@ export function Sidebar({
               <ul className="space-y-1">
                 {Object.entries(accountUsers).map(([userId, userData]) => {
                   const isCurrentUser = userId === authUser?.uid;
+                  const userDataToShow = isCurrentUser 
+                    ? { 
+                        displayName: userData.displayName,
+                        email: userData.email,
+                        photoURL: authUser?.photoURL
+                      }
+                    : userData;
+                  
                   return (
                     <li key={userId}>
                       <button
                         onClick={() => handleStartDirectMessage(userId)}
                         className={`
                           flex items-center w-full p-2 rounded-lg text-left
-                          ${location.pathname === `/chat/${userId}` 
+                          ${location.pathname === `/chat/dm/${userId}` 
                             ? 'bg-gray-700 text-white' 
                             : 'text-gray-300 hover:bg-gray-700'
                           }
                         `}
                       >
-                        <div className="w-5 h-5 mr-2 rounded-full bg-gray-600 flex items-center justify-center overflow-hidden">
-                          {userData.photoURL ? (
-                            <img 
-                              src={userData.photoURL} 
-                              alt={userData.displayName || ''} 
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <User className="h-4 w-4 text-gray-400" />
-                          )}
+                        <div className="mr-2">
+                          <UserAvatar userData={userDataToShow} size="small" />
                         </div>
                         <span className="truncate">
                           {userData.displayName || userData.email || 'Unknown User'}
-                          {isCurrentUser && ' (you)'}
+                          {isCurrentUser && ' (You)'}
                         </span>
-                        {isCurrentUser && (
-                          <div className="ml-auto text-xs text-gray-500">self</div>
-                        )}
                       </button>
                     </li>
                   );
@@ -6062,83 +6377,6 @@ export function Sidebar({
   )
 }
 
-
---- File: ./src/utils/board.ts ---
-
-import { Ticket, TicketStatus } from '../types/ticket';
-import { 
-  Column, 
-  DevelopmentColumnsType, 
-  BacklogColumnsType,
-  COLUMN_STATUS_LABELS 
-} from '../types/board';
-
-type ColumnsType = DevelopmentColumnsType | BacklogColumnsType;
-type OrganizedColumns = { [key in TicketStatus]?: Column };
-
-export const organizeTickets = (tickets: Ticket[], mode: 'development' | 'backlog'): ColumnsType => {
-  // First pass: organize tickets into columns
-  const organized = tickets.reduce((acc, ticket) => {
-    if (!acc[ticket.status]) {
-      acc[ticket.status] = {
-        title: COLUMN_STATUS_LABELS[ticket.status],
-        tickets: []
-      };
-    }
-    acc[ticket.status]!.tickets.push(ticket);
-    return acc;
-  }, {} as OrganizedColumns);
-
-  // Sort tickets within each column by order
-  Object.values(organized).forEach(column => {
-    if (column) {
-      column.tickets.sort((a, b) => (a.order || 0) - (b.order || 0));
-    }
-  });
-
-  // Return the appropriate column structure based on mode
-  if (mode === 'development') {
-    const developmentColumns: DevelopmentColumnsType = {
-      SELECTED_FOR_DEV: {
-        title: COLUMN_STATUS_LABELS.SELECTED_FOR_DEV,
-        tickets: organized.SELECTED_FOR_DEV?.tickets || []
-      },
-      IN_PROGRESS: {
-        title: COLUMN_STATUS_LABELS.IN_PROGRESS,
-        tickets: organized.IN_PROGRESS?.tickets || []
-      },
-      READY_FOR_TESTING: {
-        title: COLUMN_STATUS_LABELS.READY_FOR_TESTING,
-        tickets: organized.READY_FOR_TESTING?.tickets || []
-      },
-      DEPLOYED: {
-        title: COLUMN_STATUS_LABELS.DEPLOYED,
-        tickets: organized.DEPLOYED?.tickets || []
-      }
-    };
-    return developmentColumns;
-  } else {
-    const backlogColumns: BacklogColumnsType = {
-      BACKLOG_ICEBOX: {
-        title: COLUMN_STATUS_LABELS.BACKLOG_ICEBOX,
-        tickets: organized.BACKLOG_ICEBOX?.tickets || []
-      },
-      BACKLOG_NEW: {
-        title: COLUMN_STATUS_LABELS.BACKLOG_NEW,
-        tickets: organized.BACKLOG_NEW?.tickets || []
-      },
-      BACKLOG_REFINED: {
-        title: COLUMN_STATUS_LABELS.BACKLOG_REFINED,
-        tickets: organized.BACKLOG_REFINED?.tickets || []
-      },
-      BACKLOG_DEV_NEXT: {
-        title: COLUMN_STATUS_LABELS.BACKLOG_DEV_NEXT,
-        tickets: organized.BACKLOG_DEV_NEXT?.tickets || []
-      }
-    };
-    return backlogColumns;
-  }
-};
 
 --- File: ./src/services/ticketService.ts ---
 
@@ -6301,52 +6539,9 @@ export const getTicket = async (ticketId: string): Promise<Ticket | null> => {
 
 --- File: ./src/services/firebase.ts ---
 
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getDatabase } from "firebase/database";
-import { getFunctions } from "firebase/functions";
-
-const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
-  databaseURL: process.env.REACT_APP_FIREBASE_DATABASE_URL
-};
-
-const app = initializeApp(firebaseConfig);
-
-// Initialize services
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const database = getDatabase(app);
-export const functions = getFunctions(app);
-
-// Debug log the config (remove sensitive data in production)
-console.log('Firebase Config:', {
-  projectId: firebaseConfig.projectId,
-  authDomain: firebaseConfig.authDomain,
-  databaseURL: firebaseConfig.databaseURL
-});
-
-// Verify initialization
-console.log('Firebase Services Initialized:', {
-  auth: !!auth,
-  firestore: !!db,
-  database: !!database,
-  functions: !!functions
-});
-
-// Log Firestore initialization
-console.log('Firestore initialized:', !!db);
-
-// If you're using emulators, uncomment this:
-// if (process.env.NODE_ENV === 'development') {
-//   connectFirestoreEmulator(db, 'localhost', 8080);
-// }
+// Remove Firebase initialization from here
+// Just re-export what you need
+export { db, auth, functions, app, database } from '../config/firebase';
 
 
 --- File: ./src/services/chat.ts ---
@@ -6365,29 +6560,49 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 
-import { db } from '../config/firebase';
+import { db, auth, functions } from '../config/firebase';
 import { Message } from '../types/message';
 import { CustomUser } from '../types/user';
 
 // Subscribe to account users
-export const subscribeToUsers = (accountId: string, callback: (users: { [key: string]: CustomUser }) => void) => {
-  console.log('[Chat Service] Setting up users subscription for account:', accountId);
+export const subscribeToUsers = (
+  accountId: string, 
+  memberIds: string[],
+  callback: (users: { [key: string]: CustomUser }) => void
+) => {
+  if (!accountId || !memberIds.length) {
+    console.error('[Chat Service] Cannot subscribe to users: missing accountId or memberIds');
+    return () => {};
+  }
+
+  console.log('[Chat Service] Starting users subscription for account:', accountId, 'members:', memberIds);
   
   const usersRef = collection(db, 'users');
-  const q = firestoreQuery(usersRef, where('accountIds', 'array-contains', accountId));
+  const q = firestoreQuery(
+    usersRef,
+    where('uid', 'in', memberIds)
+  );
+  
+  return onSnapshot(q, 
+    (snapshot) => {
+      const users: { [key: string]: CustomUser } = {};
+      snapshot.forEach((doc) => {
+        const userData = doc.data() as CustomUser;
+        users[doc.id] = {
+          ...userData,
+          uid: doc.id,
+          displayName: userData.displayName || userData.email || 'Unknown User',
+        };
+      });
 
-  return onSnapshot(q, (snapshot) => {
-    const users: { [key: string]: CustomUser } = {};
-    
-    snapshot.forEach((doc) => {
-      users[doc.id] = doc.data() as CustomUser;
-    });
-
-    console.log('[Chat Service] Found users for account:', Object.keys(users).length);
-    callback(users);
-  }, (error) => {
-    console.error('[Chat Service] Error fetching users:', error);
-  });
+      console.log('[Chat Service] Snapshot received with users:', users);
+      callback(users);
+    }, 
+    (error) => {
+      console.error('[Chat Service] Error in users subscription:', error);
+      callback({});
+    }
+  );
 };
 
 // Subscribe to channel messages
@@ -7007,9 +7222,9 @@ declare module 'react-responsive-modal' {
 
 --- File: ./src/types/ticket.ts ---
 
-import { BoardStatus, BacklogStatus } from './board';
+import type { BoardStatus, BacklogStatus } from './board';
 
-// Use the same status types from board
+// Use the union type directly instead of importing TicketStatus
 export type TicketStatus = BoardStatus | BacklogStatus;
 
 export type TicketPriority = 'low' | 'medium' | 'high';
@@ -7116,42 +7331,40 @@ export interface Message {
 
 --- File: ./src/types/board/columns.ts ---
 
-import { TicketStatus } from '../ticket';
-import { DevelopmentColumnsType, BacklogColumnsType } from './index';
+import { Column, BacklogColumnsType, DevelopmentColumnsType } from './index';
 
-export const developmentColumns: DevelopmentColumnsType = {
-  'SELECTED_FOR_DEV': { title: 'Selected for Development', tickets: [] },
-  'IN_PROGRESS': { title: 'In Progress', tickets: [] },
-  'READY_FOR_TESTING': { title: 'Ready for Testing', tickets: [] },
-  'DEPLOYED': { title: 'Deployed', tickets: [] }
-};
-
-export const backlogColumns: BacklogColumnsType = {
-  'BACKLOG_ICEBOX': { title: 'Icebox', tickets: [] },
-  'BACKLOG_NEW': { title: 'New', tickets: [] },
-  'BACKLOG_REFINED': { title: 'Refined', tickets: [] },
-  'BACKLOG_DEV_NEXT': { title: 'Next for Development', tickets: [] }
-};
-
-export const COLUMN_STATUS_LABELS: Record<TicketStatus, string> = {
-  // Development statuses
-  'SELECTED_FOR_DEV': 'Selected for Development',
-  'IN_PROGRESS': 'In Progress',
-  'READY_FOR_TESTING': 'Ready for Testing',
-  'DEPLOYED': 'Deployed',
-  
+export const COLUMN_STATUS_LABELS = {
   // Backlog statuses
   'BACKLOG_ICEBOX': 'Icebox',
   'BACKLOG_NEW': 'New',
   'BACKLOG_REFINED': 'Refined',
-  'BACKLOG_DEV_NEXT': 'Next for Development'
+  'BACKLOG_DEV_NEXT': 'Next for Development',
+  // Development statuses
+  'SELECTED_FOR_DEV': 'Selected for Development',
+  'IN_PROGRESS': 'In Progress',
+  'READY_FOR_TESTING': 'Ready for Testing',
+  'DEPLOYED': 'Deployed'
 } as const;
+
+export const backlogColumns: BacklogColumnsType = {
+  'BACKLOG_ICEBOX': { title: COLUMN_STATUS_LABELS['BACKLOG_ICEBOX'], tickets: [] },
+  'BACKLOG_NEW': { title: COLUMN_STATUS_LABELS['BACKLOG_NEW'], tickets: [] },
+  'BACKLOG_REFINED': { title: COLUMN_STATUS_LABELS['BACKLOG_REFINED'], tickets: [] },
+  'BACKLOG_DEV_NEXT': { title: COLUMN_STATUS_LABELS['BACKLOG_DEV_NEXT'], tickets: [] }
+};
+
+export const developmentColumns: DevelopmentColumnsType = {
+  'SELECTED_FOR_DEV': { title: COLUMN_STATUS_LABELS['SELECTED_FOR_DEV'], tickets: [] },
+  'IN_PROGRESS': { title: COLUMN_STATUS_LABELS['IN_PROGRESS'], tickets: [] },
+  'READY_FOR_TESTING': { title: COLUMN_STATUS_LABELS['READY_FOR_TESTING'], tickets: [] },
+  'DEPLOYED': { title: COLUMN_STATUS_LABELS['DEPLOYED'], tickets: [] }
+};
 
 --- File: ./src/types/board/index.ts ---
 
 import { Ticket } from '../ticket';
 
-// Define all possible statuses
+// Define status types
 export type BoardStatus = 
   | 'SELECTED_FOR_DEV'
   | 'IN_PROGRESS'
@@ -7164,13 +7377,15 @@ export type BacklogStatus =
   | 'BACKLOG_REFINED'
   | 'BACKLOG_DEV_NEXT';
 
+export type TicketStatus = BoardStatus | BacklogStatus;
+
 export interface Column {
   title: string;
   tickets: Ticket[];
 }
 
-export type DevelopmentColumnsType = Record<BoardStatus, Column>;
 export type BacklogColumnsType = Record<BacklogStatus, Column>;
+export type DevelopmentColumnsType = Record<BoardStatus, Column>;
 
 export * from './columns';
 
@@ -7736,14 +7951,19 @@ export async function verifyTicketMigration() {
 
 --- File: ./src/config/firebase.ts ---
 
-import { initializeApp } from 'firebase/app';
-import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
-import { getFirestore } from 'firebase/firestore';
+import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 import { getDatabase } from 'firebase/database';
 
+// Clear any existing Firebase apps
+const apps = getApps();
+for (const app of apps) {
+  deleteApp(app);
+}
+
 const firebaseConfig = {
-  // Your Firebase config here
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
@@ -7751,30 +7971,15 @@ const firebaseConfig = {
   messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.REACT_APP_FIREBASE_APP_ID,
   databaseURL: process.env.REACT_APP_FIREBASE_DATABASE_URL,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
-const app = initializeApp(firebaseConfig);
-const functions = getFunctions(app);
-const firestore = getFirestore(app);
-const auth = getAuth(app);
-const database = getDatabase(app);
-
-// For backward compatibility
-const db = firestore;
-
-// Only connect Functions to emulator in development
-if (process.env.NODE_ENV === 'development') {
-  connectFunctionsEmulator(functions, '127.0.0.1', 5003);
-}
-
-export { 
-  app, 
-  functions, 
-  firestore, 
-  auth, 
-  database,
-  db  // For backward compatibility
-};
+// Initialize Firebase
+export const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const functions = getFunctions(app);
+export const database = getDatabase(app);
 
 --- File: ./repository-indexer/src/services/api.ts ---
 
@@ -8108,10 +8313,34 @@ exports.getAllUsers = functions.https.onCall(async (data, context) => {
 --- File: ./functions/lib/index.js ---
 
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handleInvitationAcceptance = exports.sendInvitation = void 0;
+exports.syncGithubRepository = exports.storeGithubToken = exports.sendInvitation = void 0;
 const https_1 = require("firebase-functions/v2/https");
-const admin = require("firebase-admin");
+const admin = __importStar(require("firebase-admin"));
+const rest_1 = require("@octokit/rest");
 // Initialize Firebase Admin
 try {
     admin.initializeApp();
@@ -8119,6 +8348,11 @@ try {
 catch (error) {
     console.error('Firebase Admin initialization error:', error);
 }
+// TODO: Implement these user management functions later
+// export const addUser = ...
+// export const getUsers = ...
+// export const getAllUsers = ...
+// export const api = ...
 exports.sendInvitation = (0, https_1.onCall)({
     cors: true
 }, async (request) => {
@@ -8138,53 +8372,137 @@ exports.sendInvitation = (0, https_1.onCall)({
         throw new Error('Function error: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
 });
-exports.handleInvitationAcceptance = (0, https_1.onCall)({
-    maxInstances: 10,
-    cors: ['http://localhost:3000']
+// Store GitHub token securely
+exports.storeGithubToken = (0, https_1.onCall)({
+    cors: true
 }, async (request) => {
-    if (!request.auth) {
-        throw new Error('Unauthenticated');
+    // Add logging to see what we're receiving
+    console.log('Received request data:', request.data);
+    if (!request.data || !request.data.token || !request.data.accountId) {
+        throw new Error('Missing required fields: token and accountId');
     }
-    const { invitationId } = request.data;
-    const userId = request.auth.uid;
+    const { token, accountId } = request.data;
     try {
-        const invitationRef = admin.firestore().collection('invitations').doc(invitationId);
-        const invitation = await invitationRef.get();
-        if (!invitation.exists) {
-            throw new Error('Invitation not found');
-        }
-        const invitationData = invitation.data();
-        if (invitationData.status !== 'pending') {
-            throw new Error('Invitation has already been used');
-        }
-        if (new Date(invitationData.expiresAt.toDate()) < new Date()) {
-            throw new Error('Invitation has expired');
-        }
-        // Add user to account
-        const accountRef = admin.firestore().collection('accounts').doc(invitationData.accountId);
-        await accountRef.update({
-            [`members.${userId}`]: {
-                role: invitationData.role,
-                joinedAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-        });
-        // Update user's account reference
-        await admin.firestore().collection('users').doc(userId).update({
-            accountId: invitationData.accountId,
-        });
-        // Mark invitation as accepted
-        await invitationRef.update({
-            status: 'accepted',
-            acceptedBy: userId,
-            acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+        // Verify token is valid
+        const octokit = new rest_1.Octokit({ auth: token });
+        await octokit.users.getAuthenticated();
+        // Store token
+        await admin.firestore()
+            .collection('secure_tokens')
+            .doc(accountId)
+            .set({
+            githubToken: token,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
         return { success: true };
     }
     catch (error) {
-        console.error('Error accepting invitation:', error);
-        throw new Error('Failed to process invitation');
+        console.error('Error storing GitHub token:', error);
+        throw new Error('Invalid GitHub token or storage error');
     }
 });
+// Function to sync repository
+exports.syncGithubRepository = (0, https_1.onCall)({
+    cors: true,
+    timeoutSeconds: 540 // 9 minutes timeout for large repos
+}, async (request) => {
+    if (!request.auth) {
+        throw new Error('Unauthenticated');
+    }
+    const { repositoryName, accountId } = request.data;
+    try {
+        // Get token from secure storage
+        const tokenDoc = await admin.firestore()
+            .collection('secure_tokens')
+            .doc(accountId)
+            .get();
+        if (!tokenDoc.exists) {
+            throw new Error('GitHub token not found');
+        }
+        const { githubToken } = tokenDoc.data();
+        const octokit = new rest_1.Octokit({ auth: githubToken });
+        // Start repository sync
+        const [owner, repo] = repositoryName.split('/');
+        // Update sync status
+        const repoRef = admin.firestore()
+            .collection('repositories')
+            .doc(repositoryName.replace('/', '_'));
+        await repoRef.set({
+            metadata: {
+                sync_status: 'syncing',
+                last_synced: admin.firestore.FieldValue.serverTimestamp(),
+                error: null
+            }
+        }, { merge: true });
+        // Get repository contents
+        const { data: contents } = await octokit.repos.getContent({
+            owner,
+            repo,
+            path: ''
+        });
+        // Process repository contents
+        const files = Array.isArray(contents) ? contents : [contents];
+        const processedFiles = await processFiles(files, octokit, owner, repo);
+        // Store files in Firestore
+        await repoRef.set({
+            files: processedFiles,
+            metadata: {
+                sync_status: 'completed',
+                last_synced: admin.firestore.FieldValue.serverTimestamp(),
+                error: null
+            }
+        }, { merge: true });
+        return { success: true };
+    }
+    catch (error) {
+        console.error('Sync error:', error);
+        // Update status with error
+        await admin.firestore()
+            .collection('repositories')
+            .doc(repositoryName.replace('/', '_'))
+            .set({
+            metadata: {
+                sync_status: 'failed',
+                error: error instanceof Error ? error.message : 'Unknown error',
+                last_synced: admin.firestore.FieldValue.serverTimestamp()
+            }
+        }, { merge: true });
+        throw new Error('Failed to sync repository');
+    }
+});
+// Helper function to process files recursively with proper typing
+async function processFiles(files, octokit, owner, repo, path = '') {
+    const processedFiles = [];
+    for (const file of files) {
+        if (file.type === 'file') {
+            const { data: content } = await octokit.repos.getContent({
+                owner,
+                repo,
+                path: file.path,
+                mediaType: {
+                    format: 'raw'
+                }
+            });
+            processedFiles.push({
+                path: file.path,
+                type: 'file',
+                size: file.size,
+                content: typeof content === 'string' ? content : null,
+                indexed_at: admin.firestore.Timestamp.now()
+            });
+        }
+        else if (file.type === 'dir') {
+            const { data: dirContents } = await octokit.repos.getContent({
+                owner,
+                repo,
+                path: file.path
+            });
+            const subFiles = await processFiles(Array.isArray(dirContents) ? dirContents : [dirContents], octokit, owner, repo, file.path);
+            processedFiles.push(...subFiles);
+        }
+    }
+    return processedFiles;
+}
 //# sourceMappingURL=index.js.map
 
 --- File: ./functions/src/index.ts ---

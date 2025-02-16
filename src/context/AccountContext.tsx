@@ -1,7 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { db } from '../services/firebase';
-import { doc, getDoc, setDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
+import { 
+  collection, 
+  doc, 
+  getDoc, 
+  getDocs,
+  query,
+  setDoc,
+  where 
+} from 'firebase/firestore';
 import type { Account } from '../types/account';
 
 interface AccountContextType {
@@ -16,45 +24,98 @@ const AccountContext = createContext<AccountContextType | undefined>(undefined);
 export function AccountProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [currentAccount, setCurrentAccount] = useState<Account | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
-      console.log('[AccountContext] No user, clearing accounts');
-      setAccounts([]);
       setCurrentAccount(null);
-      setIsLoading(false);
+      setLoading(false);
       return;
     }
 
-    console.log('[AccountContext] Fetching accounts for user:', user.uid);
-    
-    const accountsRef = collection(db, 'accounts');
-    const q = query(
-      accountsRef,
-      where(`members.${user.uid}`, '!=', null)
-    );
+    console.log('[AccountContext] Loading account for user:', user.uid);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const userAccounts = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Account[];
+    const loadAccount = async () => {
+      try {
+        console.log('[AccountContext] Starting account load for user:', user.uid, 'with ID:', user.uid);
+        
+        // Find account where user is owner or member
+        const accountsRef = collection(db, 'accounts');
+        
+        // Query for accounts where user is either owner or member
+        const q = query(accountsRef, 
+          where('ownerId', '==', user.uid)
+        );
+        const memberQuery = query(accountsRef,
+          where(`members.${user.uid}`, '!=', null)
+        );
 
-      console.log('[AccountContext] Found accounts:', userAccounts);
-      setAccounts(userAccounts);
-      
-      if (!currentAccount && userAccounts.length > 0) {
-        console.log('[AccountContext] Setting current account:', userAccounts[0]);
-        setCurrentAccount(userAccounts[0]);
+        const [ownerSnapshot, memberSnapshot] = await Promise.all([
+          getDocs(q),
+          getDocs(memberQuery)
+        ]);
+
+        // Combine results, removing duplicates
+        const allDocs = [...ownerSnapshot.docs, ...memberSnapshot.docs];
+        const uniqueDocs = allDocs.filter((doc, index, self) => 
+          index === self.findIndex((d) => d.id === doc.id)
+        );
+        
+        if (uniqueDocs.length === 0) {
+          console.log('[AccountContext] No account found for user');
+          setCurrentAccount(null);
+          setLoading(false);
+          return;
+        }
+
+        // Use the first account found
+        const accountDoc = uniqueDocs[0];
+
+        console.log('[AccountContext] Found account:', accountDoc.data());
+        
+        const rawData = accountDoc.data();
+        const accountData = {
+          name: rawData.name,
+          members: Object.entries(rawData.members).reduce((acc, [userId, member]: [string, any]) => ({
+            ...acc,
+            [userId]: {
+              role: member.role as 'admin' | 'member',
+              joinedAt: new Date(member.joinedAt)
+            }
+          }), {}),
+          settings: rawData.settings || {},
+          createdAt: new Date(rawData.createdAt),
+          updatedAt: new Date(rawData.updatedAt),
+          ownerId: rawData.ownerId
+        };
+
+        // Create account object with all required fields
+        const account: Account = {
+          id: accountDoc.id,
+          ...accountData
+        };
+
+        console.log('[AccountContext] Setting current account:', account);
+        setCurrentAccount(account);
+      } catch (err) {
+        console.error('[AccountContext] Error in account operations:', err);
+        if (err instanceof Error) {
+          console.error('[AccountContext] Error details:', {
+            message: err.message,
+            stack: err.stack,
+            name: err.name
+          });
+        }
+        setError(err instanceof Error ? err.message : 'Unknown error');
+        setCurrentAccount(null);
+      } finally {
+        setLoading(false);
       }
-      
-      setIsLoading(false);
-    });
+    };
 
-    return () => unsubscribe();
+    loadAccount();
+    return () => {}; // No cleanup needed for single fetch
   }, [user]);
 
   const updateAccountSettings = async (settings: Partial<Account['settings']>) => {
@@ -70,7 +131,6 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         settings: updatedSettings,
         updatedAt: new Date().toISOString()
       }, { merge: true });
-
     } catch (err) {
       console.error('Error updating account settings:', err);
       throw err;
@@ -80,7 +140,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   return (
     <AccountContext.Provider value={{
       currentAccount,
-      isLoading,
+      isLoading: loading,
       error,
       updateAccountSettings
     }}>

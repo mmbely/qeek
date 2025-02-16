@@ -1,6 +1,12 @@
-import { auth, database } from './firebase';
+import { auth, database, db } from './firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { ref, set } from "firebase/database";
+import { 
+  collection,
+  doc, 
+  setDoc,
+  addDoc
+} from "firebase/firestore";
 import { CustomUser } from '../types/user';
 
 export const registerUser = async (email: string, password: string) => {
@@ -40,28 +46,95 @@ export const logoutUser = async () => {
 
 const saveUserToDatabase = async (user: CustomUser) => {
   try {
-    const userRef = ref(database, `users/${user.uid}`);
-    await set(userRef, {
+    // Save to Realtime Database for online status
+    const rtdbRef = ref(database, `users/${user.uid}`);
+    await set(rtdbRef, {
       displayName: user.displayName || 'Anonymous',
       email: user.email,
       photoURL: user.photoURL || '/placeholder.svg?height=40&width=40',
       companyId: user.companyId || 'default'
     });
-    console.log("User saved to database successfully");
+
+    // Create new account in Firestore with auto-generated ID
+    const accountsRef = collection(db, 'accounts');
+    const accountData = {
+      name: 'My Account',
+      members: {
+        [user.uid]: {
+          role: 'admin',
+          joinedAt: new Date().getTime()
+        }
+      },
+      settings: {},
+      createdAt: new Date().getTime(),
+      updatedAt: new Date().getTime(),
+      ownerId: user.uid
+    };
+    
+    const accountDoc = await addDoc(accountsRef, accountData);
+    console.log('[Auth] Created account with ID:', accountDoc.id);
+
+    // Save to Firestore for account association
+    const firestoreRef = doc(db, 'users', user.uid);
+    await setDoc(firestoreRef, {
+      displayName: user.displayName || 'Anonymous',
+      email: user.email,
+      photoURL: user.photoURL || '/placeholder.svg?height=40&width=40',
+      accountIds: [accountDoc.id],
+      updatedAt: new Date().getTime()
+    });
+
+    console.log("User saved to databases successfully");
   } catch (error) {
-    console.error("Error saving user to database:", error);
+    console.error("Error saving user to databases:", error);
     throw error;
   }
 };
 
 export const createUserRecord = async (user: any, companyId: string) => {
   if (user) {
-    const userRef = ref(database, `users/${user.uid}`);
-    await set(userRef, {
-      email: user.email,
-      companyId: companyId,
-      // Add any other relevant user data here
-    });
+    try {
+      // Save to Realtime Database
+      const rtdbRef = ref(database, `users/${user.uid}`);
+      await set(rtdbRef, {
+        email: user.email,
+        companyId: companyId,
+      });
+
+      // Create new account in Firestore with auto-generated ID
+      const accountsRef = collection(db, 'accounts');
+      const accountData = {
+        name: 'My Account',
+        members: {
+          [user.uid]: {
+            role: 'admin',
+            joinedAt: new Date().getTime()
+          }
+        },
+        settings: {},
+        createdAt: new Date().getTime(),
+        updatedAt: new Date().getTime(),
+        ownerId: user.uid
+      };
+      
+      const accountDoc = await addDoc(accountsRef, accountData);
+      console.log('[Auth] Created account with ID:', accountDoc.id);
+
+      // Save to Firestore
+      const firestoreRef = doc(db, 'users', user.uid);
+      await setDoc(firestoreRef, {
+        displayName: user.displayName || user.email?.split('@')[0] || 'Anonymous',
+        email: user.email,
+        photoURL: user.photoURL || '/placeholder.svg?height=40&width=40',
+        accountIds: [accountDoc.id],
+        updatedAt: Date.now()
+      });
+
+      console.log("User record created successfully");
+    } catch (error) {
+      console.error("Error creating user record:", error);
+      throw error;
+    }
   }
 };
 

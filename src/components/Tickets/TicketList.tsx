@@ -29,7 +29,7 @@ export function TicketList({ showHeader = true }: TicketListProps) {
   const [filterStatus, setFilterStatus] = useState<'all' | TicketStatus>('all');
   const { getTickets, updateTicket } = useTickets();
   const { user } = useAuth();
-  const { currentAccount } = useAccount();
+  const { currentAccount, isLoading: isAccountLoading } = useAccount();
   const [users, setUsers] = useState<{ [key: string]: CustomUser }>({});
 
   useEffect(() => {
@@ -43,6 +43,11 @@ export function TicketList({ showHeader = true }: TicketListProps) {
   }, [getTickets]);
 
   useEffect(() => {
+    if (isAccountLoading) {
+      console.log('[TicketList] Account still loading, waiting...');
+      return;
+    }
+
     if (!currentAccount?.id) {
       console.log('[TicketList] No current account, skipping users subscription');
       return;

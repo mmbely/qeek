@@ -57,7 +57,7 @@ const DEVELOPMENT_OPTIONS: BoardStatus[] = [
 
 export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketModalProps) {
   const { user } = useAuth();
-  const { currentAccount } = useAccount();
+  const { currentAccount, isLoading } = useAccount();
   const { createTicket, updateTicket, deleteTicket } = useTickets();
   const [title, setTitle] = useState(ticket?.title || '');
   const [description, setDescription] = useState(ticket?.description || '');
@@ -72,26 +72,48 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [ticketType, setTicketType] = useState<TicketType>(ticket?.type || 'task');
 
-  // Check authorization
+  // Check authorization after account loading completes
   const isAuthorized = React.useMemo(() => {
-    if (!user || !currentAccount) return false;
+    if (isLoading) {
+      console.log('[TicketModal] Still loading account data');
+      return true; // Don't make authorization decision while loading
+    }
+    
+    if (!user || !currentAccount) {
+      console.log('[TicketModal] No user or account');
+      return false;
+    }
     
     // For new tickets, check if user is in current account
     if (!ticket) {
-      return currentAccount.members[user.uid] != null;
+      const isMember = currentAccount.members && 
+                      currentAccount.members[user.uid] != null;
+      console.log('[TicketModal] New ticket auth check:', { isMember });
+      return isMember;
     }
     
     // For existing tickets, check if ticket belongs to current account
-    return ticket.accountId === currentAccount.id && currentAccount.members[user.uid] != null;
+    const isTicketInAccount = ticket.accountId === currentAccount.id;
+    const isMember = currentAccount.members && 
+                    currentAccount.members[user.uid] != null;
+    
+    console.log('[TicketModal] Existing ticket auth check:', { 
+      isTicketInAccount, 
+      isMember,
+      ticketAccountId: ticket.accountId,
+      currentAccountId: currentAccount.id
+    });
+    
+    return isTicketInAccount && isMember;
   }, [user, currentAccount, ticket]);
 
-  // Redirect or close if not authorized
+  // Only close if we're not loading and not authorized
   useEffect(() => {
-    if (isOpen && !isAuthorized) {
+    if (isOpen && !isLoading && !isAuthorized) {
       console.log('[TicketModal] Unauthorized access, closing modal');
       onClose();
     }
-  }, [isOpen, isAuthorized, onClose]);
+  }, [isOpen, isLoading, isAuthorized, onClose]);
 
   // Fetch users for the assignee dropdown
   useEffect(() => {
@@ -194,7 +216,15 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
   // Handle submit with authorization check
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!user || !currentAccount || !isAuthorized) {
+    
+    // Check if we're still loading account data
+    if (isLoading) {
+      console.log('[TicketModal] Account still loading, waiting...');
+      return;
+    }
+
+    // Verify authorization
+    if (!isAuthorized || !user || !currentAccount) {
       console.error('[TicketModal] Unauthorized attempt to save ticket');
       setError('You do not have permission to perform this action');
       return;
@@ -446,6 +476,19 @@ You can also use \`inline code\` with single backticks.`;
   // Add delete handler
   const handleDelete = async () => {
     if (!ticket?.id) return;
+    
+    // Check if we're still loading account data
+    if (isLoading) {
+      console.log('[TicketModal] Account still loading, waiting...');
+      return;
+    }
+
+    // Verify authorization
+    if (!isAuthorized || !user || !currentAccount) {
+      console.error('[TicketModal] Unauthorized attempt to delete ticket');
+      setError('You do not have permission to perform this action');
+      return;
+    }
     
     setLoading(true);
     setError(null);
@@ -754,4 +797,3 @@ You can also use \`inline code\` with single backticks.`;
     </Modal>
   );
 }
-

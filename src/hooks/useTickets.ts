@@ -1,14 +1,19 @@
 import { collection, doc, getDocs, updateDoc, query, where, orderBy, limit, addDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { Ticket } from '../types/ticket';
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useAccount } from '../context/AccountContext';
 
-export function useTickets() {
-  const { currentAccount } = useAccount();
-  const [cachedTickets, setCachedTickets] = useState<Ticket[] | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+interface UseTicketsReturn {
+  getTickets: () => Promise<Ticket[]>;
+  createTicket: (ticketData: Omit<Ticket, 'id' | 'accountId'>) => Promise<Ticket | null>;
+  updateTicket: (ticketId: string, updates: Partial<Omit<Ticket, 'id' | 'accountId'>>) => Promise<void>;
+  deleteTicket: (ticketId: string) => Promise<boolean>;
+  generateMissingTicketIds: () => Promise<number>;
+}
+
+export function useTickets(): UseTicketsReturn {
+  const { currentAccount, isLoading: isAccountLoading } = useAccount();
 
   const getNextTicketNumber = async () => {
     const ticketsRef = collection(db, 'tickets');
@@ -38,6 +43,11 @@ export function useTickets() {
     ticketId: string,
     updates: Partial<Omit<Ticket, 'id' | 'accountId'>>
   ) => {
+    if (isAccountLoading) {
+      console.log('[useTickets] Account still loading, waiting...');
+      return;
+    }
+
     if (!currentAccount?.id) {
       console.error('[useTickets] Cannot update ticket: no account selected');
       return;
@@ -53,7 +63,7 @@ export function useTickets() {
       console.error('[useTickets] Error updating ticket:', error);
       throw error;
     }
-  }, [currentAccount]);
+  }, [currentAccount, isAccountLoading]);
 
   const generateMissingTicketIds = async () => {
     try {
@@ -75,7 +85,6 @@ export function useTickets() {
       }
 
       await Promise.all(updates);
-      setCachedTickets(null); // Clear cache to force refresh
       console.log(`Updated ${updates.length} tickets with new IDs`);
       return updates.length;
     } catch (error) {
@@ -85,55 +94,49 @@ export function useTickets() {
   };
 
   const getTickets = useCallback(async () => {
-    if (!currentAccount?.id) {
-      console.log('[useTickets] No current account, returning empty array');
-      return [];
+    if (isAccountLoading || !currentAccount?.id) {
+      throw new Error('Account not ready');
     }
 
     try {
       console.log('[useTickets] Fetching tickets for account:', currentAccount.id);
       
       const ticketsRef = collection(db, 'tickets');
+      const ticketsQuery = query(
+        ticketsRef,
+        where('accountId', '==', currentAccount.id),
+        orderBy('order', 'asc')
+      );
       
-      // First try with ordering
-      try {
-        const ticketsQuery = query(
-          ticketsRef,
-          where('accountId', '==', currentAccount.id),
-          orderBy('order')
-        );
-        const querySnapshot = await getDocs(ticketsQuery);
-        const tickets = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Ticket[];
-        console.log('[useTickets] Found tickets with ordering:', tickets.length);
-        return tickets;
-      } catch (orderError) {
-        console.warn('[useTickets] Error fetching ordered tickets, falling back to unordered:', orderError);
-        
-        // Fallback to just filtering by accountId without ordering
-        const fallbackQuery = query(
-          ticketsRef,
-          where('accountId', '==', currentAccount.id)
-        );
-        const fallbackSnapshot = await getDocs(fallbackQuery);
-        const fallbackTickets = fallbackSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Ticket[];
-        console.log('[useTickets] Found tickets without ordering:', fallbackTickets.length);
-        
-        // Sort in memory instead
-        return fallbackTickets.sort((a, b) => (a.order || 0) - (b.order || 0));
-      }
+      console.log('[useTickets] Executing query with ordering...');
+      const querySnapshot = await getDocs(ticketsQuery);
+      const tickets = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Ticket[];
+      
+      // Keep in-memory sorting as fallback
+      const sortedTickets = tickets.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) {
+          return a.order - b.order;
+        }
+        return (a.createdAt || 0) - (b.createdAt || 0);
+      });
+      
+      console.log('[useTickets] Found and sorted tickets:', sortedTickets.length);
+      return sortedTickets;
     } catch (error) {
       console.error('[useTickets] Error fetching tickets:', error);
-      return [];
+      return []; // Return empty array instead of throwing to prevent UI disruption
     }
-  }, [currentAccount]);
+  }, [currentAccount?.id, isAccountLoading]);
 
   const createTicket = useCallback(async (ticketData: Omit<Ticket, 'id' | 'accountId'>) => {
+    if (isAccountLoading) {
+      console.log('[useTickets] Account still loading, waiting...');
+      return null;
+    }
+
     if (!currentAccount?.id) {
       console.error('[useTickets] Cannot create ticket: no account selected');
       return null;
@@ -155,9 +158,13 @@ export function useTickets() {
       console.error('[useTickets] Error creating ticket:', error);
       return null;
     }
-  }, [currentAccount]);
+  }, [currentAccount, isAccountLoading]);
 
   const deleteTicket = async (ticketId: string) => {
+    if (isAccountLoading) {
+      throw new Error('Account is still loading');
+    }
+
     if (!currentAccount?.id) {
       throw new Error('No account selected');
     }
@@ -177,8 +184,6 @@ export function useTickets() {
     createTicket,
     updateTicket,
     deleteTicket,
-    generateMissingTicketIds,
-    isLoading,
-    error
+    generateMissingTicketIds
   };
 }

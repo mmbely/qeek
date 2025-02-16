@@ -9,30 +9,75 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/accounts/$(accountId));
     }
     
-    function isAccountMember(accountId) {
+    function hasAccountAccess(accountId) {
+      let account = getAccount(accountId);
       return isSignedIn() && 
         exists(/databases/$(database)/documents/accounts/$(accountId)) &&
-        request.auth.uid in getAccount(accountId).data.members;
-    }
-    
-    function isTicketInAccount(ticketData) {
-      return isAccountMember(ticketData.accountId);
+        (account.data.ownerId == request.auth.uid || 
+         request.auth.uid in account.data.members);
     }
 
-    match /tickets/{ticketId} {
-      allow read: if isTicketInAccount(resource.data);
-      allow create: if isTicketInAccount(request.resource.data);
-      allow update: if isTicketInAccount(resource.data) && 
-                      isTicketInAccount(request.resource.data) &&
-                      resource.data.accountId == request.resource.data.accountId;
-      allow delete: if isTicketInAccount(resource.data);
+    function isAccountAdmin(accountId) {
+      let account = getAccount(accountId);
+      return hasAccountAccess(accountId) && 
+        (account.data.ownerId == request.auth.uid || 
+         account.data.members[request.auth.uid].role == 'admin');
     }
 
+    // User profiles
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn(); // Allow querying users by email
+      allow write: if request.auth.uid == userId;
+    }
+
+    // Accounts
     match /accounts/{accountId} {
-      allow read: if isAccountMember(accountId);
-      allow write: if isAccountMember(accountId) && 
-                     request.auth.uid in resource.data.members &&
-                     request.auth.uid in request.resource.data.members;
+      allow read: if hasAccountAccess(accountId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      // Only admins can update members
+      allow update: if (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']) && isAccountAdmin(accountId)
+      ) || (
+        // Other updates allowed for any member
+        hasAccountAccess(accountId) &&
+        request.auth.uid in request.resource.data.members
+      );
+    }
+
+    // Tickets
+    match /tickets/{ticketId} {
+      allow read: if !exists(/databases/$(database)/documents/tickets/$(ticketId)) ||
+                   hasAccountAccess(resource.data.accountId);
+      allow create: if hasAccountAccess(request.resource.data.accountId);
+      allow update: if hasAccountAccess(resource.data.accountId);
+      allow delete: if hasAccountAccess(resource.data.accountId);
+    }
+
+    // Messages
+    match /messages/{messageId} {
+      allow read: if hasAccountAccess(resource.data.accountId);
+      allow create: if hasAccountAccess(request.resource.data.accountId);
+      allow update, delete: if request.auth.uid == resource.data.senderId;
+    }
+
+    // Direct Messages
+    match /direct_messages/{messageId} {
+      allow read: if request.auth.uid == resource.data.senderId || 
+                    request.auth.uid == resource.data.recipientId;
+      allow create: if request.auth.uid == request.resource.data.senderId;
+      allow update, delete: if request.auth.uid == resource.data.senderId;
+    }
+
+    // Invitations
+    match /invitations/{invitationId} {
+      allow read: if isSignedIn() && (
+        resource.data.recipientEmail == request.auth.token.email ||
+        isAccountAdmin(resource.data.accountId)
+      );
+      allow create: if isAccountAdmin(request.resource.data.accountId);
+      allow update: if isAccountAdmin(resource.data.accountId);
+      allow delete: if isAccountAdmin(resource.data.accountId);
     }
   }
 }

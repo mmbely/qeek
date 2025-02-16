@@ -33,7 +33,7 @@ type ColumnsType = BacklogColumnsType | DevelopmentColumnsType;
 
 export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   const { user } = useAuth();
-  const { currentAccount } = useAccount();
+  const { currentAccount, isLoading: isAccountLoading } = useAccount();
   const { getTickets, updateTicket } = useTickets();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [users, setUsers] = useState<{[key: string]: any}>({});
@@ -86,45 +86,6 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     fetchAuthUsers();
   }, []);
 
-  // Fetch tickets using useTickets hook
-  useEffect(() => {
-    const fetchTickets = async () => {
-      if (!currentAccount?.id) return;
-      
-      try {
-        const ticketsData = await getTickets();
-        console.log('[TicketBoard] Fetched tickets:', ticketsData);
-
-        // Sort tickets by order
-        const sortedTickets = [...ticketsData].sort((a, b) => (a.order || 0) - (b.order || 0));
-        
-        // Create fresh columns with proper typing
-        const newColumns = mode === 'development' 
-          ? { ...developmentColumns } as DevelopmentColumnsType
-          : { ...backlogColumns } as BacklogColumnsType;
-
-        // Distribute tickets to columns
-        sortedTickets.forEach(ticket => {
-          if (isDevelopmentColumns(newColumns)) {
-            if (ticket.status in newColumns) {
-              newColumns[ticket.status as keyof DevelopmentColumnsType].tickets.push(ticket);
-            }
-          } else {
-            if (ticket.status in newColumns) {
-              newColumns[ticket.status as keyof BacklogColumnsType].tickets.push(ticket);
-            }
-          }
-        });
-
-        setTickets(ticketsData);
-        setColumns(newColumns);
-      } catch (error) {
-        console.error('Error fetching tickets:', error);
-      }
-    };
-
-    fetchTickets();
-  }, [currentAccount?.id, getTickets, mode]);
 
   const getUserName = (userId: string) => {
     if (!userId) return 'Unassigned';
@@ -279,50 +240,63 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
     return newColumns;
   }, [mode]);
 
-  // Add useEffect to listen for tickets changes
+  // Load tickets when account is ready
   useEffect(() => {
     const loadTickets = async () => {
-      if (!currentAccount?.id) return;
-      
       try {
+        console.log('[TicketBoard] Loading tickets for account:', currentAccount?.id);
         const ticketsData = await getTickets();
-        setTickets(ticketsData);
-        const newColumns = organizeTicketsIntoColumns(ticketsData);
+        console.log('[TicketBoard] Loaded tickets:', ticketsData.length);
+        
+        // Sort tickets by order
+        const sortedTickets = [...ticketsData].sort((a, b) => (a.order || 0) - (b.order || 0));
+        setTickets(sortedTickets);
+        
+        // Organize tickets into columns
+        const newColumns = organizeTicketsIntoColumns(sortedTickets);
         setColumns(newColumns);
       } catch (error) {
-        console.error('Error loading tickets:', error);
+        if (error instanceof Error && error.message === 'Account not ready') {
+          console.log('[TicketBoard] Account not ready, waiting...');
+          setTickets([]);
+          setColumns(mode === 'development' ? developmentColumns : backlogColumns);
+        } else {
+          console.error('[TicketBoard] Error loading tickets:', error);
+          setTickets([]);
+          setColumns(mode === 'development' ? developmentColumns : backlogColumns);
+        }
       }
     };
 
     loadTickets();
-  }, [currentAccount?.id, getTickets, organizeTicketsIntoColumns]);
+  }, [currentAccount?.id, isAccountLoading, getTickets, organizeTicketsIntoColumns, mode]);
 
-  // Update refreshTickets to use the new helper
-  const refreshTickets = useCallback(async () => {
-    if (!currentAccount?.id) return;
-    
-    try {
-      const ticketsData = await getTickets();
-      console.log('[TicketBoard] Refreshing tickets:', ticketsData);
-      const newColumns = organizeTicketsIntoColumns(ticketsData);
-      setColumns(newColumns);
-    } catch (error) {
-      console.error('Error refreshing tickets:', error);
-    }
-  }, [currentAccount?.id, getTickets, organizeTicketsIntoColumns]);
-
+  // Single refresh function for both tickets and board
   const refreshBoard = useCallback(async () => {
-    if (!currentAccount?.id) return;
+    if (isAccountLoading) {
+      console.log('[TicketBoard] Account still loading, waiting...');
+      return;
+    }
+    
+    if (!currentAccount?.id) {
+      console.log('[TicketBoard] No current account, skipping board refresh');
+      return;
+    }
     
     try {
+      console.log('[TicketBoard] Refreshing board for account:', currentAccount.id);
       const ticketsData = await getTickets();
+      console.log('[TicketBoard] Refreshed tickets:', ticketsData.length);
       setTickets(ticketsData);
       const newColumns = organizeTicketsIntoColumns(ticketsData);
       setColumns(newColumns);
     } catch (error) {
-      console.error('Error refreshing tickets:', error);
+      console.error('[TicketBoard] Error refreshing tickets:', error);
     }
   }, [currentAccount?.id, getTickets, organizeTicketsIntoColumns]);
+
+  // Alias for consistency in naming
+  const refreshTickets = refreshBoard;
 
   // Update modal handlers
   const handleModalClose = () => {

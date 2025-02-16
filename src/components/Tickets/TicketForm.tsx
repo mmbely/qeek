@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, addDoc, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, query, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { Ticket } from '../../types/ticket';
@@ -9,13 +9,22 @@ import { useAccount } from '../../context/AccountContext';
 export default function TicketForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { currentAccount } = useAccount();
+  const { currentAccount, isLoading: isAccountLoading } = useAccount();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!currentAccount) return;
+    
+    if (isAccountLoading) {
+      console.log('[TicketForm] Account still loading, waiting...');
+      return;
+    }
+    
+    if (!currentAccount) {
+      setError('No account selected. Please try again.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -131,10 +140,10 @@ export default function TicketForm() {
           </button>
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || isAccountLoading}
             className="px-4 py-2 bg-blue-600 text-white rounded shadow-sm hover:bg-blue-700 transition-colors disabled:bg-blue-400"
           >
-            {loading ? 'Creating...' : 'Create Ticket'}
+            {loading ? 'Creating...' : isAccountLoading ? 'Loading Account...' : 'Create Ticket'}
           </button>
         </div>
       </form>
