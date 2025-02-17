@@ -58,11 +58,21 @@ export const subscribeToUsers = (
 };
 
 // Subscribe to channel messages
-export const subscribeToMessages = (channelId: string, callback: (messages: Message[]) => void) => {
+export const subscribeToMessages = (
+  channelId: string,
+  accountId: string,
+  callback: (messages: Message[]) => void
+) => {
+  console.log('[Chat Service] Setting up message subscription:', {
+    channelId,
+    accountId
+  });
+
   const messagesRef = collection(db, 'messages');
   const q = firestoreQuery(
     messagesRef,
     where('channelId', '==', channelId),
+    where('accountId', '==', accountId),
     orderBy('timestamp', 'asc')
   );
 
@@ -71,14 +81,29 @@ export const subscribeToMessages = (channelId: string, callback: (messages: Mess
       id: doc.id,
       ...doc.data()
     })) as Message[];
+    console.log('[Chat Service] Messages snapshot:', messages);
     callback(messages);
+  }, (error) => {
+    console.error('[Chat Service] Error in message subscription:', error);
   });
 };
 
 // Send a new message
 export const sendMessage = async (channelId: string, message: Message) => {
-  const messagesRef = collection(db, 'messages');
-  await addDoc(messagesRef, message);
+  console.log('[Chat Service] Sending message:', message);
+  
+  try {
+    const messagesRef = collection(db, 'messages');
+    await addDoc(messagesRef, {
+      ...message,
+      channelId,
+      timestamp: serverTimestamp()
+    });
+    console.log('[Chat Service] Message sent successfully');
+  } catch (error) {
+    console.error('[Chat Service] Error sending message:', error);
+    throw error;
+  }
 };
 
 // Update a message

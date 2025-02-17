@@ -29,29 +29,51 @@ export default function ChatInterface() {
     ? getDMChannelId(user.uid, userId)
     : 'general';
 
-  console.log('Current channel ID:', channelId); // Debug log
+  // Debug current state
+  useEffect(() => {
+    console.log('[ChatInterface] Current state:', {
+      user: user ? { uid: user.uid } : null,
+      currentAccount: currentAccount ? { id: currentAccount.id } : null,
+      userId,
+      channelId
+    });
+  }, [user, currentAccount, userId, channelId]);
 
   // Subscribe to messages
   useEffect(() => {
-    if (!user || !currentAccount?.id) {
-      console.log('No user or account, skipping message subscription');
+    if (!user) {
+      console.log('[ChatInterface] No user, waiting for auth...');
       return;
     }
 
-    console.log('Setting up message subscription for channel:', channelId);
+    if (!currentAccount?.id) {
+      console.log('[ChatInterface] No current account, waiting for account context...');
+      return;
+    }
+
+    console.log('[ChatInterface] Setting up message subscription:', {
+      channelId,
+      accountId: currentAccount.id,
+      userId: user.uid
+    });
+    
     setIsLoading(true);
     
-    const unsubscribe = subscribeToMessages(channelId, (newMessages) => {
-      console.log('Received messages:', newMessages);
-      setMessages(newMessages);
-      setIsLoading(false);
-    });
+    const unsubscribe = subscribeToMessages(
+      channelId,
+      currentAccount.id,
+      (newMessages) => {
+        console.log('[ChatInterface] Received messages:', newMessages);
+        setMessages(newMessages);
+        setIsLoading(false);
+      }
+    );
 
     return () => {
-      console.log('Cleaning up message subscription');
+      console.log('[ChatInterface] Cleaning up message subscription');
       unsubscribe();
     };
-  }, [user, channelId, currentAccount]);
+  }, [user, currentAccount, channelId]);
 
   // Subscribe to users
   useEffect(() => {
@@ -86,12 +108,13 @@ export default function ChatInterface() {
     if (!message.trim() || !user || !currentAccount?.id) return;
 
     try {
-      const newMessage = {
-        content: message,
+      const newMessage: Message = {
+        content: message.trim(),
         timestamp: Date.now(),
         userId: user.uid,
         channelId: channelId,
-        accountId: currentAccount.id
+        accountId: currentAccount.id,
+        participants: userId ? [user.uid, userId] : undefined // Add participants for DMs
       };
       
       console.log('Sending message:', newMessage);

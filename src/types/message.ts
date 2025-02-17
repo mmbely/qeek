@@ -3,7 +3,8 @@ export interface Message {
     content: string;
     timestamp: number;
     userId: string;
-    channelId?: string;
+    channelId: string;
+    accountId: string;
     status?: string;
     participants?: string[];
   }
