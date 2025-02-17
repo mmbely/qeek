@@ -5,6 +5,10 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    function isSuperAdmin() {
+      return request.auth.uid == 'RnInDl1twWVwyWWMcEkB1sETtoq1';
+    }
+    
     function getAccount(accountId) {
       return get(/databases/$(database)/documents/accounts/$(accountId));
     }
@@ -83,6 +87,39 @@ service cloud.firestore {
         request.resource.data.userId == request.auth.uid;
         
       allow delete: if false;  // Explicitly deny message deletion
+    }
+
+    match /repositories/{repoId} {
+      // Allow read/write if user is super admin
+      allow read, write: if isSuperAdmin();
+      
+      // Regular user access
+      allow read: if isSignedIn() && (
+        !('accountId' in resource.data) ||
+        resource.data.accountId == null ||
+        isAccountMember(resource.data.accountId)
+      );
+      
+      match /files/{fileId} {
+        allow read, write: if isSuperAdmin();
+        
+        // Regular user access
+        allow read: if isSignedIn() && (
+          !('accountId' in get(/databases/$(database)/documents/repositories/$(repoId)).data) ||
+          get(/databases/$(database)/documents/repositories/$(repoId)).data.accountId == null ||
+          isAccountMember(get(/databases/$(database)/documents/repositories/$(repoId)).data.accountId)
+        );
+      }
+    }
+
+    match /secure_tokens/{tokenId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == tokenId || 
+        isAccountMember(tokenId) ||
+        tokenId == request.auth.uid
+      );
+      // Only allow write through Cloud Functions
+      allow write: if false;
     }
   }
 }

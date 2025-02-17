@@ -1,8 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Github, ChevronDown, Loader2, Settings, Search } from "lucide-react";
 import { theme, commonStyles } from '../../styles/theme';
-import { githubService, GitHubRepo } from '../../services/github';
+import { 
+  validateToken, 
+  storeGithubToken,
+  fetchUserRepositories,
+  getToken,
+  type GitHubRepo
+} from '../../services/github';
 import { useAuth } from '../../context/AuthContext';
+import { useAccount } from '../../context/AccountContext';
 import { db } from '../../services/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { syncRepository } from '../../services/api';
@@ -42,6 +49,8 @@ interface SyncStatus {
 
 export default function Connect() {
   const { user } = useAuth();
+  const { currentAccount } = useAccount();
+  const [token, setToken] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,27 +63,27 @@ export default function Connect() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const loadGitHubStatus = async () => {
-      if (user?.uid) {
-        try {
-          const token = await githubService.getToken(user.uid);
-          if (token) {
+    const checkConnection = async () => {
+      if (!currentAccount?.id) return;
+      
+      try {
+        const savedToken = await getToken(currentAccount.id);
+        if (savedToken) {
+          const isValid = await validateToken(savedToken);
+          if (isValid) {
             setIsConnected(true);
-            // Fetch repositories when connected
-            const repos = await githubService.fetchUserRepositories(user.uid);
+            const repos = await fetchUserRepositories(currentAccount.id);
             setRepositories(repos);
           }
-        } catch (err) {
-          console.error('Error loading GitHub status:', err);
-          setError('Failed to load GitHub connection status');
-        } finally {
-          setIsLoading(false);
         }
+      } catch (err) {
+        console.error('Error checking connection:', err);
+        setError('Failed to check GitHub connection');
       }
     };
 
-    loadGitHubStatus();
-  }, [user]);
+    checkConnection();
+  }, [currentAccount]);
 
   // Filter repositories based on search query
   const filteredRepositories = useMemo(() => {

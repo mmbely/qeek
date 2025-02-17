@@ -1,6 +1,8 @@
 import { onCall } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { Octokit } from '@octokit/rest';
+import * as functions from 'firebase-functions';
+import { spawn } from 'child_process';
 // or try this alternative import if the above still fails
 // import { Octokit } from '@octokit/rest/dist-types/index';
 
@@ -99,85 +101,80 @@ export const storeGithubToken = onCall(
 
 // Function to sync repository
 export const syncGithubRepository = onCall(
-  { 
-    cors: true,
-    timeoutSeconds: 540  // 9 minutes timeout for large repos
+  {
+    timeoutSeconds: 540,
+    memory: '1GiB',
+    region: 'us-central1'
   }, 
   async (request) => {
     if (!request.auth) {
-      throw new Error('Unauthenticated');
+      throw new Error('Must be authenticated to sync repository');
     }
 
     const { repositoryName, accountId } = request.data;
-    
+    if (!repositoryName || !accountId) {
+      throw new Error('Repository name and account ID are required');
+    }
+
     try {
-      // Get token from secure storage
-      const tokenDoc = await admin.firestore()
-        .collection('secure_tokens')
-        .doc(accountId)
-        .get();
-
-      if (!tokenDoc.exists) {
-        throw new Error('GitHub token not found');
-      }
-
-      const { githubToken } = tokenDoc.data()!;
-      const octokit = new Octokit({ auth: githubToken });
-
-      // Start repository sync
-      const [owner, repo] = repositoryName.split('/');
+      // Get absolute path to Python script
+      const scriptPath = require('path').resolve(__dirname, '../repository-indexer/src/main.py');
+      console.log('Python script path:', scriptPath);
+      console.log('Current working directory:', process.cwd());
       
-      // Update sync status
-      const repoRef = admin.firestore()
-        .collection('repositories')
-        .doc(repositoryName.replace('/', '_'));
-
-      await repoRef.set({
-        metadata: {
-          sync_status: 'syncing',
-          last_synced: admin.firestore.FieldValue.serverTimestamp(),
-          error: null
-        }
-      }, { merge: true });
-
-      // Get repository contents
-      const { data: contents } = await octokit.repos.getContent({
-        owner,
-        repo,
-        path: ''
-      });
-
-      // Process repository contents
-      const files = Array.isArray(contents) ? contents : [contents];
-      const processedFiles = await processFiles(files, octokit, owner, repo);
-
-      // Store files in Firestore
-      await repoRef.set({
-        files: processedFiles,
-        metadata: {
-          sync_status: 'completed',
-          last_synced: admin.firestore.FieldValue.serverTimestamp(),
-          error: null
-        }
-      }, { merge: true });
-
-      return { success: true };
-    } catch (error) {
-      console.error('Sync error:', error);
+      const userId = request.auth.uid;
+      console.log('Starting sync for:', { repositoryName, userId, accountId });
       
-      // Update status with error
-      await admin.firestore()
-        .collection('repositories')
-        .doc(repositoryName.replace('/', '_'))
-        .set({
-          metadata: {
-            sync_status: 'failed',
-            error: error instanceof Error ? error.message : 'Unknown error',
-            last_synced: admin.firestore.FieldValue.serverTimestamp()
+      return new Promise((resolve, reject) => {
+        console.log('Spawning Python process...');
+        const process = spawn('python3', [
+          scriptPath,
+          repositoryName,
+          userId,
+          accountId
+        ]);
+
+        let dataString = '';
+        let errorString = '';
+
+        process.stdout.on('data', (data) => {
+          const output = data.toString();
+          console.log(`Python stdout: ${output}`);
+          dataString += output;
+        });
+
+        process.stderr.on('data', (data) => {
+          const error = data.toString();
+          console.error(`Python stderr: ${error}`);
+          errorString += error;
+        });
+
+        process.on('error', (error) => {
+          console.error('Failed to start Python process:', error);
+          reject(new Error(`Failed to start Python process: ${error.message}`));
+        });
+
+        process.on('close', (code) => {
+          console.log(`Python process exited with code ${code}`);
+          
+          if (code === 0) {
+            try {
+              console.log('Python output:', dataString);
+              const result = JSON.parse(dataString);
+              resolve(result);
+            } catch (e) {
+              console.error('Failed to parse Python output:', e);
+              reject(new Error(`Failed to parse Python output: ${e.message}`));
+            }
+          } else {
+            console.error('Python script failed:', errorString);
+            reject(new Error(`Python script failed with code ${code}: ${errorString}`));
           }
-        }, { merge: true });
-
-      throw new Error('Failed to sync repository');
+        });
+      });
+    } catch (error) {
+      console.error('Error in sync function:', error);
+      throw new Error(`Failed to run repository sync: ${error.message}`);
     }
   }
 );

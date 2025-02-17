@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { db } from '../../services/firebase';
 import { collection, query, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { Loader2, FolderIcon, XCircle, Search, FileIcon, FileTextIcon, FileCodeIcon, FileJsonIcon, ImageIcon, FileTypeIcon, PackageIcon, Settings2Icon, DatabaseIcon, LockIcon, Github, Settings } from 'lucide-react';
+import { Loader2, FolderIcon, XCircle, Search, FileIcon, FileTextIcon, FileCodeIcon, FileJsonIcon, ImageIcon, FileTypeIcon, PackageIcon, Settings2Icon, DatabaseIcon, LockIcon, Github, Settings, AlertTriangle } from 'lucide-react';
 import { useAccount } from '../../context/AccountContext';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -261,6 +261,11 @@ export default function CodebaseViewer() {
     lastSynced?: Date;
     error?: string;
   }>({ status: 'idle' });
+  const [githubStatus, setGithubStatus] = useState<{
+    isConnected: boolean;
+    lastSynced?: Date;
+    error?: string;
+  }>({ isConnected: false });
 
   // Add debug logging
   useEffect(() => {
@@ -272,31 +277,23 @@ export default function CodebaseViewer() {
   }, [accountLoading, currentAccount]);
 
   useEffect(() => {
-    if (accountLoading) return;
+    const fetchRepo = async () => {
+      if (!currentAccount?.settings?.githubRepository) {
+        console.log('No GitHub repository configured');
+        return;
+      }
 
-    if (!currentAccount?.settings?.githubRepository) {
-      console.log('No repository selected in account settings');
-      setLoading(false);
-      setError('No repository selected');
-      return;
-    }
+      const repoPath = currentAccount.settings.githubRepository.replace('/', '_');
+      console.log('Fetching repository with path:', repoPath);
 
-    const fetchRepository = async () => {
       try {
-        setLoading(true);
-        setError(null);
-
-        const repoName = currentAccount.settings.githubRepository;
-        console.log('Fetching repository:', repoName);
-
-        if (!repoName) {
-          setError('No repository selected');
-          return;
-        }
-
-        // Get the repository document first to check ownership
-        const repoRef = doc(db, 'repositories', repoName.replace('/', '_'));
+        const repoRef = doc(db, 'repositories', repoPath);
         const repoDoc = await getDoc(repoRef);
+        
+        console.log('Repository document exists:', repoDoc.exists());
+        if (repoDoc.exists()) {
+          console.log('Repository data:', repoDoc.data());
+        }
 
         if (!repoDoc.exists()) {
           setError('Repository not found');
@@ -327,16 +324,21 @@ export default function CodebaseViewer() {
         console.log('Files found:', fetchedFiles);
         setFiles(fetchedFiles);
 
-      } catch (err) {
-        console.error('Error fetching repository:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch repository');
+      } catch (error) {
+        console.error('Error fetching repository with detailed info:', {
+          repoPath,
+          error,
+          accountId: currentAccount.id,
+          userId: user?.uid
+        });
+        setError(error instanceof Error ? error.message : 'Failed to fetch repository');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchRepository();
-  }, [currentAccount, accountLoading]);
+    fetchRepo();
+  }, [currentAccount]);
 
   // Monitor repository sync status
   useEffect(() => {
@@ -445,31 +447,37 @@ export default function CodebaseViewer() {
     )
   );
 
-  const renderSyncStatus = () => {
-    if (!currentAccount?.settings?.githubRepository) return null;
-
-    if (error) {
+  const renderHeaderActions = () => {
+    if (!githubStatus.isConnected) {
       return (
-        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-          <div className="flex items-center">
-            <XCircle className="h-5 w-5 text-red-500 mr-2" />
-            <div>
-              <p className="text-sm text-red-700 dark:text-red-400">
-                {error}
-              </p>
-              <button
-                onClick={() => navigate('/codebase/connect')}
-                className="mt-1 text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 underline"
-              >
-                Try syncing again
-              </button>
-            </div>
-          </div>
-        </div>
+        <button
+          onClick={() => navigate('/settings/github')}
+          className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md 
+                     hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-2 transition-colors"
+        >
+          <Settings className="h-4 w-4" />
+          Configure GitHub
+        </button>
       );
     }
 
-    return null;
+    return (
+      <button
+        onClick={handleSync}
+        disabled={syncStatus.status === 'syncing'}
+        className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 
+                   disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+      >
+        {syncStatus.status === 'syncing' ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Syncing...
+          </>
+        ) : (
+          'Sync Now'
+        )}
+      </button>
+    );
   };
 
   // Modify the early return for when no repository is selected
@@ -521,33 +529,48 @@ export default function CodebaseViewer() {
               Repository: {currentAccount?.settings?.githubRepository}
             </h2>
             <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-              <span>
-                Last synced: {syncStatus.lastSynced?.toLocaleString() || 'Never'}
-              </span>
-              {syncStatus.status === 'syncing' && (
-                <span className="flex items-center gap-1">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Syncing...
+              {!githubStatus.isConnected ? (
+                <span className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+                  <AlertTriangle className="h-4 w-4" />
+                  GitHub connection is not active
                 </span>
+              ) : (
+                <>
+                  <span>
+                    Last synced: {syncStatus.lastSynced?.toLocaleString() || 'Never'}
+                  </span>
+                  {syncStatus.status === 'syncing' && (
+                    <span className="flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Syncing...
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>
           
-          <button
-            onClick={handleSync}
-            disabled={syncStatus.status === 'syncing'}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {syncStatus.status === 'syncing' ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Syncing...
-              </span>
-            ) : (
-              'Sync Now'
-            )}
-          </button>
+          {renderHeaderActions()}
         </div>
+
+        {!githubStatus.isConnected && (
+          <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 
+                        dark:border-yellow-800 rounded-lg">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              <div>
+                <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                  {githubStatus.error || 'GitHub connection is not available'}
+                </p>
+                <p className="text-sm text-yellow-600 dark:text-yellow-500 mt-1">
+                  Showing cached files from last sync: {githubStatus.lastSynced 
+                    ? formatDate(githubStatus.lastSynced) 
+                    : 'Never'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="p-6">

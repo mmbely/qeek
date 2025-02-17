@@ -1,11 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Github, CheckCircle, XCircle, Loader2, ChevronDown, Search } from "lucide-react";
-import { githubService } from '../../services/github';
+import { 
+  storeGithubToken, 
+  getToken, 
+  fetchUserRepositories, 
+  validateToken, 
+  clearToken,
+  type GitHubRepo
+} from '../../services/github';
 import { useAuth } from '../../context/AuthContext';
 import { useCodebase } from '../../context/CodebaseContext';
-import type { GitHubRepo } from '../../services/github';
 import { useAccount } from '../../context/AccountContext';
-import { syncRepository, storeGithubToken } from '../../services/github';
+import { syncRepository } from '../../services/github';
 import { onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
@@ -56,38 +62,41 @@ export default function GitHubSettings() {
 
   useEffect(() => {
     const loadGitHubStatus = async () => {
-      if (user?.uid) {
-        try {
-          console.log('Loading GitHub status...');
-          const savedToken = await githubService.getToken(user.uid);
-          if (savedToken) {
-            console.log('Found saved token');
+      if (!currentAccount?.id) {
+        console.log('No current account, skipping GitHub status check');
+        return;
+      }
+
+      try {
+        console.log('Loading GitHub status for account:', currentAccount.id);
+        const savedToken = await getToken(currentAccount.id);
+        
+        if (savedToken) {
+          const isValid = await validateToken(savedToken);
+          if (isValid) {
             setIsConnected(true);
-            // Fetch repositories after confirming connection
-            const repos = await githubService.fetchUserRepositories(user.uid);
+            const repos = await fetchUserRepositories(currentAccount.id);
             setRepositories(repos);
-            console.log('Fetched repositories:', repos.length);
             
-            // Get selected repository from account settings
-            if (currentAccount?.settings?.githubRepository) {
+            if (currentAccount.settings?.githubRepository) {
               const repo = repos.find(r => r.full_name === currentAccount.settings.githubRepository);
               if (repo) {
-                console.log('Setting selected repository from account:', repo.full_name);
                 setSelectedRepo(repo);
                 setSelectedRepository(repo.full_name);
               }
             }
           }
-        } catch (err) {
-          console.error('Error loading GitHub status:', err);
-        } finally {
-          setIsLoading(false);
         }
+      } catch (err) {
+        console.error('Error loading GitHub status:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load GitHub status');
+      } finally {
+        setIsLoading(false);
       }
     };
 
     loadGitHubStatus();
-  }, [user, currentAccount, setSelectedRepository]);
+  }, [currentAccount]);
 
   const loadRepositories = async () => {
     if (!currentAccount) return;
@@ -118,38 +127,50 @@ export default function GitHubSettings() {
   };
 
   const handleGitHubConnect = async (token: string) => {
-    if (!currentAccount) return;
+    if (!currentAccount) {
+      setError('No current account found');
+      return;
+    }
     
     try {
       setIsLoading(true);
-      // Add some logging to see what we're sending
-      console.log('Sending token request with:', {
-        token,
-        accountId: currentAccount.id
-      });
+      setError(null);
+      
+      console.log('Connecting GitHub with token for account:', currentAccount.id);
       
       await storeGithubToken(token, currentAccount.id);
+      console.log('Token stored successfully');
+      
+      // Refresh repositories after connecting
+      const repos = await fetchUserRepositories(currentAccount.id);
+      console.log('Fetched repositories:', repos.length);
+      
+      setRepositories(repos);
       setIsConnected(true);
+      setToken(''); // Clear the token input
+      
     } catch (error) {
-      console.error('Error details:', error);
-      setError('Failed to connect GitHub account');
+      console.error('GitHub connection error:', error);
+      setError(error instanceof Error 
+        ? error.message 
+        : 'Failed to connect GitHub account. Please try again.'
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDisconnect = async () => {
-    if (!user?.uid) return;
-
+    if (!currentAccount) return;
+    
     try {
       setIsLoading(true);
-      await githubService.clearToken(user.uid);
+      await clearToken(currentAccount.id);
       setIsConnected(false);
       setRepositories([]);
       setSelectedRepository(null);
-    } catch (err) {
-      console.error('Failed to disconnect:', err);
-      setError('Failed to disconnect. Please try again.');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to disconnect GitHub');
     } finally {
       setIsLoading(false);
     }

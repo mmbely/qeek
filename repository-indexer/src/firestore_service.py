@@ -4,85 +4,61 @@ from typing import Dict, List
 
 class FirestoreService:
     def __init__(self, project_id: str):
-        cred = credentials.ApplicationDefault()
-        initialize_app(cred, {
-            'projectId': project_id,
-        })
+        if not project_id:
+            raise ValueError("Project ID is required")
+            
         self.db = firestore.client()
 
     def store_repository_metadata(self, repo_id: str, metadata: Dict):
-        """
-        Store repository metadata in Firestore
-        """
+        """Store repository metadata in Firestore"""
         repo_ref = self.db.collection('repositories').document(repo_id)
         repo_ref.set({
             'metadata': {
                 **metadata,
-                'last_synced': datetime.now(),
-                'sync_status': 'syncing',
-                'files_processed': 0,
-                'total_files': 0,
-                'error': None
+                'last_synced': firestore.SERVER_TIMESTAMP,
+                'sync_status': 'syncing'
             }
         }, merge=True)
+        return repo_ref
 
-    def store_repository_files(self, repo_id: str, files: List[Dict]):
-        """
-        Store repository files metadata in Firestore
-        """
-        repo_ref = self.db.collection('repositories').document(repo_id)
+    def store_repository_files(self, repo_ref, files: List[Dict]):
+        """Store repository files metadata in Firestore"""
         batch = self.db.batch()
-        files_processed = 0
-        
-        # Update total file count
-        repo_ref.set({
-            'metadata': {
-                'total_files': len(files)
-            }
-        }, merge=True)
+        files_stored = 0
         
         for file in files:
-            file_ref = repo_ref.collection('files').document(file['path'])
+            # Sanitize path for document ID
+            doc_id = file['path'].replace('/', '_').replace('.', '_')
+            file_ref = repo_ref.collection('files').document(doc_id)
+            
             batch.set(file_ref, {
                 **file,
-                'indexed_at': datetime.now()
+                'indexed_at': firestore.SERVER_TIMESTAMP
             })
             
-            files_processed += 1
-            
-            # Update progress every 100 files
-            if files_processed % 100 == 0:
-                repo_ref.set({
-                    'metadata': {
-                        'files_processed': files_processed
-                    }
-                }, merge=True)
+            files_stored += 1
             
             # Commit every 500 files (Firestore batch limit)
-            if len(batch._writes) >= 500:
+            if files_stored % 500 == 0:
                 batch.commit()
                 batch = self.db.batch()
+                print(f"Stored {files_stored} files")
         
         # Commit any remaining files
-        if len(batch._writes) > 0:
+        if batch._writes:
             batch.commit()
-        
-        # Update final file count
-        repo_ref.set({
-            'metadata': {
-                'files_processed': files_processed
-            }
-        }, merge=True)
+            print(f"Stored total of {files_stored} files")
 
-    def update_sync_status(self, repo_id: str, status: str, error: str = None):
-        """
-        Update repository sync status
-        """
-        repo_ref = self.db.collection('repositories').document(repo_id)
-        repo_ref.set({
+    def update_sync_status(self, repo_ref, status: str, error: str = None):
+        """Update repository sync status"""
+        update_data = {
             'metadata': {
                 'sync_status': status,
-                'last_synced': datetime.now(),
-                'error': error
+                'last_synced': firestore.SERVER_TIMESTAMP
             }
-        }, merge=True)
+        }
+        
+        if error:
+            update_data['metadata']['error'] = error
+            
+        repo_ref.set(update_data, merge=True)
