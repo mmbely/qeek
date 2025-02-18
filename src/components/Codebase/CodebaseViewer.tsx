@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { db } from '../../services/firebase';
-import { collection, query, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { Loader2, FolderIcon, XCircle, Search, FileIcon, FileTextIcon, FileCodeIcon, FileJsonIcon, ImageIcon, FileTypeIcon, PackageIcon, Settings2Icon, DatabaseIcon, LockIcon, Github, Settings, AlertTriangle } from 'lucide-react';
+import { collection, query, getDocs, doc, getDoc, onSnapshot, orderBy, limit, Firestore, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { Loader2, FolderIcon, XCircle, Search, FileIcon, FileTextIcon, FileCodeIcon, FileJsonIcon, ImageIcon, FileTypeIcon, PackageIcon, Settings2Icon, DatabaseIcon, LockIcon, Github, Settings, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useAccount } from '../../context/AccountContext';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -26,12 +26,37 @@ import {
   SiGit
 } from 'react-icons/si';
 import { syncRepository } from '../../services/github';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  Legend,
+  ResponsiveContainer 
+} from 'recharts';
+
+// Add helper functions at the top level
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+};
 
 interface RepositoryFile {
-  path: string;
-  content?: string;
-  type?: 'file' | 'directory';
-  [key: string]: any;
+  metadata: {
+    language: string;
+    last_commit_message: string;
+    last_updated: string;  // ISO date string
+    name: string;
+    path: string;
+    sha: string;
+    size: number;
+    type: string;
+  };
+  updated_at: string;  // ISO date string
 }
 
 interface Repository {
@@ -164,9 +189,9 @@ const FileViewer = ({ file, onClose }: { file: RepositoryFile; onClose: () => vo
       <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            {getFileIcon(file.path)}
+            {getFileIcon(file.metadata.path)}
             <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-              {file.path}
+              {file.metadata.path}
             </h3>
           </div>
           <button
@@ -178,14 +203,14 @@ const FileViewer = ({ file, onClose }: { file: RepositoryFile; onClose: () => vo
         </div>
         
         <div className="flex-1 overflow-auto p-4">
-          {file.type === 'directory' ? (
+          {file.metadata.type === 'directory' ? (
             <div className="text-gray-500 dark:text-gray-400">
               This is a directory
             </div>
           ) : (
             <pre className="font-mono text-sm bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-auto">
               <code className="text-gray-900 dark:text-gray-100">
-                {file.content || 'No content available'}
+                {file.metadata.last_commit_message || 'No content available'}
               </code>
             </pre>
           )}
@@ -193,8 +218,8 @@ const FileViewer = ({ file, onClose }: { file: RepositoryFile; onClose: () => vo
         
         <div className="p-4 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
           <div className="flex gap-4">
-            <span>Size: {file.size || 'Unknown'}</span>
-            <span>Last indexed: {formatDate(file.indexed_at)}</span>
+            <span>Size: {file.metadata.size ? formatFileSize(file.metadata.size) : 'Unknown'}</span>
+            <span>Last updated: {file.metadata.last_updated ? new Date(file.metadata.last_updated).toLocaleString() : 'Never'}</span>
           </div>
         </div>
       </div>
@@ -202,7 +227,7 @@ const FileViewer = ({ file, onClose }: { file: RepositoryFile; onClose: () => vo
   );
 };
 
-type SortColumn = 'path' | 'type' | 'size' | 'indexed_at';
+type SortColumn = 'path' | 'language' | 'size' | 'last_updated';
 type SortDirection = 'asc' | 'desc';
 
 // Add this new component for the not connected state
@@ -237,6 +262,132 @@ const NotConnectedState = () => {
             <li>Select a repository to analyze</li>
             <li>Wait for the initial sync to complete</li>
           </ol>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface SyncMetrics extends DocumentData {
+  id?: string;
+  timestamp: {
+    seconds: number;
+    nanoseconds: number;
+  };
+  stats: {
+    new: number;
+    updated: number;
+    unchanged: number;
+    deleted: number;
+    restored: number;
+  };
+  totals: {
+    active_files: number;
+    deleted_files: number;
+    total_files: number;
+  };
+}
+
+export const CodebaseMetrics = ({ repoId }: { repoId: string }) => {
+  const [metrics, setMetrics] = useState<SyncMetrics[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const metricsRef = collection(db, 'repositories', repoId, 'metrics');
+        const metricsQuery = query(metricsRef, orderBy('timestamp', 'desc'), limit(10));
+        const querySnapshot = await getDocs(metricsQuery);
+        
+        const metricsData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as SyncMetrics[];
+        
+        // Validate the data structure
+        const validMetrics = metricsData.filter(metric => 
+          metric.timestamp && 
+          metric.stats && 
+          metric.totals
+        );
+        
+        setMetrics(validMetrics);
+      } catch (error) {
+        console.error('Error fetching metrics:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMetrics();
+  }, [repoId]);
+
+  if (loading) {
+    return <div>Loading metrics...</div>;
+  }
+
+  const getDateFromTimestamp = (timestamp: { seconds: number; nanoseconds: number }) => {
+    return new Date(timestamp.seconds * 1000);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Latest Sync Stats */}
+      <div className="grid grid-cols-5 gap-4">
+        {metrics[0]?.stats && Object.entries(metrics[0].stats).map(([key, value]) => (
+          <div key={key} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+            <div className="text-sm text-gray-500 dark:text-gray-400 capitalize">
+              {key}
+            </div>
+            <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+              {value.toString()}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Historical Chart */}
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+        <h3 className="text-lg font-semibold mb-4">Sync History</h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={[...metrics].reverse()}>
+              <XAxis 
+                dataKey="timestamp" 
+                tickFormatter={(timestamp) => 
+                  getDateFromTimestamp(timestamp).toLocaleDateString()
+                } 
+              />
+              <YAxis />
+              <Tooltip 
+                labelFormatter={(timestamp) => 
+                  getDateFromTimestamp(timestamp).toLocaleString()
+                }
+              />
+              <Legend />
+              <Bar dataKey="stats.new" name="New" fill="#4CAF50" />
+              <Bar dataKey="stats.updated" name="Updated" fill="#2196F3" />
+              <Bar dataKey="stats.deleted" name="Deleted" fill="#F44336" />
+              <Bar dataKey="stats.restored" name="Restored" fill="#FF9800" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* File Status Summary */}
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+        <h3 className="text-lg font-semibold mb-4">Current Status</h3>
+        <div className="grid grid-cols-3 gap-4">
+          {metrics[0]?.totals && Object.entries(metrics[0].totals).map(([key, value]) => (
+            <div key={key} className="text-center">
+              <div className="text-sm text-gray-500 dark:text-gray-400 capitalize">
+                {key.replace('_', ' ')}
+              </div>
+              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                {value.toString()}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -317,8 +468,11 @@ export default function CodebaseViewer() {
         }
 
         const fetchedFiles = filesSnapshot.docs.map(doc => ({
-          path: doc.id,
-          ...doc.data()
+          metadata: {
+            ...doc.data(),
+            path: doc.id
+          },
+          updated_at: new Date().toISOString()
         })) as RepositoryFile[];
 
         console.log('Files found:', fetchedFiles);
@@ -406,19 +560,17 @@ export default function CodebaseViewer() {
 
       switch (sortColumn) {
         case 'path':
-          return multiplier * a.path.localeCompare(b.path);
+          return multiplier * a.metadata.path.localeCompare(b.metadata.path);
         
-        case 'type':
-          return multiplier * ((a.type || 'file').localeCompare(b.type || 'file'));
+        case 'language':
+          return multiplier * (a.metadata.language || '').localeCompare(b.metadata.language || '');
         
         case 'size':
-          const sizeA = a.size ? parseInt(a.size.toString()) : 0;
-          const sizeB = b.size ? parseInt(b.size.toString()) : 0;
-          return multiplier * (sizeA - sizeB);
+          return multiplier * (a.metadata.size - b.metadata.size);
         
-        case 'indexed_at':
-          const dateA = a.indexed_at ? new Date(a.indexed_at).getTime() : 0;
-          const dateB = b.indexed_at ? new Date(b.indexed_at).getTime() : 0;
+        case 'last_updated':
+          const dateA = new Date(a.metadata.last_updated).getTime();
+          const dateB = new Date(b.metadata.last_updated).getTime();
           return multiplier * (dateA - dateB);
         
         default:
@@ -443,7 +595,8 @@ export default function CodebaseViewer() {
   // Get sorted and filtered files
   const sortedAndFilteredFiles = getSortedFiles(
     files.filter((file) => 
-      file.path.toLowerCase().includes(searchTerm.toLowerCase())
+      file.metadata.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (file.metadata.language || '').toLowerCase().includes(searchTerm.toLowerCase())
     )
   );
 
@@ -529,48 +682,27 @@ export default function CodebaseViewer() {
               Repository: {currentAccount?.settings?.githubRepository}
             </h2>
             <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-              {!githubStatus.isConnected ? (
-                <span className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
-                  <AlertTriangle className="h-4 w-4" />
-                  GitHub connection is not active
+              {syncStatus.status === 'completed' ? (
+                <span className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                  <CheckCircle className="h-4 w-4" />
+                  Last synced: {syncStatus.lastSynced?.toLocaleString() || 'Never'}
+                </span>
+              ) : syncStatus.status === 'syncing' ? (
+                <span className="flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Syncing...
                 </span>
               ) : (
-                <>
-                  <span>
-                    Last synced: {syncStatus.lastSynced?.toLocaleString() || 'Never'}
-                  </span>
-                  {syncStatus.status === 'syncing' && (
-                    <span className="flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Syncing...
-                    </span>
-                  )}
-                </>
+                <span className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+                  <AlertTriangle className="h-4 w-4" />
+                  Not synced
+                </span>
               )}
             </div>
           </div>
           
           {renderHeaderActions()}
         </div>
-
-        {!githubStatus.isConnected && (
-          <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 
-                        dark:border-yellow-800 rounded-lg">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
-              <div>
-                <p className="text-sm text-yellow-700 dark:text-yellow-400">
-                  {githubStatus.error || 'GitHub connection is not available'}
-                </p>
-                <p className="text-sm text-yellow-600 dark:text-yellow-500 mt-1">
-                  Showing cached files from last sync: {githubStatus.lastSynced 
-                    ? formatDate(githubStatus.lastSynced) 
-                    : 'Never'}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </header>
 
       <div className="p-6">
@@ -612,11 +744,11 @@ export default function CodebaseViewer() {
                   </TableCell>
                   <TableCell 
                     className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 cursor-pointer"
-                    onClick={() => handleSort('type')}
+                    onClick={() => handleSort('language')}
                   >
                     <div className="flex items-center">
-                      Type
-                      <SortIcon column="type" />
+                      Language
+                      <SortIcon column="language" />
                     </div>
                   </TableCell>
                   <TableCell 
@@ -628,17 +760,17 @@ export default function CodebaseViewer() {
                       <SortIcon column="size" />
                     </div>
                   </TableCell>
-                  <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
-                    Preview
-                  </TableCell>
                   <TableCell 
                     className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 cursor-pointer"
-                    onClick={() => handleSort('indexed_at')}
+                    onClick={() => handleSort('last_updated')}
                   >
                     <div className="flex items-center">
-                      Indexed At
-                      <SortIcon column="indexed_at" />
+                      Last Updated
+                      <SortIcon column="last_updated" />
                     </div>
+                  </TableCell>
+                  <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
+                    Last Commit Message
                   </TableCell>
                 </TableRow>
               </TableHead>
@@ -647,31 +779,32 @@ export default function CodebaseViewer() {
                   .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                   .map((file) => (
                     <TableRow
-                      key={file.path}
+                      key={file.metadata.path}
                       onClick={() => setSelectedFile(file)}
                       className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150"
                     >
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
                         <div className="flex items-center gap-2">
-                          {getFileIcon(file.path)}
-                          <span className="truncate">{file.path}</span>
+                          {getFileIcon(file.metadata.path)}
+                          <span className="truncate">{file.metadata.path}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
-                        {file.type || 'file'}
-                      </TableCell>
-                      <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
-                        {file.size || '-'}
-                      </TableCell>
-                      <TableCell 
-                        className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 max-w-md"
-                      >
-                        <div className="truncate font-mono text-sm">
-                          {getContentPreview(file.content)}
+                        <div className="flex items-center gap-2">
+                          {getFileIcon(file.metadata.path)}
+                          {file.metadata.language || '-'}
                         </div>
                       </TableCell>
-                      <TableCell className="text-gray-600 dark:text-gray-400 border-b dark:border-gray-600">
-                        {formatDate(file.indexed_at)}
+                      <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
+                        {formatFileSize(file.metadata.size)}
+                      </TableCell>
+                      <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
+                        {file.metadata.last_updated ? new Date(file.metadata.last_updated).toLocaleString() : '-'}
+                      </TableCell>
+                      <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
+                        <div className="truncate max-w-md">
+                          {file.metadata.last_commit_message || '-'}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
