@@ -149,7 +149,7 @@ export const syncGithubRepository = onCall(
           errorString += error;
         });
 
-        process.on('error', (error) => {
+        process.on('error', (error: Error) => {
           console.error('Failed to start Python process:', error);
           reject(new Error(`Failed to start Python process: ${error.message}`));
         });
@@ -164,7 +164,8 @@ export const syncGithubRepository = onCall(
               resolve(result);
             } catch (e) {
               console.error('Failed to parse Python output:', e);
-              reject(new Error(`Failed to parse Python output: ${e.message}`));
+              const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+              reject(new Error(`Failed to parse Python output: ${errorMessage}`));
             }
           } else {
             console.error('Python script failed:', errorString);
@@ -174,7 +175,8 @@ export const syncGithubRepository = onCall(
       });
     } catch (error) {
       console.error('Error in sync function:', error);
-      throw new Error(`Failed to run repository sync: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to run repository sync: ${errorMessage}`);
     }
   }
 );

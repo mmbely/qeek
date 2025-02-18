@@ -1,3 +1,4 @@
-firebase-admin==6.4.0
-PyGithub==2.2.0
-python-dotenv==1.0.1
+PyGithub==1.55
+firebase-admin==6.1.0
+python-dotenv==0.19.2
+pytest==7.4.0
