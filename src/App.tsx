@@ -8,7 +8,6 @@ import TicketList from './components/Tickets/TicketList';
 import { TicketBoard } from './components/Tickets/TicketBoard';
 import Layout from './components/Layout';
 import { TicketForm } from './components/Tickets';
-import { Connect } from './components/Codebase';
 import GitHubSettings from './components/Settings/GitHubSettings';
 import { FolderOpen } from 'lucide-react';
 import CodebaseViewer from './components/Codebase/CodebaseViewer';
@@ -93,7 +92,7 @@ function AppContent() {
         <Route path="/tickets/board" element={<TicketBoard mode="development" />} />
         <Route path="/tickets/all" element={<TicketList />} />
         <Route path="/tickets/new" element={<TicketForm />} />
-        <Route path="/codebase/connect" element={<Connect />} />
+        <Route path="/codebase/connect" element={<GitHubSettings />} />
         <Route path="/codebase/files" element={<CodebaseViewer />} />
         <Route path="/codebase/files/:repositoryName" element={<CodebaseViewer />} />
         <Route path="/settings" element={<SettingsLayout />}>

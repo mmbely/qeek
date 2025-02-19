@@ -15,6 +15,12 @@ export const theme = {
         primary: '#262b3d', // Main background
         secondary: '#1e2132', // Secondary background (cards, etc)
         hover: '#313a55', // Hover state
+        table: {
+          header: '#1f2937', // Table header background
+          headerText: '#f3f4f6', // Table header text
+          row: '#1e2132', // Table row background
+          rowHover: '#2b2f44', // Table row hover
+        }
       },
       border: '#374151',
     },
@@ -31,6 +37,12 @@ export const theme = {
         primary: '#ffffff',
         secondary: '#f9fafb',
         hover: '#f3f4f6',
+        table: {
+          header: '#f9fafb', // Table header background
+          headerText: '#111827', // Table header text
+          row: '#ffffff', // Table row background
+          rowHover: '#f3f4f6', // Table row hover
+        }
       },
       border: '#e5e7eb',
     },
@@ -218,6 +230,52 @@ export const commonStyles = {
     actions: `
       flex items-center gap-3
     `,
+  },
+  table: {
+    container: `
+      bg-white dark:bg-gray-800 
+      shadow-sm overflow-auto
+      rounded-lg
+    `,
+    header: {
+      cell: `
+        sticky top-0
+        bg-gray-50 dark:bg-gray-800
+        text-gray-900 dark:text-gray-100
+        border-b dark:border-gray-600
+        cursor-pointer
+        transition-colors
+        hover:bg-gray-100 dark:hover:bg-gray-700
+      `,
+      sortIcon: {
+        active: 'text-gray-900 dark:text-gray-100',
+        inactive: 'text-gray-400 dark:text-gray-500',
+      }
+    },
+    body: {
+      row: `
+        cursor-pointer
+        hover:bg-gray-50 dark:hover:bg-gray-700
+        transition-colors duration-150
+      `,
+      cell: `
+        text-gray-900 dark:text-gray-100
+        border-b dark:border-gray-600
+      `,
+      cellWithScroll: `
+        text-gray-900 dark:text-gray-100
+        border-b dark:border-gray-600
+        max-w-[200px]
+        whitespace-normal break-words
+        max-h-[100px] overflow-y-auto
+      `
+    },
+    pagination: `
+      text-gray-900 dark:text-gray-100
+      sticky bottom-0
+      bg-white dark:bg-gray-800
+      border-t dark:border-gray-600
+    `
   },
 };
 

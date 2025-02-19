@@ -1,11 +1,31 @@
 import { useEffect, useState } from 'react';
 import { db } from '../../services/firebase';
 import { collection, query, getDocs, doc, getDoc, onSnapshot, orderBy, limit, Firestore, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
-import { Loader2, FolderIcon, XCircle, Search, FileIcon, FileTextIcon, FileCodeIcon, FileJsonIcon, ImageIcon, FileTypeIcon, PackageIcon, Settings2Icon, DatabaseIcon, LockIcon, Github, Settings, AlertTriangle, CheckCircle } from 'lucide-react';
+import { 
+  Loader2, 
+  FolderIcon, 
+  XCircle, 
+  Search, 
+  FileTextIcon, 
+  FileCodeIcon, 
+  FileJsonIcon, 
+  ImageIcon, 
+  FileTypeIcon, 
+  PackageIcon, 
+  Settings2Icon, 
+  DatabaseIcon, 
+  LockIcon, 
+  Github, 
+  Settings, 
+  AlertTriangle, 
+  CheckCircle, 
+  ChevronDown, 
+  ChevronUp 
+} from 'lucide-react';
 import { useAccount } from '../../context/AccountContext';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment } from '@mui/material';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment, FormControl, Select, MenuItem } from '@mui/material';
 import { 
   SiPython, 
   SiJavascript, 
@@ -35,8 +55,13 @@ import {
   Legend,
   ResponsiveContainer 
 } from 'recharts';
+import { Theme } from '@mui/material/styles';
+import { FileViewer } from './FileViewer';
+import { RepositoryFile } from '../../types/repository';
+import { ExpandableCell } from './components/ExpandableCell';
+import { FileIcon } from './components/FileIcon';
 
-// Add helper functions at the top level
+// Remove the duplicate formatFileSize function and keep only one at the top level
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -44,20 +69,6 @@ const formatFileSize = (bytes: number): string => {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 };
-
-interface RepositoryFile {
-  metadata: {
-    language: string;
-    last_commit_message: string;
-    last_updated: string;  // ISO date string
-    name: string;
-    path: string;
-    sha: string;
-    size: number;
-    type: string;
-  };
-  updated_at: string;  // ISO date string
-}
 
 interface Repository {
   files: RepositoryFile[];
@@ -83,152 +94,14 @@ const getContentPreview = (content: string | undefined) => {
 };
 
 const getFileIcon = (filePath: string) => {
-  const extension = filePath.split('.').pop()?.toLowerCase() || '';
-  const fileName = filePath.toLowerCase();
-
-  // Language-specific icons
-  switch (extension) {
-    // Python
-    case 'py':
-      return <SiPython className="h-4 w-4 text-blue-500" />;
-    
-    // JavaScript
-    case 'js':
-      return <SiJavascript className="h-4 w-4 text-yellow-400" />;
-    
-    // TypeScript
-    case 'ts':
-      return <SiTypescript className="h-4 w-4 text-blue-600" />;
-    
-    // React
-    case 'jsx':
-    case 'tsx':
-      return <SiReact className="h-4 w-4 text-cyan-400" />;
-    
-    // Vue
-    case 'vue':
-      return <SiVuedotjs className="h-4 w-4 text-emerald-400" />;
-    
-    // HTML
-    case 'html':
-    case 'htm':
-      return <SiHtml5 className="h-4 w-4 text-orange-500" />;
-    
-    // CSS
-    case 'css':
-    case 'scss':
-    case 'sass':
-    case 'less':
-      return <SiCss3 className="h-4 w-4 text-blue-500" />;
-    
-    // Java
-    case 'java':
-      return <SiJava className="h-4 w-4 text-red-500" />;
-    
-    // PHP
-    case 'php':
-      return <SiPhp className="h-4 w-4 text-purple-500" />;
-    
-    // Ruby
-    case 'rb':
-      return <SiRuby className="h-4 w-4 text-red-600" />;
-    
-    // Swift
-    case 'swift':
-      return <SiSwift className="h-4 w-4 text-orange-500" />;
-    
-    // Kotlin
-    case 'kt':
-    case 'kts':
-      return <SiKotlin className="h-4 w-4 text-purple-600" />;
-    
-    // Go
-    case 'go':
-      return <SiGo className="h-4 w-4 text-cyan-500" />;
-    
-    // Rust
-    case 'rs':
-      return <SiRust className="h-4 w-4 text-orange-600" />;
-    
-    // Markdown
-    case 'md':
-    case 'mdx':
-      return <SiMarkdown className="h-4 w-4 text-gray-500" />;
-    
-    // JSON
-    case 'json':
-      return <FileJsonIcon className="h-4 w-4 text-yellow-600" />;
-    
-    // YAML
-    case 'yml':
-    case 'yaml':
-      return <FileCodeIcon className="h-4 w-4 text-gray-500" />;
-  }
-
-  // Special files
-  if (fileName === 'dockerfile') {
-    return <SiDocker className="h-4 w-4 text-blue-500" />;
-  }
-  if (fileName === '.gitignore' || fileName.endsWith('.git')) {
-    return <SiGit className="h-4 w-4 text-orange-600" />;
-  }
-
-  // Directory
-  if (!extension || extension === filePath) {
-    return <FolderIcon className="h-4 w-4 text-yellow-400" />;
-  }
-
-  // Default file icon
-  return <FileIcon className="h-4 w-4 text-gray-400" />;
+  return <FileIcon filePath={filePath} className="h-4 w-4 text-gray-400" />;
 };
 
-// Add this new component for file viewing
-const FileViewer = ({ file, onClose }: { file: RepositoryFile; onClose: () => void }) => {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            {getFileIcon(file.metadata.path)}
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-              {file.metadata.path}
-            </h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <XCircle className="h-5 w-5" />
-          </button>
-        </div>
-        
-        <div className="flex-1 overflow-auto p-4">
-          {file.metadata.type === 'directory' ? (
-            <div className="text-gray-500 dark:text-gray-400">
-              This is a directory
-            </div>
-          ) : (
-            <pre className="font-mono text-sm bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-auto">
-              <code className="text-gray-900 dark:text-gray-100">
-                {file.metadata.last_commit_message || 'No content available'}
-              </code>
-            </pre>
-          )}
-        </div>
-        
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
-          <div className="flex gap-4">
-            <span>Size: {file.metadata.size ? formatFileSize(file.metadata.size) : 'Unknown'}</span>
-            <span>Last updated: {file.metadata.last_updated ? new Date(file.metadata.last_updated).toLocaleString() : 'Never'}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-type SortColumn = 'path' | 'language' | 'size' | 'last_updated';
+type SortColumn = 'path' | 'status' | 'language' | 'size' | 'last_updated' | 'functions' | 'classes';
 type SortDirection = 'asc' | 'desc';
+
+// Add status type
+type FileStatus = 'active' | 'deleted' | 'all';
 
 // Add this new component for the not connected state
 const NotConnectedState = () => {
@@ -394,6 +267,50 @@ export const CodebaseMetrics = ({ repoId }: { repoId: string }) => {
   );
 };
 
+const columns: { id: string; label: string; minWidth?: number }[] = [
+  { id: 'path', label: 'File Path', minWidth: 200 },
+  { id: 'status', label: 'Status', minWidth: 100 },
+  { id: 'language', label: 'Language', minWidth: 100 },
+  { id: 'functions', label: 'Functions', minWidth: 120 },
+  { id: 'classes', label: 'Classes', minWidth: 120 },
+  { id: 'size', label: 'Size', minWidth: 100 },
+  { id: 'last_updated', label: 'Last Updated', minWidth: 160 }
+];
+
+// Helper function to get the name from either a string or an object with name property
+const getName = (item: string | { name: string }): string => {
+  if (typeof item === 'string') {
+    return item;
+  }
+  return item.name;
+};
+
+// Add this helper function for searching
+const searchFile = (file: RepositoryFile, searchTerm: string): boolean => {
+  const searchLower = searchTerm.toLowerCase();
+  
+  // Search in file path
+  if (file.path.toLowerCase().includes(searchLower)) {
+    return true;
+  }
+  
+  // Search in functions
+  if (file.functions?.some(func => 
+    func.toLowerCase().includes(searchLower)
+  )) {
+    return true;
+  }
+  
+  // Search in classes
+  if (file.classes?.some(cls => 
+    cls.toLowerCase().includes(searchLower)
+  )) {
+    return true;
+  }
+  
+  return false;
+};
+
 export default function CodebaseViewer() {
   const { user } = useAuth();
   const { currentAccount, isLoading: accountLoading } = useAccount();
@@ -417,6 +334,7 @@ export default function CodebaseViewer() {
     lastSynced?: Date;
     error?: string;
   }>({ isConnected: false });
+  const [filterStatus, setFilterStatus] = useState<FileStatus>('all');
 
   // Add debug logging
   useEffect(() => {
@@ -441,11 +359,6 @@ export default function CodebaseViewer() {
         const repoRef = doc(db, 'repositories', repoPath);
         const repoDoc = await getDoc(repoRef);
         
-        console.log('Repository document exists:', repoDoc.exists());
-        if (repoDoc.exists()) {
-          console.log('Repository data:', repoDoc.data());
-        }
-
         if (!repoDoc.exists()) {
           setError('Repository not found');
           return;
@@ -467,24 +380,38 @@ export default function CodebaseViewer() {
           return;
         }
 
-        const fetchedFiles = filesSnapshot.docs.map(doc => ({
-          metadata: {
-            ...doc.data(),
-            path: doc.id
-          },
-          updated_at: new Date().toISOString()
-        })) as RepositoryFile[];
+        const fetchedFiles = filesSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            content: data.content || '',
+            sha: data.sha || '',
+            type: data.type || '',
+            classes: data.classes || [],
+            exports: data.exports || [],
+            first_indexed_at: data.first_indexed_at,
+            functions: data.functions || [],
+            imports: data.imports || [],
+            language: data.language || '',
+            last_commit_message: data.last_commit_message || '',
+            last_updated: data.last_updated || '',
+            metadata: {
+              content_type: data.metadata?.content_type || '',
+              sha: data.metadata?.sha || '',
+              type: data.metadata?.type || ''
+            },
+            name: data.name || '',
+            path: data.path || '',
+            size: data.size || 0,
+            status: data.status || 'active',
+            updated_at: data.updated_at || new Date().toISOString()
+          } as RepositoryFile;
+        });
 
         console.log('Files found:', fetchedFiles);
         setFiles(fetchedFiles);
 
       } catch (error) {
-        console.error('Error fetching repository with detailed info:', {
-          repoPath,
-          error,
-          accountId: currentAccount.id,
-          userId: user?.uid
-        });
+        console.error('Error fetching repository:', error);
         setError(error instanceof Error ? error.message : 'Failed to fetch repository');
       } finally {
         setLoading(false);
@@ -560,18 +487,27 @@ export default function CodebaseViewer() {
 
       switch (sortColumn) {
         case 'path':
-          return multiplier * a.metadata.path.localeCompare(b.metadata.path);
+          return multiplier * a.path.localeCompare(b.path);
+        
+        case 'status':
+          return multiplier * (a.status || 'active').localeCompare(b.status || 'active');
         
         case 'language':
-          return multiplier * (a.metadata.language || '').localeCompare(b.metadata.language || '');
+          return multiplier * (a.language || '').localeCompare(b.language || '');
         
         case 'size':
-          return multiplier * (a.metadata.size - b.metadata.size);
+          return multiplier * (a.size - b.size);
         
         case 'last_updated':
-          const dateA = new Date(a.metadata.last_updated).getTime();
-          const dateB = new Date(b.metadata.last_updated).getTime();
+          const dateA = a.last_updated ? new Date(a.last_updated).getTime() : 0;
+          const dateB = b.last_updated ? new Date(b.last_updated).getTime() : 0;
           return multiplier * (dateA - dateB);
+        
+        case 'functions':
+          return multiplier * ((a.functions?.length || 0) - (b.functions?.length || 0));
+        
+        case 'classes':
+          return multiplier * ((a.classes?.length || 0) - (b.classes?.length || 0));
         
         default:
           return 0;
@@ -582,54 +518,201 @@ export default function CodebaseViewer() {
   const SortIcon = ({ column }: { column: SortColumn }) => {
     if (sortColumn !== column) {
       return (
-        <span className="text-gray-400 ml-2">↕</span>
+        <span className="text-gray-400 dark:text-gray-500 ml-2">↕</span>
       );
     }
     return (
-      <span className="text-gray-900 dark:text-white ml-2">
+      <span className="text-gray-900 dark:text-gray-100 ml-2">
         {sortDirection === 'asc' ? '↑' : '↓'}
       </span>
     );
   };
 
-  // Get sorted and filtered files
-  const sortedAndFilteredFiles = getSortedFiles(
-    files.filter((file) => 
-      file.metadata.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (file.metadata.language || '').toLowerCase().includes(searchTerm.toLowerCase())
-    )
+  // Update the search and filter section
+  const renderSearchAndFilters = () => (
+    <div className="p-6">
+      <div className="mb-6 flex gap-4 items-center">
+        <div className="flex-1">
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search files, functions, or classes..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="dark:bg-gray-800"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': {
+                  borderColor: 'rgba(255, 255, 255, 0.1)',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'rgba(255, 255, 255, 0.2)',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                },
+              },
+              '& .MuiInputBase-input': {
+                color: 'inherit',
+              },
+            }}
+            InputProps={{
+              className: 'dark:text-white',
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Search className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </div>
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <Select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as FileStatus)}
+            className="dark:bg-gray-800 dark:text-white"
+            MenuProps={{
+              PaperProps: {
+                className: 'dark:bg-gray-800',
+                sx: {
+                  '& .MuiMenuItem-root': {
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    },
+                  },
+                },
+              },
+            }}
+            sx={{
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(255, 255, 255, 0.2)',
+              },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(255, 255, 255, 0.3)',
+              },
+            }}
+          >
+            <MenuItem value="all" className="dark:text-gray-200">All Files</MenuItem>
+            <MenuItem value="active" className="dark:text-gray-200">Active Files</MenuItem>
+            <MenuItem value="deleted" className="dark:text-gray-200">Deleted Files</MenuItem>
+          </Select>
+        </FormControl>
+      </div>
+    </div>
   );
 
+  // Update the sortedAndFilteredFiles calculation
+  const sortedAndFilteredFiles = getSortedFiles(
+    files.filter((file) => {
+      const matchesSearch = searchTerm ? searchFile(file, searchTerm) : true;
+      const matchesStatus = filterStatus === 'all' ? true : (file.status || 'active') === filterStatus;
+      return matchesSearch && matchesStatus;
+    })
+  );
+
+  // Update the header section to include the search bar
+  const renderHeader = () => (
+    <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+            Codebase
+          </h1>
+        </div>
+        <div className="flex items-center gap-4">
+          {renderSyncStatus()}
+          {renderHeaderActions()}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderSyncStatus = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading...
+        </div>
+      );
+    }
+
+    if (syncStatus.status === 'syncing') {
+      return (
+        <div className="flex items-center gap-2 text-blue-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Syncing repository...
+        </div>
+      );
+    }
+
+    if (syncStatus.error) {
+      return (
+        <div className="flex items-center gap-2 text-red-500">
+          <AlertTriangle className="h-4 w-4" />
+          {syncStatus.error}
+        </div>
+      );
+    }
+
+    if (syncStatus.lastSynced) {
+      return (
+        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+          <CheckCircle className="h-4 w-4 text-green-500" />
+          Last synced: {new Date(syncStatus.lastSynced).toLocaleString()}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   const renderHeaderActions = () => {
-    if (!githubStatus.isConnected) {
+    if (!currentAccount?.settings?.githubRepository) {
       return (
         <button
           onClick={() => navigate('/settings/github')}
-          className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md 
-                     hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-2 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-500 
+                     hover:bg-blue-600 rounded-lg transition-colors"
         >
           <Settings className="h-4 w-4" />
-          Configure GitHub
+          Configure Repository
         </button>
       );
     }
 
     return (
-      <button
-        onClick={handleSync}
-        disabled={syncStatus.status === 'syncing'}
-        className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 
-                   disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-      >
-        {syncStatus.status === 'syncing' ? (
-          <>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleSync}
+          disabled={loading || syncStatus.status === 'syncing'}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
+            ${loading || syncStatus.status === 'syncing'
+              ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+              : 'bg-blue-500 hover:bg-blue-600 text-white'
+            }`}
+        >
+          {loading || syncStatus.status === 'syncing' ? (
             <Loader2 className="h-4 w-4 animate-spin" />
-            Syncing...
-          </>
-        ) : (
-          'Sync Now'
-        )}
-      </button>
+          ) : (
+            <Github className="h-4 w-4" />
+          )}
+          {loading || syncStatus.status === 'syncing' ? 'Syncing...' : 'Sync Now'}
+        </button>
+        
+        <button
+          onClick={() => navigate('/settings/github')}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 
+                     dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg 
+                     transition-colors"
+        >
+          <Settings className="h-4 w-4" />
+          Settings
+        </button>
+      </div>
     );
   };
 
@@ -674,104 +757,38 @@ export default function CodebaseViewer() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900">
-      <header className="mb-6 px-6 pt-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Repository: {currentAccount?.settings?.githubRepository}
-            </h2>
-            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-              {syncStatus.status === 'completed' ? (
-                <span className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                  <CheckCircle className="h-4 w-4" />
-                  Last synced: {syncStatus.lastSynced?.toLocaleString() || 'Never'}
-                </span>
-              ) : syncStatus.status === 'syncing' ? (
-                <span className="flex items-center gap-1">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Syncing...
-                </span>
-              ) : (
-                <span className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
-                  <AlertTriangle className="h-4 w-4" />
-                  Not synced
-                </span>
-              )}
-            </div>
-          </div>
-          
-          {renderHeaderActions()}
-        </div>
-      </header>
-
-      <div className="p-6">
-        <div className="mb-6">
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Search files..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="dark:bg-gray-800"
-            InputProps={{
-              className: 'dark:text-white',
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-                </InputAdornment>
-              ),
-            }}
-          />
-        </div>
-
+    <div className="flex flex-col h-full overflow-auto bg-white dark:bg-gray-900">
+      {renderHeader()}
+      {renderSearchAndFilters()}
+      <div className="flex-1 p-6 overflow-auto">
         {sortedAndFilteredFiles.length > 0 ? (
           <TableContainer 
             component={Paper} 
-            className="bg-white dark:bg-gray-800 shadow-sm"
+            className="bg-white dark:bg-gray-800 shadow-sm overflow-auto"
+            sx={{ maxHeight: 'calc(100vh - 250px)' }}
           >
-            <Table>
+            <Table stickyHeader>
               <TableHead>
                 <TableRow className="bg-gray-50 dark:bg-gray-700">
-                  <TableCell 
-                    className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 cursor-pointer"
-                    onClick={() => handleSort('path')}
-                  >
-                    <div className="flex items-center">
-                      File Path
-                      <SortIcon column="path" />
-                    </div>
-                  </TableCell>
-                  <TableCell 
-                    className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 cursor-pointer"
-                    onClick={() => handleSort('language')}
-                  >
-                    <div className="flex items-center">
-                      Language
-                      <SortIcon column="language" />
-                    </div>
-                  </TableCell>
-                  <TableCell 
-                    className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 cursor-pointer"
-                    onClick={() => handleSort('size')}
-                  >
-                    <div className="flex items-center">
-                      Size
-                      <SortIcon column="size" />
-                    </div>
-                  </TableCell>
-                  <TableCell 
-                    className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 cursor-pointer"
-                    onClick={() => handleSort('last_updated')}
-                  >
-                    <div className="flex items-center">
-                      Last Updated
-                      <SortIcon column="last_updated" />
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
-                    Last Commit Message
-                  </TableCell>
+                  {columns.map((column) => (
+                    <TableCell
+                      key={column.id}
+                      className="cursor-pointer"
+                      sx={{
+                        '&.MuiTableCell-head': {
+                          backgroundColor: 'inherit',
+                          color: 'inherit',
+                          borderBottom: '1px solid var(--border-color)',
+                        },
+                      }}
+                      onClick={() => handleSort(column.id as SortColumn)}
+                    >
+                      <div className="flex items-center text-gray-900 dark:text-gray-100">
+                        {column.label}
+                        <SortIcon column={column.id as SortColumn} />
+                      </div>
+                    </TableCell>
+                  ))}
                 </TableRow>
               </TableHead>
               <TableBody className="dark:bg-gray-800">
@@ -779,60 +796,52 @@ export default function CodebaseViewer() {
                   .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                   .map((file) => (
                     <TableRow
-                      key={file.metadata.path}
+                      key={file.path}
                       onClick={() => setSelectedFile(file)}
                       className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150"
                     >
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
                         <div className="flex items-center gap-2">
-                          {getFileIcon(file.metadata.path)}
-                          <span className="truncate">{file.metadata.path}</span>
+                          {getFileIcon(file.path)}
+                          <span className="truncate">{file.path}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
-                        <div className="flex items-center gap-2">
-                          {getFileIcon(file.metadata.path)}
-                          {file.metadata.language || '-'}
-                        </div>
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          (file.status || 'active') === 'active'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                        }`}>
+                          {file.status || 'active'}
+                        </span>
                       </TableCell>
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
-                        {formatFileSize(file.metadata.size)}
+                        {file.language || '-'}
+                      </TableCell>
+                      <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 max-w-[200px]">
+                        <ExpandableCell items={file.functions} />
+                      </TableCell>
+                      <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 max-w-[200px]">
+                        <ExpandableCell items={file.classes} />
                       </TableCell>
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
-                        {file.metadata.last_updated ? new Date(file.metadata.last_updated).toLocaleString() : '-'}
+                        {formatFileSize(file.size)}
                       </TableCell>
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
-                        <div className="truncate max-w-md">
-                          {file.metadata.last_commit_message || '-'}
-                        </div>
+                        {file.last_updated ? new Date(file.last_updated).toLocaleString() : '-'}
                       </TableCell>
                     </TableRow>
                   ))}
               </TableBody>
             </Table>
             <TablePagination
-              rowsPerPageOptions={[5, 10, 25]}
               component="div"
               count={sortedAndFilteredFiles.length}
               rowsPerPage={rowsPerPage}
               page={page}
               onPageChange={handleChangePage}
               onRowsPerPageChange={handleChangeRowsPerPage}
-              className="text-gray-900 dark:text-gray-100"
-              sx={{
-                '.MuiTablePagination-select': {
-                  color: 'inherit',
-                },
-                '.MuiTablePagination-selectIcon': {
-                  color: 'inherit',
-                },
-                '.MuiTablePagination-displayedRows': {
-                  color: 'inherit',
-                },
-                '.MuiIconButton-root': {
-                  color: 'inherit',
-                },
-              }}
+              className="text-gray-900 dark:text-gray-100 sticky bottom-0 bg-white dark:bg-gray-800"
             />
           </TableContainer>
         ) : (

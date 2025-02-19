@@ -3,7 +3,18 @@ export interface RepositoryFile {
   content: string;
   sha: string;
   size: number;
-  type: 'file' | 'directory';
+  type: string;
+  status?: 'active' | 'deleted' | 'modified';
+  language?: string;
+  last_updated?: string;
+  last_commit_message?: string;
+  metadata?: {
+    content_type: string;
+    sha: string;
+    type: string;
+  };
+  functions?: string[];
+  classes?: string[];
   lastModified?: Date;
 }
 
