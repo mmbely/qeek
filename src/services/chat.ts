@@ -15,6 +15,7 @@ import {
 import { db } from '../config/firebase';
 import { Message } from '../types/message';
 import { CustomUser } from '../types/user';
+import { getTimestampMillis } from '../utils/dateUtils';
 
 // Subscribe to account users
 export const subscribeToUsers = (
@@ -68,9 +69,8 @@ export const subscribeToMessages = (
     accountId
   });
 
-  const messagesRef = collection(db, 'messages');
   const q = firestoreQuery(
-    messagesRef,
+    collection(db, 'messages'),
     where('channelId', '==', channelId),
     where('accountId', '==', accountId),
     orderBy('timestamp', 'asc')
@@ -78,13 +78,14 @@ export const subscribeToMessages = (
 
   return onSnapshot(q, (snapshot) => {
     const messages = snapshot.docs.map(doc => ({
+      ...doc.data(),
       id: doc.id,
-      ...doc.data()
+      timestamp: doc.data().timestamp?.toMillis?.() || doc.data().timestamp || Date.now()
     })) as Message[];
-    console.log('[Chat Service] Messages snapshot:', messages);
+    
     callback(messages);
   }, (error) => {
-    console.error('[Chat Service] Error in message subscription:', error);
+    console.error("Error subscribing to messages:", error);
   });
 };
 
@@ -92,13 +93,18 @@ export const subscribeToMessages = (
 export const sendMessage = async (channelId: string, message: Message) => {
   console.log('[Chat Service] Sending message:', message);
   
+  // Ensure timestamp is a number before storing
+  const messageToStore = {
+    ...message,
+    channelId,
+    timestamp: typeof message.timestamp === 'number' 
+      ? message.timestamp 
+      : Date.now()
+  };
+
   try {
     const messagesRef = collection(db, 'messages');
-    await addDoc(messagesRef, {
-      ...message,
-      channelId,
-      timestamp: serverTimestamp()
-    });
+    await addDoc(messagesRef, messageToStore);
     console.log('[Chat Service] Message sent successfully');
   } catch (error) {
     console.error('[Chat Service] Error sending message:', error);
@@ -120,10 +126,9 @@ export const updateMessage = async (messageId: string, updates: Partial<Message>
 // Delete a message
 export const deleteMessage = async (messageId: string) => {
   try {
-    const messageRef = doc(db, 'messages', messageId);
-    await deleteDoc(messageRef);
+    await deleteDoc(doc(db, 'messages', messageId));
   } catch (error) {
-    console.error("Error deleting message:", error);
+    console.error('Error deleting message:', error);
     throw error;
   }
 };

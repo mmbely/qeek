@@ -8,6 +8,13 @@ import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
 import { useAccount } from '../../context/AccountContext';
+import { Timestamp } from 'firebase/firestore';
+import { getTimestampMillis, timestampToDate, formatMessageDate } from '../../utils/dateUtils';
+
+// Add type guard for Firestore Timestamp
+const isFirestoreTimestamp = (value: any): value is Timestamp => {
+  return value && typeof value.toMillis === 'function';
+};
 
 export default function ChatInterface() {
   const { userId } = useParams();
@@ -64,7 +71,18 @@ export default function ChatInterface() {
       currentAccount.id,
       (newMessages) => {
         console.log('[ChatInterface] Received messages:', newMessages);
-        setMessages(newMessages);
+        
+        // Ensure all timestamps are numbers
+        const processedMessages = newMessages.map(msg => ({
+          ...msg,
+          timestamp: typeof msg.timestamp === 'number'
+            ? msg.timestamp
+            : isFirestoreTimestamp(msg.timestamp)
+              ? msg.timestamp.toMillis()
+              : Date.now()
+        }));
+
+        setMessages(processedMessages);
         setIsLoading(false);
       }
     );
@@ -114,10 +132,14 @@ export default function ChatInterface() {
         userId: user.uid,
         channelId: channelId,
         accountId: currentAccount.id,
-        participants: userId ? [user.uid, userId] : undefined // Add participants for DMs
+        participants: userId ? [user.uid, userId] : undefined
       };
       
-      console.log('Sending message:', newMessage);
+      console.log('Sending message with timestamp:', {
+        timestamp: newMessage.timestamp,
+        date: timestampToDate(newMessage.timestamp)
+      });
+
       await sendMessage(channelId, newMessage);
       setMessage('');
     } catch (error) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Github, CheckCircle, XCircle, Loader2, ChevronDown, Search } from "lucide-react";
+import { Github, CheckCircle, XCircle, Loader2, ChevronDown, Search, AlertTriangle } from "lucide-react";
 import { 
   storeGithubToken, 
   getToken, 
@@ -473,6 +473,21 @@ export default function GitHubSettings() {
                     )}
                   </div>
 
+                  {/* Add sync failure message if present */}
+                  {syncStatus.status === 'failed' && (
+                    <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-lg">
+                      <div className="flex items-start gap-2 text-red-600 dark:text-red-400">
+                        <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-medium">Sync Failed</p>
+                          <p className="text-sm mt-1">
+                            {syncStatus.error || 'Failed to sync repository. Please try again.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Sync Action Button */}
                   {syncStatus.status !== 'syncing' && (
                     <button
@@ -509,16 +524,6 @@ export default function GitHubSettings() {
                         <span>Syncing repository...</span>
                         <span>{Math.round((syncStatus.progress || 0) * 100)}%</span>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Status Messages */}
-                  {syncStatus.status === 'failed' && (
-                    <div className="text-sm text-red-500 dark:text-red-400 flex items-center gap-2">
-                      <XCircle className="h-4 w-4" />
-                      <span>
-                        {syncStatus.error || 'Failed to sync repository. Please try again.'}
-                      </span>
                     </div>
                   )}
                 </div>

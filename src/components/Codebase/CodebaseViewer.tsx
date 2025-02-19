@@ -530,8 +530,8 @@ export default function CodebaseViewer() {
 
   // Update the search and filter section
   const renderSearchAndFilters = () => (
-    <div className="p-6">
-      <div className="mb-6 flex gap-4 items-center">
+    <div className="px-6">
+      <div className="flex gap-4 items-center">
         <div className="flex-1">
           <TextField
             fullWidth
@@ -615,106 +615,55 @@ export default function CodebaseViewer() {
 
   // Update the header section to include the search bar
   const renderHeader = () => (
-    <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-            Codebase
-          </h1>
+    <header className="mb-6 px-6 pt-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Codebase</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {currentAccount?.settings?.githubRepository || 'No repository selected'}
+          </p>
         </div>
-        <div className="flex items-center gap-4">
-          {renderSyncStatus()}
-          {renderHeaderActions()}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderSyncStatus = () => {
-    if (loading) {
-      return (
-        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading...
-        </div>
-      );
-    }
-
-    if (syncStatus.status === 'syncing') {
-      return (
-        <div className="flex items-center gap-2 text-blue-500">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Syncing repository...
-        </div>
-      );
-    }
-
-    if (syncStatus.error) {
-      return (
-        <div className="flex items-center gap-2 text-red-500">
-          <AlertTriangle className="h-4 w-4" />
-          {syncStatus.error}
-        </div>
-      );
-    }
-
-    if (syncStatus.lastSynced) {
-      return (
-        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-          <CheckCircle className="h-4 w-4 text-green-500" />
-          Last synced: {new Date(syncStatus.lastSynced).toLocaleString()}
-        </div>
-      );
-    }
-
-    return null;
-  };
-
-  const renderHeaderActions = () => {
-    if (!currentAccount?.settings?.githubRepository) {
-      return (
-        <button
-          onClick={() => navigate('/settings/github')}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-500 
-                     hover:bg-blue-600 rounded-lg transition-colors"
-        >
-          <Settings className="h-4 w-4" />
-          Configure Repository
-        </button>
-      );
-    }
-
-    return (
-      <div className="flex items-center gap-2">
-        <button
-          onClick={handleSync}
-          disabled={loading || syncStatus.status === 'syncing'}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
-            ${loading || syncStatus.status === 'syncing'
-              ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-              : 'bg-blue-500 hover:bg-blue-600 text-white'
-            }`}
-        >
-          {loading || syncStatus.status === 'syncing' ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+        <div className="flex items-center gap-2">
+          {syncStatus.error ? (
+            <button
+              onClick={() => navigate('/settings/github')}
+              className="flex items-center gap-2 px-3 py-2 text-red-600 dark:text-red-400 
+                         hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+              title={syncStatus.error}
+            >
+              <AlertTriangle className="h-5 w-5" />
+            </button>
           ) : (
-            <Github className="h-4 w-4" />
+            <button
+              onClick={handleSync}
+              disabled={loading || syncStatus.status === 'syncing'}
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 
+                         disabled:bg-gray-300 dark:disabled:bg-gray-700 
+                         disabled:text-gray-500 dark:disabled:text-gray-400 
+                         disabled:cursor-not-allowed transition-colors duration-150"
+            >
+              {loading || syncStatus.status === 'syncing' ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                  Syncing...
+                </>
+              ) : (
+                'Sync Now'
+              )}
+            </button>
           )}
-          {loading || syncStatus.status === 'syncing' ? 'Syncing...' : 'Sync Now'}
-        </button>
-        
-        <button
-          onClick={() => navigate('/settings/github')}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 
-                     dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg 
-                     transition-colors"
-        >
-          <Settings className="h-4 w-4" />
-          Settings
-        </button>
+          <button
+            onClick={() => navigate('/settings/github')}
+            className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 
+                       dark:hover:bg-gray-700 rounded-md transition-colors"
+            title="GitHub Settings"
+          >
+            <Settings className="h-5 w-5" />
+          </button>
+        </div>
       </div>
-    );
-  };
+    </header>
+  );
 
   // Modify the early return for when no repository is selected
   if (!currentAccount?.settings?.githubRepository) {
@@ -757,15 +706,92 @@ export default function CodebaseViewer() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-auto bg-white dark:bg-gray-900">
+    <div className="flex flex-col h-full bg-white dark:bg-gray-900">
       {renderHeader()}
-      {renderSearchAndFilters()}
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="px-6">
+        <div className="flex gap-4 items-center">
+          <div className="flex-1">
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search files, functions, or classes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="dark:bg-gray-800"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': {
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                  },
+                  '&:hover fieldset': {
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: 'rgba(255, 255, 255, 0.3)',
+                  },
+                },
+                '& .MuiInputBase-input': {
+                  color: 'inherit',
+                },
+              }}
+              InputProps={{
+                className: 'dark:text-white',
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </div>
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <Select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as FileStatus)}
+              className="dark:bg-gray-800 dark:text-white"
+              MenuProps={{
+                PaperProps: {
+                  className: 'dark:bg-gray-800',
+                  sx: {
+                    '& .MuiMenuItem-root': {
+                      '&:hover': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      },
+                    },
+                  },
+                },
+              }}
+              sx={{
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'rgba(255, 255, 255, 0.1)',
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'rgba(255, 255, 255, 0.2)',
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                },
+              }}
+            >
+              <MenuItem value="all" className="dark:text-gray-200">All Files</MenuItem>
+              <MenuItem value="active" className="dark:text-gray-200">Active Files</MenuItem>
+              <MenuItem value="deleted" className="dark:text-gray-200">Deleted Files</MenuItem>
+            </Select>
+          </FormControl>
+        </div>
+      </div>
+
+      <div className="flex-1 px-6 mt-4">
         {sortedAndFilteredFiles.length > 0 ? (
           <TableContainer 
             component={Paper} 
-            className="bg-white dark:bg-gray-800 shadow-sm overflow-auto"
-            sx={{ maxHeight: 'calc(100vh - 250px)' }}
+            className="bg-white dark:bg-gray-800 shadow-sm"
+            sx={{ 
+              height: 'calc(100vh - 220px)',
+              '& .MuiPaper-root': {
+                backgroundColor: 'inherit',
+              },
+            }}
           >
             <Table stickyHeader>
               <TableHead>
@@ -845,14 +871,14 @@ export default function CodebaseViewer() {
             />
           </TableContainer>
         ) : (
-          <div className="flex flex-col items-center justify-center p-6 text-gray-400">
+          <div className="flex flex-col items-center justify-center h-[calc(100vh-220px)] text-gray-400">
             <XCircle className="w-5 h-5 mb-2" />
             <p className="text-sm">No files found</p>
           </div>
         )}
       </div>
 
-      {/* Add the FileViewer modal */}
+      {/* FileViewer modal */}
       {selectedFile && (
         <FileViewer
           file={selectedFile}
