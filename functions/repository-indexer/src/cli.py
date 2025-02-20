@@ -1,17 +1,20 @@
 import argparse
+import asyncio
 import firebase_admin
 from firebase_admin import credentials
+from pathlib import Path
 from main import process_repository
 from config import load_config
 from services.github_service import GitHubService
-from pathlib import Path
 
-def main():
+async def main():
     parser = argparse.ArgumentParser(description='Repository Indexer CLI')
     parser.add_argument('repo_name', help='Repository name (e.g., "owner/repo")')
     parser.add_argument('--env-file', help='Path to .env file', default='.env')
     parser.add_argument('--account-id', help='Account ID to use', required=True)
     parser.add_argument('--test-mode', action='store_true', help='Use test mode with local token')
+    parser.add_argument('--skip-types', help='File types to skip (comma-separated)', default='')
+    parser.add_argument('--max-files', type=int, help='Maximum number of files to process', default=None)
     
     args = parser.parse_args()
     
@@ -29,14 +32,20 @@ def main():
         })
     
     # Process repository
-    result = process_repository(
+    result = await process_repository(
         repo_full_name=args.repo_name,
         user_id='test_user',  # Only used for logging
         account_id=args.account_id,
         config=config
     )
     
-    print(result)
+    print("\nProcessing completed!")
+    print(f"Status: {result['status']}")
+    if result['status'] == 'success':
+        print(f"Files processed: {result['file_count']}")
+    else:
+        print(f"Error: {result['error']}")
 
 if __name__ == '__main__':
-    main()
+    # Run the async main function
+    asyncio.run(main())

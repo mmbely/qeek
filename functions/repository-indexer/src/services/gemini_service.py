@@ -1,6 +1,7 @@
 import google.generativeai as genai
 from datetime import datetime, UTC
 from typing import TypedDict, List, Optional, Dict
+import asyncio
 
 class StateInteractions(TypedDict):
     reads: List[str]
@@ -148,17 +149,16 @@ CODE CONTENT:
 
 Return only valid JSON matching the structure exactly.'''
 
-    def generate_file_summary(self, content: str, file_path: str) -> Dict:
+    async def generate_file_summary(self, content: str, file_path: str) -> Dict:
         """Generate structured summary for a file using Gemini"""
         try:
             print(f"\nDebug: Generating summary for {file_path}")
             prompt = self.create_analysis_prompt(file_path, content)
             print("Debug: Created prompt")
             
-            response = self.model.generate_content(prompt)
+            # Make the generate_content call properly awaitable
+            response = await asyncio.to_thread(self.model.generate_content, prompt)
             print("Debug: Received response from Gemini")
-            print("Debug: Raw response text:")
-            print(response.text)  # Add this line to see the raw response
             
             # Parse the response as JSON
             analysis = response.text
@@ -186,9 +186,10 @@ Return only valid JSON matching the structure exactly.'''
             
         except Exception as e:
             print(f"Debug: Error in generate_file_summary: {str(e)}")
-            print(f"Debug: Response type: {type(response.text)}")
-            print(f"Debug: Response content:")
-            print(response.text)
+            if 'response' in locals():
+                print(f"Debug: Response type: {type(response.text)}")
+                print(f"Debug: Response content:")
+                print(response.text)
             return {
                 'error': str(e),
                 'generated_at': datetime.now(UTC).isoformat()

@@ -170,8 +170,16 @@ class FirestoreService:
               f"{stats['unchanged']} unchanged, {stats['deleted']} deleted, "
               f"{stats['restored']} restored")
 
-    def update_sync_status(self, repo_ref: firestore.DocumentReference, status: str, error: str = None):
-        """Update repository sync status"""
+    def update_sync_status(self, repo_ref: firestore.DocumentReference, status: str, error: str = None, progress: dict = None):
+        """
+        Update repository sync status
+        
+        Args:
+            repo_ref: Reference to repository document
+            status: Current status ('in_progress', 'completed', 'error')
+            error: Optional error message
+            progress: Optional dict with progress info {'processed': int, 'total': int}
+        """
         print(f"Updating sync status to: {status}")
         update_data = {
             'metadata': {
@@ -182,5 +190,9 @@ class FirestoreService:
         
         if error:
             update_data['metadata']['error'] = error
+            
+        if progress:
+            update_data['metadata']['progress'] = progress
+            update_data['metadata']['progress_updated_at'] = firestore.SERVER_TIMESTAMP
             
         repo_ref.set(update_data, merge=True)
