@@ -1,7 +1,9 @@
 import { functions } from '../config/firebase';
 import { httpsCallable } from 'firebase/functions';
-import { doc, getDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { RepositoryFile } from '../types/repository';
+import { Octokit } from '@octokit/rest';
 
 const storeGithubTokenFunction = httpsCallable(functions, 'storeGithubToken');
 const syncRepoFunction = httpsCallable(functions, 'syncGithubRepository');
@@ -112,3 +114,75 @@ export const syncRepository = async (repositoryName: string, accountId: string) 
     throw new Error(error instanceof Error ? error.message : 'Failed to sync repository');
   }
 };
+
+export async function getFileContent(repoFullName: string, filePath: string, accountId: string): Promise<string> {
+  try {
+    // Get GitHub token from Firebase
+    const tokenDoc = await getDoc(doc(db, 'secure_tokens', accountId));
+    const githubToken = tokenDoc.data()?.githubToken;
+    
+    if (!githubToken) {
+      throw new Error('GitHub token not found for this account');
+    }
+
+    // Initialize Octokit with the retrieved token
+    const octokit = new Octokit({
+      auth: githubToken
+    });
+
+    // Split repoFullName into owner and repo
+    const [owner, repo] = repoFullName.split('/');
+
+    console.log('Fetching from GitHub:', {
+      owner,
+      repo,
+      path: filePath
+    });
+
+    // Get file content from GitHub
+    const response = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: filePath,
+    });
+
+    // GitHub returns content as base64
+    if ('content' in response.data && !Array.isArray(response.data)) {
+      const base64Content = response.data.content.replace(/\n/g, '');
+      const content = atob(base64Content);
+      return content;
+    } else {
+      throw new Error('Invalid response from GitHub API');
+    }
+  } catch (error) {
+    console.error('GitHub API error:', error);
+    throw new Error(`Failed to fetch file content: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+export async function getRepositoryFiles(repoFullName: string): Promise<RepositoryFile[]> {
+  const filesRef = collection(db, 'repositories', repoFullName.replace('/', '_'), 'files');
+  const snapshot = await getDocs(filesRef);
+  
+  return snapshot.docs.map(doc => {
+    // Convert underscores back to slashes for display
+    const path = doc.id.replace(/_/g, '/');
+    const data = doc.data();
+    
+    return {
+      path,
+      content: data.content,
+      sha: data.sha,
+      size: data.size,
+      type: data.type,
+      status: data.status,
+      language: data.language,
+      last_updated: data.last_updated,
+      last_commit_message: data.last_commit_message,
+      metadata: data.metadata,
+      functions: data.functions,
+      classes: data.classes,
+      lastModified: data.lastModified ? new Date(data.lastModified) : undefined
+    } as RepositoryFile;
+  });
+}

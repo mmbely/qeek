@@ -11,7 +11,8 @@ def load_config(env_path=None):
         # Running in Cloud Functions
         return {
             'firebase_project_id': 'qap-ai',
-            'environment': 'production'
+            'environment': 'production',
+            'gemini_api_key': os.getenv('GEMINI_API_KEY')
         }
     else:
         # Local development
@@ -37,5 +38,6 @@ def load_config(env_path=None):
         return {
             'firebase_project_id': os.getenv('REACT_APP_FIREBASE_PROJECT_ID', 'qap-ai'),
             'firebase_credentials_path': str(firebase_creds_path),
-            'environment': os.getenv('ENVIRONMENT', 'development')
+            'environment': os.getenv('ENVIRONMENT', 'development'),
+            'gemini_api_key': os.getenv('GEMINI_API_KEY')
         }

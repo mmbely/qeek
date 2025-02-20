@@ -99,11 +99,23 @@ class FirestoreService:
                 'size': file['size'],
                 'last_updated': file['last_updated'],
                 'last_commit_message': file['last_commit_message'],
+                
+                # Original code metadata
                 'imports': file.get('imports', []),
                 'functions': file.get('functions', []),
                 'classes': file.get('classes', []),
                 'exports': file.get('exports', []),
-                'metadata': file.get('metadata', {}),
+                
+                # New AI analysis fields
+                'summary': file.get('summary', ''),
+                'primary_features': file.get('primary_features', []),
+                'state_management': file.get('state_management', []),
+                'modification_points': file.get('modification_points', []),
+                
+                # Detailed analysis in a subcollection
+                'ai_analysis': file.get('ai_analysis', {}),
+                'analysis_metadata': file.get('analysis_metadata', {}),
+                
                 'status': 'active',
                 'updated_at': firestore.SERVER_TIMESTAMP,
                 'first_indexed_at': existing_files.get(doc_id, {}).get('first_indexed_at') or firestore.SERVER_TIMESTAMP

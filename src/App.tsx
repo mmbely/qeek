@@ -17,6 +17,7 @@ import SettingsLayout from './components/Settings/SettingsLayout';
 import UserManagement from './components/Settings/UserManagement';
 import UserProfile from './components/Settings/UserProfile';
 import AdminSettings from './components/Settings/AdminSettings';
+import FileExtractionTool from './components/Codebase/FileExtractionTool';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -95,6 +96,7 @@ function AppContent() {
         <Route path="/codebase/connect" element={<GitHubSettings />} />
         <Route path="/codebase/files" element={<CodebaseViewer />} />
         <Route path="/codebase/files/:repositoryName" element={<CodebaseViewer />} />
+        <Route path="/codebase/file-extractor" element={<FileExtractionTool />} />
         <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<UserProfile />} />
           <Route path="profile" element={<UserProfile />} />

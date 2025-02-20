@@ -3,12 +3,53 @@ import firebase_admin
 from firebase_admin import credentials
 from services.github_service import GitHubService
 from services.firestore_service import FirestoreService
+from services.gemini_service import GeminiService
+import os
+from dotenv import load_dotenv
+from pathlib import Path
 
-def process_contents(github_service, repo_full_name: str, contents: list):
-    """Process repository contents recursively"""
+async def process_contents(github_service, gemini_service, repo_full_name: str, contents: list):
+    """Process repository contents recursively and generate AI summaries"""
     try:
         files = github_service.get_repository_files(repo_full_name)
-        contents.extend(files)
+        
+        # Generate AI summaries for each file
+        for file_info in files:
+            if isinstance(file_info, dict) and 'path' in file_info:
+                if file_info.get('type') != 'dir':
+                    try:
+                        content = github_service.get_file_content(repo_full_name, file_info['path'])
+                        
+                        # Generate enhanced analysis
+                        analysis_result = await gemini_service.generate_file_summary(content, file_info['path'])
+                        
+                        # Add the analysis to file metadata
+                        file_info['ai_analysis'] = analysis_result['analysis']
+                        file_info['analysis_metadata'] = {
+                            'generated_at': analysis_result['generated_at'],
+                            'model_version': analysis_result['model_version']
+                        }
+                        
+                        # Add searchable fields at root level for better query performance
+                        if 'analysis' in analysis_result:
+                            analysis = analysis_result['analysis']
+                            file_info['summary'] = analysis.get('summary', '')
+                            file_info['primary_features'] = analysis.get('searchMetadata', {}).get('primaryFeatures', [])
+                            file_info['state_management'] = analysis.get('searchMetadata', {}).get('stateManagement', [])
+                            file_info['modification_points'] = [
+                                point
+                                for func in analysis.get('functions', [])
+                                for point in func.get('modificationPoints', [])
+                            ]
+                            
+                    except Exception as e:
+                        print(f"Error processing file {file_info['path']}: {str(e)}")
+                        file_info['ai_analysis'] = {'error': str(e)}
+                
+                contents.append(file_info)
+            else:
+                print(f"Skipping invalid file info: {file_info}")
+        
         return contents
     except Exception as e:
         print(f"Error processing contents: {str(e)}")
@@ -30,6 +71,9 @@ def process_repository(repo_full_name: str, user_id: str, account_id: str, confi
         
         firestore_service = init_firestore_dev(config) if config['environment'] == 'development' else init_firestore_prod(config)
         
+        # Initialize Gemini service
+        gemini_service = GeminiService(config['gemini_api_key'])
+        
         # Get repository metadata
         repo_metadata = github_service.get_repository_metadata(repo_full_name)
         
@@ -39,11 +83,11 @@ def process_repository(repo_full_name: str, user_id: str, account_id: str, confi
             repo_metadata
         )
         
-        # Process repository contents
+        # Process repository contents with AI summaries
         contents = []
-        process_contents(github_service, repo_full_name, contents)
+        await process_contents(github_service, gemini_service, repo_full_name, contents)
         
-        # Store files metadata
+        # Store files metadata with AI summaries
         firestore_service.store_repository_files(repo_ref, contents)
         
         # Update final status
@@ -93,10 +137,21 @@ def get_github_token_from_firebase(account_id):
     
     return github_token
 
+def load_env():
+    """Load environment variables from root .env file"""
+    env_path = Path(__file__).parents[3] / '.env'  # Go up 3 levels to reach root
+    load_dotenv(env_path)
+
+def get_secret(secret_id: str) -> str:
+    """Retrieve secret from environment variables"""
+    load_env()
+    return os.getenv(secret_id)
+
 # This is what the Cloud Function will call
 def cloud_function_handler(repo_full_name: str, user_id: str, account_id: str):
     config = {
-        'environment': 'production',
-        'firebase_project_id': 'qap-ai'
+        'environment': os.getenv('ENVIRONMENT', 'development'),
+        'firebase_project_id': 'qap-ai',
+        'gemini_api_key': get_secret('GEMINI_API_KEY')
     }
     return process_repository(repo_full_name, user_id, account_id, config)
