@@ -1,10 +1,31 @@
 import { useEffect, useState } from 'react';
 import { db } from '../../services/firebase';
-import { collection, query, getDocs, doc, getDoc } from 'firebase/firestore';
-import { Loader2, FolderIcon, XCircle, Search, FileIcon, FileTextIcon, FileCodeIcon, FileJsonIcon, ImageIcon, FileTypeIcon, PackageIcon, Settings2Icon, DatabaseIcon, LockIcon } from 'lucide-react';
+import { collection, query, getDocs, doc, getDoc, onSnapshot, orderBy, limit, Firestore, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { 
+  Loader2, 
+  FolderIcon, 
+  XCircle, 
+  Search, 
+  FileTextIcon, 
+  FileCodeIcon, 
+  FileJsonIcon, 
+  ImageIcon, 
+  FileTypeIcon, 
+  PackageIcon, 
+  Settings2Icon, 
+  DatabaseIcon, 
+  LockIcon, 
+  Github, 
+  Settings, 
+  AlertTriangle, 
+  CheckCircle, 
+  ChevronDown, 
+  ChevronUp 
+} from 'lucide-react';
 import { useAccount } from '../../context/AccountContext';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment } from '@mui/material';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment, FormControl, Select, MenuItem } from '@mui/material';
 import { 
   SiPython, 
   SiJavascript, 
@@ -24,13 +45,30 @@ import {
   SiDocker,
   SiGit
 } from 'react-icons/si';
+import { syncRepository } from '../../services/github';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  Legend,
+  ResponsiveContainer 
+} from 'recharts';
+import { Theme } from '@mui/material/styles';
+import { FileViewer } from './FileViewer';
+import { RepositoryFile } from '../../types/repository';
+import { ExpandableCell } from './components/ExpandableCell';
+import { FileIcon } from './components/FileIcon';
 
-interface RepositoryFile {
-  path: string;
-  content?: string;
-  type?: 'file' | 'directory';
-  [key: string]: any;
-}
+// Remove the duplicate formatFileSize function and keep only one at the top level
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+};
 
 interface Repository {
   files: RepositoryFile[];
@@ -56,190 +94,271 @@ const getContentPreview = (content: string | undefined) => {
 };
 
 const getFileIcon = (filePath: string) => {
-  const extension = filePath.split('.').pop()?.toLowerCase() || '';
-  const fileName = filePath.toLowerCase();
-
-  // Language-specific icons
-  switch (extension) {
-    // Python
-    case 'py':
-      return <SiPython className="h-4 w-4 text-blue-500" />;
-    
-    // JavaScript
-    case 'js':
-      return <SiJavascript className="h-4 w-4 text-yellow-400" />;
-    
-    // TypeScript
-    case 'ts':
-      return <SiTypescript className="h-4 w-4 text-blue-600" />;
-    
-    // React
-    case 'jsx':
-    case 'tsx':
-      return <SiReact className="h-4 w-4 text-cyan-400" />;
-    
-    // Vue
-    case 'vue':
-      return <SiVuedotjs className="h-4 w-4 text-emerald-400" />;
-    
-    // HTML
-    case 'html':
-    case 'htm':
-      return <SiHtml5 className="h-4 w-4 text-orange-500" />;
-    
-    // CSS
-    case 'css':
-    case 'scss':
-    case 'sass':
-    case 'less':
-      return <SiCss3 className="h-4 w-4 text-blue-500" />;
-    
-    // Java
-    case 'java':
-      return <SiJava className="h-4 w-4 text-red-500" />;
-    
-    // PHP
-    case 'php':
-      return <SiPhp className="h-4 w-4 text-purple-500" />;
-    
-    // Ruby
-    case 'rb':
-      return <SiRuby className="h-4 w-4 text-red-600" />;
-    
-    // Swift
-    case 'swift':
-      return <SiSwift className="h-4 w-4 text-orange-500" />;
-    
-    // Kotlin
-    case 'kt':
-    case 'kts':
-      return <SiKotlin className="h-4 w-4 text-purple-600" />;
-    
-    // Go
-    case 'go':
-      return <SiGo className="h-4 w-4 text-cyan-500" />;
-    
-    // Rust
-    case 'rs':
-      return <SiRust className="h-4 w-4 text-orange-600" />;
-    
-    // Markdown
-    case 'md':
-    case 'mdx':
-      return <SiMarkdown className="h-4 w-4 text-gray-500" />;
-    
-    // JSON
-    case 'json':
-      return <FileJsonIcon className="h-4 w-4 text-yellow-600" />;
-    
-    // YAML
-    case 'yml':
-    case 'yaml':
-      return <FileCodeIcon className="h-4 w-4 text-gray-500" />;
-  }
-
-  // Special files
-  if (fileName === 'dockerfile') {
-    return <SiDocker className="h-4 w-4 text-blue-500" />;
-  }
-  if (fileName === '.gitignore' || fileName.endsWith('.git')) {
-    return <SiGit className="h-4 w-4 text-orange-600" />;
-  }
-
-  // Directory
-  if (!extension || extension === filePath) {
-    return <FolderIcon className="h-4 w-4 text-yellow-400" />;
-  }
-
-  // Default file icon
-  return <FileIcon className="h-4 w-4 text-gray-400" />;
+  return <FileIcon filePath={filePath} className="h-4 w-4 text-gray-400" />;
 };
 
-// Add this new component for file viewing
-const FileViewer = ({ file, onClose }: { file: RepositoryFile; onClose: () => void }) => {
+type SortColumn = 'path' | 'status' | 'language' | 'size' | 'last_updated' | 'functions' | 'classes';
+type SortDirection = 'asc' | 'desc';
+
+// Add status type
+type FileStatus = 'active' | 'deleted' | 'all';
+
+// Add this new component for the not connected state
+const NotConnectedState = () => {
+  const navigate = useNavigate();
+  
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            {getFileIcon(file.path)}
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-              {file.path}
-            </h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <XCircle className="h-5 w-5" />
-          </button>
-        </div>
+    <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] gap-6 p-8">
+      <div className="flex flex-col items-center gap-2">
+        <Github className="h-12 w-12 text-gray-400 dark:text-gray-600" />
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-200">
+          Connect to GitHub
+        </h2>
+        <p className="text-center text-gray-600 dark:text-gray-400 max-w-md">
+          To view your codebase, you'll need to connect your GitHub account and select a repository.
+        </p>
+      </div>
+      
+      <div className="flex flex-col gap-4 w-full max-w-md">
+        <button
+          onClick={() => navigate('/settings/github')}
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-[#2b2f44] hover:bg-[#363b52] text-gray-200 rounded-lg transition-colors duration-200"
+        >
+          <Settings className="h-5 w-5" />
+          Configure GitHub Settings
+        </button>
         
-        <div className="flex-1 overflow-auto p-4">
-          {file.type === 'directory' ? (
-            <div className="text-gray-500 dark:text-gray-400">
-              This is a directory
-            </div>
-          ) : (
-            <pre className="font-mono text-sm bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-auto">
-              <code className="text-gray-900 dark:text-gray-100">
-                {file.content || 'No content available'}
-              </code>
-            </pre>
-          )}
-        </div>
-        
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
-          <div className="flex gap-4">
-            <span>Size: {file.size || 'Unknown'}</span>
-            <span>Last indexed: {formatDate(file.indexed_at)}</span>
-          </div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-center">You'll need to:</p>
+          <ol className="list-decimal list-inside space-y-1 mt-2">
+            <li>Add your GitHub Personal Access Token</li>
+            <li>Select a repository to analyze</li>
+            <li>Wait for the initial sync to complete</li>
+          </ol>
         </div>
       </div>
     </div>
   );
 };
 
-type SortColumn = 'path' | 'type' | 'size' | 'indexed_at';
-type SortDirection = 'asc' | 'desc';
+interface SyncMetrics extends DocumentData {
+  id?: string;
+  timestamp: {
+    seconds: number;
+    nanoseconds: number;
+  };
+  stats: {
+    new: number;
+    updated: number;
+    unchanged: number;
+    deleted: number;
+    restored: number;
+  };
+  totals: {
+    active_files: number;
+    deleted_files: number;
+    total_files: number;
+  };
+}
+
+export const CodebaseMetrics = ({ repoId }: { repoId: string }) => {
+  const [metrics, setMetrics] = useState<SyncMetrics[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const metricsRef = collection(db, 'repositories', repoId, 'metrics');
+        const metricsQuery = query(metricsRef, orderBy('timestamp', 'desc'), limit(10));
+        const querySnapshot = await getDocs(metricsQuery);
+        
+        const metricsData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as SyncMetrics[];
+        
+        // Validate the data structure
+        const validMetrics = metricsData.filter(metric => 
+          metric.timestamp && 
+          metric.stats && 
+          metric.totals
+        );
+        
+        setMetrics(validMetrics);
+      } catch (error) {
+        console.error('Error fetching metrics:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMetrics();
+  }, [repoId]);
+
+  if (loading) {
+    return <div>Loading metrics...</div>;
+  }
+
+  const getDateFromTimestamp = (timestamp: { seconds: number; nanoseconds: number }) => {
+    return new Date(timestamp.seconds * 1000);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Latest Sync Stats */}
+      <div className="grid grid-cols-5 gap-4">
+        {metrics[0]?.stats && Object.entries(metrics[0].stats).map(([key, value]) => (
+          <div key={key} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+            <div className="text-sm text-gray-500 dark:text-gray-400 capitalize">
+              {key}
+            </div>
+            <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+              {value.toString()}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Historical Chart */}
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+        <h3 className="text-lg font-semibold mb-4">Sync History</h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={[...metrics].reverse()}>
+              <XAxis 
+                dataKey="timestamp" 
+                tickFormatter={(timestamp) => 
+                  getDateFromTimestamp(timestamp).toLocaleDateString()
+                } 
+              />
+              <YAxis />
+              <Tooltip 
+                labelFormatter={(timestamp) => 
+                  getDateFromTimestamp(timestamp).toLocaleString()
+                }
+              />
+              <Legend />
+              <Bar dataKey="stats.new" name="New" fill="#4CAF50" />
+              <Bar dataKey="stats.updated" name="Updated" fill="#2196F3" />
+              <Bar dataKey="stats.deleted" name="Deleted" fill="#F44336" />
+              <Bar dataKey="stats.restored" name="Restored" fill="#FF9800" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* File Status Summary */}
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+        <h3 className="text-lg font-semibold mb-4">Current Status</h3>
+        <div className="grid grid-cols-3 gap-4">
+          {metrics[0]?.totals && Object.entries(metrics[0].totals).map(([key, value]) => (
+            <div key={key} className="text-center">
+              <div className="text-sm text-gray-500 dark:text-gray-400 capitalize">
+                {key.replace('_', ' ')}
+              </div>
+              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                {value.toString()}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const columns: { id: string; label: string; minWidth?: number }[] = [
+  { id: 'path', label: 'File Path', minWidth: 200 },
+  { id: 'status', label: 'Status', minWidth: 100 },
+  { id: 'language', label: 'Language', minWidth: 100 },
+  { id: 'functions', label: 'Functions', minWidth: 120 },
+  { id: 'classes', label: 'Classes', minWidth: 120 },
+  { id: 'size', label: 'Size', minWidth: 100 },
+  { id: 'last_updated', label: 'Last Updated', minWidth: 160 }
+];
+
+// Helper function to get the name from either a string or an object with name property
+const getName = (item: string | { name: string }): string => {
+  if (typeof item === 'string') {
+    return item;
+  }
+  return item.name;
+};
+
+// Add this helper function for searching
+const searchFile = (file: RepositoryFile, searchTerm: string): boolean => {
+  const searchLower = searchTerm.toLowerCase();
+  
+  // Search in file path
+  if (file.path.toLowerCase().includes(searchLower)) {
+    return true;
+  }
+  
+  // Search in functions
+  if (file.functions?.some(func => 
+    func.toLowerCase().includes(searchLower)
+  )) {
+    return true;
+  }
+  
+  // Search in classes
+  if (file.classes?.some(cls => 
+    cls.toLowerCase().includes(searchLower)
+  )) {
+    return true;
+  }
+  
+  return false;
+};
 
 export default function CodebaseViewer() {
+  const { user } = useAuth();
+  const { currentAccount, isLoading: accountLoading } = useAccount();
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<RepositoryFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<RepositoryFile | null>(null);
-  const { currentAccount, isLoading: accountLoading } = useAccount();
   const navigate = useNavigate();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortColumn, setSortColumn] = useState<SortColumn>('path');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [syncStatus, setSyncStatus] = useState<{
+    status: 'idle' | 'syncing' | 'completed' | 'failed';
+    lastSynced?: Date;
+    error?: string;
+  }>({ status: 'idle' });
+  const [githubStatus, setGithubStatus] = useState<{
+    isConnected: boolean;
+    lastSynced?: Date;
+    error?: string;
+  }>({ isConnected: false });
+  const [filterStatus, setFilterStatus] = useState<FileStatus>('all');
+
+  // Add debug logging
+  useEffect(() => {
+    console.log('CodebaseViewer - Account state:', {
+      isLoading: accountLoading,
+      currentAccount,
+      githubRepo: currentAccount?.settings?.githubRepository
+    });
+  }, [accountLoading, currentAccount]);
 
   useEffect(() => {
-    if (accountLoading) return;
+    const fetchRepo = async () => {
+      if (!currentAccount?.settings?.githubRepository) {
+        console.log('No GitHub repository configured');
+        return;
+      }
 
-    if (!currentAccount?.settings?.githubRepository) {
-      setLoading(false);
-      setError('No repository selected');
-      return;
-    }
+      const repoPath = currentAccount.settings.githubRepository.replace('/', '_');
+      console.log('Fetching repository with path:', repoPath);
 
-    const fetchRepository = async () => {
       try {
-        setLoading(true);
-        setError(null);
-
-        const repoName = currentAccount.settings.githubRepository;
-        if (!repoName) {
-          setError('No repository selected');
-          return;
-        }
-
-        // Get the repository document first to check ownership
-        const repoRef = doc(db, 'repositories', repoName.replace('/', '_'));
+        const repoRef = doc(db, 'repositories', repoPath);
         const repoDoc = await getDoc(repoRef);
-
+        
         if (!repoDoc.exists()) {
           setError('Repository not found');
           return;
@@ -261,24 +380,86 @@ export default function CodebaseViewer() {
           return;
         }
 
-        const fetchedFiles = filesSnapshot.docs.map(doc => ({
-          path: doc.id,
-          ...doc.data()
-        })) as RepositoryFile[];
+        const fetchedFiles = filesSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            content: data.content || '',
+            sha: data.sha || '',
+            type: data.type || '',
+            classes: data.classes || [],
+            exports: data.exports || [],
+            first_indexed_at: data.first_indexed_at,
+            functions: data.functions || [],
+            imports: data.imports || [],
+            language: data.language || '',
+            last_commit_message: data.last_commit_message || '',
+            last_updated: data.last_updated || '',
+            metadata: {
+              content_type: data.metadata?.content_type || '',
+              sha: data.metadata?.sha || '',
+              type: data.metadata?.type || ''
+            },
+            name: data.name || '',
+            path: data.path || '',
+            size: data.size || 0,
+            status: data.status || 'active',
+            updated_at: data.updated_at || new Date().toISOString()
+          } as RepositoryFile;
+        });
 
         console.log('Files found:', fetchedFiles);
         setFiles(fetchedFiles);
 
-      } catch (err) {
-        console.error('Error fetching repository:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch repository');
+      } catch (error) {
+        console.error('Error fetching repository:', error);
+        setError(error instanceof Error ? error.message : 'Failed to fetch repository');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchRepository();
-  }, [currentAccount, accountLoading]);
+    fetchRepo();
+  }, [currentAccount]);
+
+  // Monitor repository sync status
+  useEffect(() => {
+    if (!currentAccount?.settings?.githubRepository || !user?.uid) return;
+
+    const repoId = currentAccount.settings.githubRepository.replace('/', '_');
+    const unsubscribe = onSnapshot(
+      doc(db, 'repositories', repoId),
+      (doc) => {
+        if (doc.exists()) {
+          const data = doc.data();
+          setSyncStatus({
+            status: data.metadata.sync_status,
+            lastSynced: data.metadata.last_synced?.toDate(),
+            error: data.metadata.error
+          });
+        }
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentAccount?.settings?.githubRepository, user]);
+
+  // Handle manual sync
+  const handleSync = async () => {
+    if (!currentAccount?.settings?.githubRepository || !currentAccount.id) return;
+
+    try {
+      setLoading(true);
+      await syncRepository(
+        currentAccount.settings.githubRepository,
+        currentAccount.id
+      );
+    } catch (error) {
+      console.error('Failed to sync repository:', error);
+      setError('Failed to sync repository. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -308,18 +489,25 @@ export default function CodebaseViewer() {
         case 'path':
           return multiplier * a.path.localeCompare(b.path);
         
-        case 'type':
-          return multiplier * ((a.type || 'file').localeCompare(b.type || 'file'));
+        case 'status':
+          return multiplier * (a.status || 'active').localeCompare(b.status || 'active');
+        
+        case 'language':
+          return multiplier * (a.language || '').localeCompare(b.language || '');
         
         case 'size':
-          const sizeA = a.size ? parseInt(a.size.toString()) : 0;
-          const sizeB = b.size ? parseInt(b.size.toString()) : 0;
-          return multiplier * (sizeA - sizeB);
+          return multiplier * (a.size - b.size);
         
-        case 'indexed_at':
-          const dateA = a.indexed_at ? new Date(a.indexed_at).getTime() : 0;
-          const dateB = b.indexed_at ? new Date(b.indexed_at).getTime() : 0;
+        case 'last_updated':
+          const dateA = a.last_updated ? new Date(a.last_updated).getTime() : 0;
+          const dateB = b.last_updated ? new Date(b.last_updated).getTime() : 0;
           return multiplier * (dateA - dateB);
+        
+        case 'functions':
+          return multiplier * ((a.functions?.length || 0) - (b.functions?.length || 0));
+        
+        case 'classes':
+          return multiplier * ((a.classes?.length || 0) - (b.classes?.length || 0));
         
         default:
           return 0;
@@ -330,102 +518,44 @@ export default function CodebaseViewer() {
   const SortIcon = ({ column }: { column: SortColumn }) => {
     if (sortColumn !== column) {
       return (
-        <span className="text-gray-400 ml-2">↕</span>
+        <span className="text-gray-400 dark:text-gray-500 ml-2">↕</span>
       );
     }
     return (
-      <span className="text-gray-900 dark:text-white ml-2">
+      <span className="text-gray-900 dark:text-gray-100 ml-2">
         {sortDirection === 'asc' ? '↑' : '↓'}
       </span>
     );
   };
 
-  // Get sorted and filtered files
-  const sortedAndFilteredFiles = getSortedFiles(
-    files.filter((file) => 
-      file.path.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  );
-
-  const renderSyncStatus = () => {
-    if (!currentAccount?.settings?.githubRepository) return null;
-
-    if (error) {
-      return (
-        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-          <div className="flex items-center">
-            <XCircle className="h-5 w-5 text-red-500 mr-2" />
-            <div>
-              <p className="text-sm text-red-700 dark:text-red-400">
-                {error}
-              </p>
-              <button
-                onClick={() => navigate('/codebase/connect')}
-                className="mt-1 text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 underline"
-              >
-                Try syncing again
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return null;
-  };
-
-  if (accountLoading || loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-6 h-6 animate-spin" />
-      </div>
-    );
-  }
-
-  if (!currentAccount?.settings?.githubRepository) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-4">
-        <p className="text-gray-500 dark:text-gray-400">
-          No repository selected
-        </p>
-        <button
-          onClick={() => navigate('/settings/github')}
-          className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
-        >
-          Go to GitHub Settings to select a repository
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900">
-      <header className="mb-6 px-6 pt-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Repository: {currentAccount.settings.githubRepository}
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Browse repository files</p>
-          </div>
-          <button
-            onClick={() => navigate('/codebase/connect')}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-          >
-            Sync Repository
-          </button>
-        </div>
-      </header>
-
-      <div className="p-6">
-        <div className="mb-6">
+  // Update the search and filter section
+  const renderSearchAndFilters = () => (
+    <div className="px-6">
+      <div className="flex gap-4 items-center">
+        <div className="flex-1">
           <TextField
             fullWidth
             size="small"
-            placeholder="Search files..."
+            placeholder="Search files, functions, or classes..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="dark:bg-gray-800"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': {
+                  borderColor: 'rgba(255, 255, 255, 0.1)',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'rgba(255, 255, 255, 0.2)',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                },
+              },
+              '& .MuiInputBase-input': {
+                color: 'inherit',
+              },
+            }}
             InputProps={{
               className: 'dark:text-white',
               startAdornment: (
@@ -436,54 +566,255 @@ export default function CodebaseViewer() {
             }}
           />
         </div>
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <Select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as FileStatus)}
+            className="dark:bg-gray-800 dark:text-white"
+            MenuProps={{
+              PaperProps: {
+                className: 'dark:bg-gray-800',
+                sx: {
+                  '& .MuiMenuItem-root': {
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    },
+                  },
+                },
+              },
+            }}
+            sx={{
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(255, 255, 255, 0.2)',
+              },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(255, 255, 255, 0.3)',
+              },
+            }}
+          >
+            <MenuItem value="all" className="dark:text-gray-200">All Files</MenuItem>
+            <MenuItem value="active" className="dark:text-gray-200">Active Files</MenuItem>
+            <MenuItem value="deleted" className="dark:text-gray-200">Deleted Files</MenuItem>
+          </Select>
+        </FormControl>
+      </div>
+    </div>
+  );
 
+  // Update the sortedAndFilteredFiles calculation
+  const sortedAndFilteredFiles = getSortedFiles(
+    files.filter((file) => {
+      const matchesSearch = searchTerm ? searchFile(file, searchTerm) : true;
+      const matchesStatus = filterStatus === 'all' ? true : (file.status || 'active') === filterStatus;
+      return matchesSearch && matchesStatus;
+    })
+  );
+
+  // Update the header section to include the search bar
+  const renderHeader = () => (
+    <header className="mb-6 px-6 pt-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Codebase</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {currentAccount?.settings?.githubRepository || 'No repository selected'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {syncStatus.error ? (
+            <button
+              onClick={() => navigate('/settings/github')}
+              className="flex items-center gap-2 px-3 py-2 text-red-600 dark:text-red-400 
+                         hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+              title={syncStatus.error}
+            >
+              <AlertTriangle className="h-5 w-5" />
+            </button>
+          ) : (
+            <button
+              onClick={handleSync}
+              disabled={loading || syncStatus.status === 'syncing'}
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 
+                         disabled:bg-gray-300 dark:disabled:bg-gray-700 
+                         disabled:text-gray-500 dark:disabled:text-gray-400 
+                         disabled:cursor-not-allowed transition-colors duration-150"
+            >
+              {loading || syncStatus.status === 'syncing' ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                  Syncing...
+                </>
+              ) : (
+                'Sync Now'
+              )}
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/settings/github')}
+            className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 
+                       dark:hover:bg-gray-700 rounded-md transition-colors"
+            title="GitHub Settings"
+          >
+            <Settings className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+
+  // Modify the early return for when no repository is selected
+  if (!currentAccount?.settings?.githubRepository) {
+    return <NotConnectedState />;
+  }
+
+  // Modify the loading state to be more informative
+  if (accountLoading || loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+        <p className="text-gray-600 dark:text-gray-400">
+          {accountLoading ? 'Loading account...' : 'Loading repository...'}
+        </p>
+      </div>
+    );
+  }
+
+  // Modify the error state to be more helpful
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] gap-4">
+        <XCircle className="w-12 h-12 text-red-500" />
+        <div className="text-center">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-200 mb-2">
+            {error}
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            There was an error loading your repository.
+          </p>
+          <button
+            onClick={() => navigate('/settings/github')}
+            className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline"
+          >
+            Check GitHub Settings
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-white dark:bg-gray-900">
+      {renderHeader()}
+      <div className="px-6">
+        <div className="flex gap-4 items-center">
+          <div className="flex-1">
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search files, functions, or classes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="dark:bg-gray-800"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': {
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                  },
+                  '&:hover fieldset': {
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: 'rgba(255, 255, 255, 0.3)',
+                  },
+                },
+                '& .MuiInputBase-input': {
+                  color: 'inherit',
+                },
+              }}
+              InputProps={{
+                className: 'dark:text-white',
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </div>
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <Select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as FileStatus)}
+              className="dark:bg-gray-800 dark:text-white"
+              MenuProps={{
+                PaperProps: {
+                  className: 'dark:bg-gray-800',
+                  sx: {
+                    '& .MuiMenuItem-root': {
+                      '&:hover': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      },
+                    },
+                  },
+                },
+              }}
+              sx={{
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'rgba(255, 255, 255, 0.1)',
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'rgba(255, 255, 255, 0.2)',
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                },
+              }}
+            >
+              <MenuItem value="all" className="dark:text-gray-200">All Files</MenuItem>
+              <MenuItem value="active" className="dark:text-gray-200">Active Files</MenuItem>
+              <MenuItem value="deleted" className="dark:text-gray-200">Deleted Files</MenuItem>
+            </Select>
+          </FormControl>
+        </div>
+      </div>
+
+      <div className="flex-1 px-6 mt-4">
         {sortedAndFilteredFiles.length > 0 ? (
           <TableContainer 
             component={Paper} 
             className="bg-white dark:bg-gray-800 shadow-sm"
+            sx={{ 
+              height: 'calc(100vh - 220px)',
+              '& .MuiPaper-root': {
+                backgroundColor: 'inherit',
+              },
+            }}
           >
-            <Table>
+            <Table stickyHeader>
               <TableHead>
                 <TableRow className="bg-gray-50 dark:bg-gray-700">
-                  <TableCell 
-                    className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 cursor-pointer"
-                    onClick={() => handleSort('path')}
-                  >
-                    <div className="flex items-center">
-                      File Path
-                      <SortIcon column="path" />
-                    </div>
-                  </TableCell>
-                  <TableCell 
-                    className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 cursor-pointer"
-                    onClick={() => handleSort('type')}
-                  >
-                    <div className="flex items-center">
-                      Type
-                      <SortIcon column="type" />
-                    </div>
-                  </TableCell>
-                  <TableCell 
-                    className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 cursor-pointer"
-                    onClick={() => handleSort('size')}
-                  >
-                    <div className="flex items-center">
-                      Size
-                      <SortIcon column="size" />
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
-                    Preview
-                  </TableCell>
-                  <TableCell 
-                    className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 cursor-pointer"
-                    onClick={() => handleSort('indexed_at')}
-                  >
-                    <div className="flex items-center">
-                      Indexed At
-                      <SortIcon column="indexed_at" />
-                    </div>
-                  </TableCell>
+                  {columns.map((column) => (
+                    <TableCell
+                      key={column.id}
+                      className="cursor-pointer"
+                      sx={{
+                        '&.MuiTableCell-head': {
+                          backgroundColor: 'inherit',
+                          color: 'inherit',
+                          borderBottom: '1px solid var(--border-color)',
+                        },
+                      }}
+                      onClick={() => handleSort(column.id as SortColumn)}
+                    >
+                      <div className="flex items-center text-gray-900 dark:text-gray-100">
+                        {column.label}
+                        <SortIcon column={column.id as SortColumn} />
+                      </div>
+                    </TableCell>
+                  ))}
                 </TableRow>
               </TableHead>
               <TableBody className="dark:bg-gray-800">
@@ -502,59 +833,52 @@ export default function CodebaseViewer() {
                         </div>
                       </TableCell>
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
-                        {file.type || 'file'}
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          (file.status || 'active') === 'active'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                        }`}>
+                          {file.status || 'active'}
+                        </span>
                       </TableCell>
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
-                        {file.size || '-'}
+                        {file.language || '-'}
                       </TableCell>
-                      <TableCell 
-                        className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 max-w-md"
-                      >
-                        <div className="truncate font-mono text-sm">
-                          {getContentPreview(file.content)}
-                        </div>
+                      <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 max-w-[200px]">
+                        <ExpandableCell items={file.functions} />
                       </TableCell>
-                      <TableCell className="text-gray-600 dark:text-gray-400 border-b dark:border-gray-600">
-                        {formatDate(file.indexed_at)}
+                      <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 max-w-[200px]">
+                        <ExpandableCell items={file.classes} />
+                      </TableCell>
+                      <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
+                        {formatFileSize(file.size)}
+                      </TableCell>
+                      <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
+                        {file.last_updated ? new Date(file.last_updated).toLocaleString() : '-'}
                       </TableCell>
                     </TableRow>
                   ))}
               </TableBody>
             </Table>
             <TablePagination
-              rowsPerPageOptions={[5, 10, 25]}
               component="div"
               count={sortedAndFilteredFiles.length}
               rowsPerPage={rowsPerPage}
               page={page}
               onPageChange={handleChangePage}
               onRowsPerPageChange={handleChangeRowsPerPage}
-              className="text-gray-900 dark:text-gray-100"
-              sx={{
-                '.MuiTablePagination-select': {
-                  color: 'inherit',
-                },
-                '.MuiTablePagination-selectIcon': {
-                  color: 'inherit',
-                },
-                '.MuiTablePagination-displayedRows': {
-                  color: 'inherit',
-                },
-                '.MuiIconButton-root': {
-                  color: 'inherit',
-                },
-              }}
+              className="text-gray-900 dark:text-gray-100 sticky bottom-0 bg-white dark:bg-gray-800"
             />
           </TableContainer>
         ) : (
-          <div className="flex flex-col items-center justify-center p-6 text-gray-400">
+          <div className="flex flex-col items-center justify-center h-[calc(100vh-220px)] text-gray-400">
             <XCircle className="w-5 h-5 mb-2" />
             <p className="text-sm">No files found</p>
           </div>
         )}
       </div>
 
-      {/* Add the FileViewer modal */}
+      {/* FileViewer modal */}
       {selectedFile && (
         <FileViewer
           file={selectedFile}

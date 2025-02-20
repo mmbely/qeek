@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 
@@ -15,25 +15,11 @@ const firebaseConfig = {
   databaseURL: process.env.REACT_APP_FIREBASE_DATABASE_URL,
 };
 
-const app = initializeApp(firebaseConfig);
-const functions = getFunctions(app);
-const firestore = getFirestore(app);
-const auth = getAuth(app);
-const database = getDatabase(app);
+export const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app);
+export const auth = getAuth(app);
+export const functions = getFunctions(app);
+export const database = getDatabase(app);
 
-// For backward compatibility
-const db = firestore;
-
-// Only connect Functions to emulator in development
-if (process.env.NODE_ENV === 'development') {
-  connectFunctionsEmulator(functions, '127.0.0.1', 5003);
-}
-
-export { 
-  app, 
-  functions, 
-  firestore, 
-  auth, 
-  database,
-  db  // For backward compatibility
-};
+// Remove or comment out any connectFunctionsEmulator calls
+// if they exist in your code

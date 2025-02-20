@@ -19,7 +19,10 @@ class FirestoreService:
             'metadata': {
                 **metadata,
                 'last_synced': datetime.now(),
-                'sync_status': 'syncing'
+                'sync_status': 'syncing',
+                'files_processed': 0,
+                'total_files': 0,
+                'error': None
             }
         }, merge=True)
 
@@ -29,6 +32,14 @@ class FirestoreService:
         """
         repo_ref = self.db.collection('repositories').document(repo_id)
         batch = self.db.batch()
+        files_processed = 0
+        
+        # Update total file count
+        repo_ref.set({
+            'metadata': {
+                'total_files': len(files)
+            }
+        }, merge=True)
         
         for file in files:
             file_ref = repo_ref.collection('files').document(file['path'])
@@ -36,6 +47,16 @@ class FirestoreService:
                 **file,
                 'indexed_at': datetime.now()
             })
+            
+            files_processed += 1
+            
+            # Update progress every 100 files
+            if files_processed % 100 == 0:
+                repo_ref.set({
+                    'metadata': {
+                        'files_processed': files_processed
+                    }
+                }, merge=True)
             
             # Commit every 500 files (Firestore batch limit)
             if len(batch._writes) >= 500:
@@ -45,8 +66,15 @@ class FirestoreService:
         # Commit any remaining files
         if len(batch._writes) > 0:
             batch.commit()
+        
+        # Update final file count
+        repo_ref.set({
+            'metadata': {
+                'files_processed': files_processed
+            }
+        }, merge=True)
 
-    def update_sync_status(self, repo_id: str, status: str):
+    def update_sync_status(self, repo_id: str, status: str, error: str = None):
         """
         Update repository sync status
         """
@@ -54,6 +82,7 @@ class FirestoreService:
         repo_ref.set({
             'metadata': {
                 'sync_status': status,
-                'last_synced': datetime.now()
+                'last_synced': datetime.now(),
+                'error': error
             }
         }, merge=True)

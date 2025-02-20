@@ -5,14 +5,20 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    function isSuperAdmin() {
+      return request.auth.uid == 'RnInDl1twWVwyWWMcEkB1sETtoq1';
+    }
+    
     function getAccount(accountId) {
       return get(/databases/$(database)/documents/accounts/$(accountId));
     }
     
     function isAccountMember(accountId) {
+      let account = getAccount(accountId);
       return isSignedIn() && 
         exists(/databases/$(database)/documents/accounts/$(accountId)) &&
-        request.auth.uid in getAccount(accountId).data.members;
+        (account.data.members[request.auth.uid] != null || 
+         request.auth.uid == accountId);
     }
     
     function isTicketInAccount(ticketData) {
@@ -28,11 +34,100 @@ service cloud.firestore {
       allow delete: if isTicketInAccount(resource.data);
     }
 
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && 
+        request.auth.uid == userId;
+      allow delete: if isSignedIn() && 
+        request.auth.uid == userId;
+    }
+
     match /accounts/{accountId} {
-      allow read: if isAccountMember(accountId);
-      allow write: if isAccountMember(accountId) && 
-                     request.auth.uid in resource.data.members &&
-                     request.auth.uid in request.resource.data.members;
+      allow read: if isSignedIn() && 
+        (resource.data.members[request.auth.uid] != null || 
+         request.auth.uid == accountId);
+      allow create: if isSignedIn() && 
+        accountId == request.auth.uid &&
+        request.resource.data.members[request.auth.uid] != null &&
+        request.resource.data.members[request.auth.uid].role == "owner" &&
+        request.resource.data.ownerId == request.auth.uid;
+    }
+
+    match /messages/{messageId} {
+      function isMessageParticipant() {
+        let msg = resource.data;
+        return isSignedIn() && (
+          (msg.participants != null && request.auth.uid in msg.participants) ||
+          (msg.channelId.split('_')[0] == 'dm' && 
+           (request.auth.uid == msg.channelId.split('_')[1] || 
+            request.auth.uid == msg.channelId.split('_')[2])) ||
+          (msg.accountId != null && isAccountMember(msg.accountId))
+        );
+      }
+
+      allow read: if isSignedIn() && (
+        resource.data.participants != null && request.auth.uid in resource.data.participants ||
+        resource.data.accountId != null && isAccountMember(resource.data.accountId)
+      );
+      
+      allow create: if isSignedIn() && 
+        request.resource.data.userId == request.auth.uid &&
+        (
+          // For DM channels
+          (request.resource.data.channelId.matches('^dm_.*') && 
+           (request.resource.data.participants == null || 
+            request.auth.uid in request.resource.data.participants)) ||
+          // For general channel
+          (!request.resource.data.channelId.matches('^dm_.*') && 
+           isAccountMember(request.resource.data.accountId))
+        );
+
+      allow update: if isSignedIn() && 
+        (
+          // Allow message owner to update the content
+          (resource.data.userId == request.auth.uid &&
+           request.resource.data.userId == request.auth.uid &&
+           request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['content', 'edited', 'editedAt'])) ||
+          // Allow reaction updates
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['reactions'])
+        );
+        
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /repositories/{repoId} {
+      // Allow read/write if user is super admin
+      allow read, write: if isSuperAdmin();
+      
+      // Regular user access
+      allow read: if isSignedIn() && (
+        !('accountId' in resource.data) ||
+        resource.data.accountId == null ||
+        isAccountMember(resource.data.accountId)
+      );
+      
+      match /files/{fileId} {
+        allow read, write: if isSuperAdmin();
+        
+        // Regular user access
+        allow read: if isSignedIn() && (
+          !('accountId' in get(/databases/$(database)/documents/repositories/$(repoId)).data) ||
+          get(/databases/$(database)/documents/repositories/$(repoId)).data.accountId == null ||
+          isAccountMember(get(/databases/$(database)/documents/repositories/$(repoId)).data.accountId)
+        );
+      }
+    }
+
+    match /secure_tokens/{tokenId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == tokenId || 
+        isAccountMember(tokenId) ||
+        tokenId == request.auth.uid
+      );
+      // Only allow write through Cloud Functions
+      allow write: if false;
     }
   }
 }

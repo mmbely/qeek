@@ -8,6 +8,13 @@ import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import { theme, commonStyles, typography, layout, animations } from '../../styles';
 import { useAccount } from '../../context/AccountContext';
+import { Timestamp } from 'firebase/firestore';
+import { getTimestampMillis, timestampToDate, formatMessageDate } from '../../utils/dateUtils';
+
+// Add type guard for Firestore Timestamp
+const isFirestoreTimestamp = (value: any): value is Timestamp => {
+  return value && typeof value.toMillis === 'function';
+};
 
 export default function ChatInterface() {
   const { userId } = useParams();
@@ -29,29 +36,62 @@ export default function ChatInterface() {
     ? getDMChannelId(user.uid, userId)
     : 'general';
 
-  console.log('Current channel ID:', channelId); // Debug log
+  // Debug current state
+  useEffect(() => {
+    console.log('[ChatInterface] Current state:', {
+      user: user ? { uid: user.uid } : null,
+      currentAccount: currentAccount ? { id: currentAccount.id } : null,
+      userId,
+      channelId
+    });
+  }, [user, currentAccount, userId, channelId]);
 
   // Subscribe to messages
   useEffect(() => {
-    if (!user || !currentAccount?.id) {
-      console.log('No user or account, skipping message subscription');
+    if (!user) {
+      console.log('[ChatInterface] No user, waiting for auth...');
       return;
     }
 
-    console.log('Setting up message subscription for channel:', channelId);
+    if (!currentAccount?.id) {
+      console.log('[ChatInterface] No current account, waiting for account context...');
+      return;
+    }
+
+    console.log('[ChatInterface] Setting up message subscription:', {
+      channelId,
+      accountId: currentAccount.id,
+      userId: user.uid
+    });
+    
     setIsLoading(true);
     
-    const unsubscribe = subscribeToMessages(channelId, (newMessages) => {
-      console.log('Received messages:', newMessages);
-      setMessages(newMessages);
-      setIsLoading(false);
-    });
+    const unsubscribe = subscribeToMessages(
+      channelId,
+      currentAccount.id,
+      (newMessages) => {
+        console.log('[ChatInterface] Received messages:', newMessages);
+        
+        // Ensure all timestamps are numbers
+        const processedMessages = newMessages.map(msg => ({
+          ...msg,
+          timestamp: typeof msg.timestamp === 'number'
+            ? msg.timestamp
+            : isFirestoreTimestamp(msg.timestamp)
+              ? msg.timestamp.toMillis()
+              : Date.now()
+        }));
+
+        setMessages(processedMessages);
+        setIsLoading(false);
+      }
+    );
 
     return () => {
-      console.log('Cleaning up message subscription');
+      console.log('[ChatInterface] Cleaning up message subscription');
       unsubscribe();
     };
-  }, [user, channelId, currentAccount]);
+  }, [user, currentAccount, channelId]);
 
   // Subscribe to users
   useEffect(() => {
@@ -86,15 +126,20 @@ export default function ChatInterface() {
     if (!message.trim() || !user || !currentAccount?.id) return;
 
     try {
-      const newMessage = {
-        content: message,
+      const newMessage: Message = {
+        content: message.trim(),
         timestamp: Date.now(),
         userId: user.uid,
         channelId: channelId,
-        accountId: currentAccount.id
+        accountId: currentAccount.id,
+        participants: userId ? [user.uid, userId] : undefined
       };
       
-      console.log('Sending message:', newMessage);
+      console.log('Sending message with timestamp:', {
+        timestamp: newMessage.timestamp,
+        date: timestampToDate(newMessage.timestamp)
+      });
+
       await sendMessage(channelId, newMessage);
       setMessage('');
     } catch (error) {

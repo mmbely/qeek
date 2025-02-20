@@ -189,19 +189,6 @@ export function Sidebar({
           <ul className="space-y-1">
             <li>
               <NavLink
-                to="/codebase/connect"
-                className={({ isActive }) =>
-                  `${commonStyles.sidebar.nav.item} ${
-                    isActive ? commonStyles.sidebar.nav.active : commonStyles.sidebar.nav.inactive
-                  }`
-                }
-              >
-                <Github className="h-5 w-5 mr-2" />
-                Connect
-              </NavLink>
-            </li>
-            <li>
-              <NavLink
                 to="/codebase/files"
                 className={({ isActive }) =>
                   `${commonStyles.sidebar.nav.item} ${
@@ -211,6 +198,19 @@ export function Sidebar({
               >
                 <FolderOpen className="h-5 w-5 mr-2" />
                 View Files
+              </NavLink>
+            </li>
+            <li>
+              <NavLink
+                to="/codebase/file-extractor"
+                className={({ isActive }) =>
+                  `${commonStyles.sidebar.nav.item} ${
+                    isActive ? commonStyles.sidebar.nav.active : commonStyles.sidebar.nav.inactive
+                  }`
+                }
+              >
+                <Hash className="h-5 w-5 mr-2" />
+                File Extractor
               </NavLink>
             </li>
           </ul>
