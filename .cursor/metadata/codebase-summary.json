@@ -1,0 +1,53 @@
+{
+  "name": "qeek",
+  "description": "This project appears to be a web application with a React frontend and a backend likely utilizing Firebase functions and potentially Express.js.  It interacts with GitHub for repository indexing and uses Firebase for various services like authentication, database, storage, and functions. The frontend focuses on codebase visualization, chat, ticketing, and user settings.  Gemini and Firestore are used for data storage and retrieval.",
+  "stack": {
+    "frontend": {
+      "mainLanguage": "TypeScript",
+      "framework": "React",
+      "styling": "CSS Modules, MUI (Material UI)",
+      "keyLibraries": ["react-router-dom", "lucide-react", "@emoji-mart/react", "date-fns", "@mui/material", "react-icons", "recharts", "react-markdown", "@hello-pangea/dnd", "react-responsive-modal", "react-syntax-highlighter", "@radix-ui/react-avatar", "@radix-ui/react-dialog", "@radix-ui/react-dropdown-menu",  "@radix-ui/react-popover", "@radix-ui/react-scroll-area",  "@radix-ui/react-tooltip", "axios"],
+      "testingStrategy": "Uses React Testing Library (@testing-library/react) with 6 test files indicating a focus on component-level testing.",
+      "stateManagement": "Likely using React Context, although no dedicated store files were identified.  Further analysis of the `src/context` directory is needed."
+    },
+    "backend": {
+      "mainLanguage": "Python, JavaScript/TypeScript",
+      "services": ["Firebase Functions", "Firebase Firestore", "Firebase Auth", "Firebase Storage", "Firebase Database", "GitHub API", "Gemini API", "Nodemailer"],
+      "keyFeatures": ["Repository Indexing", "User Authentication", "Chat Functionality", "Ticket Management", "Codebase Visualization"],
+      "apiArchitecture": "Likely uses Firebase Functions as serverless functions for backend logic and potentially Express.js for traditional API endpoints. Further analysis is required."
+    }
+  },
+  "patterns": {
+    "common": [],
+    "architecture": "Serverless functions with Firebase, potentially combined with a traditional API using Express.js.  The frontend follows a standard React component-based architecture.",
+    "componentOrganization": "Standard React component structure with subdirectories for related components and utils."
+  },
+  "mainFeatures": ["Codebase exploration and visualization", "Real-time chat", "Ticket management system", "User authentication and settings", "Repository indexing"],
+  "directoryStructure": {
+    "backend": "Contains backend logic, potentially using Express.js.",
+    "backend/src": "Source code for backend services and routes.",
+    "backend/src/routes": "API route definitions.",
+    "functions": "Directory for Firebase functions.",
+    "functions/repository-indexer": "Firebase function for indexing repositories.",
+    "functions/src/services": "Shared services used by Firebase functions.",
+    "public": "Static assets accessible to the frontend.",
+    "src": "Frontend React application source code.",
+    "src/components": "React components.",
+    "src/config": "Configuration files.",
+    "src/context": "Likely contains React Context definitions for state management.",
+    "src/hooks": "Custom React hooks.",
+    "src/migrations": "Database migration scripts.",
+    "src/pages": "Page-level components.",
+    "src/routes": "Frontend route definitions.",
+    "src/services": "Frontend service modules.",
+    "src/styles": "Styling files.",
+    "src/types": "TypeScript type definitions.",
+    "src/utils": "Utility functions."
+  },
+  "developmentPractices": {
+    "testing": "Component-level testing using React Testing Library.",
+    "stateManagement": "Likely using React Context.  Requires further analysis.",
+    "componentPatterns": "Standard React component patterns with a clear separation of concerns.",
+    "dataFlow": "Data flow appears to be primarily driven by interactions with Firebase and potentially API calls to external services like GitHub and Gemini. Further investigation is needed."
+  }
+}

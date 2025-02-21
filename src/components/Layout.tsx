@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from './Navigation/Sidebar';
 import { useAuth } from '../context/AuthContext';
 import { useAccount } from '../context/AccountContext';
 import { CustomUser } from '../types/user';
 import { subscribeToUsers } from '../services/chat';
+import { FileText, Code2 } from 'lucide-react';
 
 export default function Layout() {
   const { user, logout, isDarkMode, toggleDarkMode } = useAuth();
   const { currentAccount } = useAccount();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDirectMessageModalOpen, setIsDirectMessageModalOpen] = useState(false);
   const [isCreateChannelModalOpen, setIsCreateChannelModalOpen] = useState(false);

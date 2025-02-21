@@ -1,0 +1,18 @@
+{
+  "projectDescription": "A web application for analyzing and visualizing GitHub repositories with AI-enhanced code understanding",
+  "mainTechnologies": [
+    "React",
+    "TypeScript",
+    "Firebase",
+    "Material UI",
+    "GitHub API"
+  ],
+  "codebaseStructure": {
+    "src/": {
+      "components/": "React components organized by feature",
+      "services/": "Firebase and external API integrations",
+      "context/": "React context providers",
+      "types/": "TypeScript type definitions"
+    }
+  }
+}

@@ -129,5 +129,10 @@ service cloud.firestore {
       // Only allow write through Cloud Functions
       allow write: if false;
     }
+
+    match /profiles/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
   }
 }

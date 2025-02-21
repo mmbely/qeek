@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { Hash, Plus, Sun, Moon, ListTodo, Kanban, MessageSquare, LayoutGrid, LogOut, User, Github, Settings, FolderOpen } from "lucide-react"
+import { Hash, Plus, Sun, Moon, ListTodo, Kanban, MessageSquare, LayoutGrid, LogOut, User, Github, Settings, FolderOpen, Code2 } from "lucide-react"
 import { ScrollArea } from "../ui/scroll-area"
 import { Button } from "../ui/button"
 import { CustomUser } from '../../types/user'
@@ -211,6 +211,19 @@ export function Sidebar({
               >
                 <Hash className="h-5 w-5 mr-2" />
                 File Extractor
+              </NavLink>
+            </li>
+            <li>
+              <NavLink
+                to="/codebase/cursor-extractor"
+                className={({ isActive }) =>
+                  `${commonStyles.sidebar.nav.item} ${
+                    isActive ? commonStyles.sidebar.nav.active : commonStyles.sidebar.nav.inactive
+                  }`
+                }
+              >
+                <Code2 className="h-5 w-5 mr-2" />
+                Cursor Extractor
               </NavLink>
             </li>
           </ul>

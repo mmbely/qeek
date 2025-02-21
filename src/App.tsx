@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, useLocation, createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -17,6 +17,9 @@ import UserManagement from './components/Settings/UserManagement';
 import UserProfile from './components/Settings/UserProfile';
 import AdminSettings from './components/Settings/AdminSettings';
 import FileExtractionTool from './components/Codebase/FileExtractionTool';
+import { settingsRoutes } from './routes/settings';
+import CursorSettings from './components/Settings/CursorSettings';
+import CursorExtractionTool from './components/Codebase/CursorExtractionTool';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -57,6 +60,8 @@ function usePageTitle() {
       return 'Connect Repository';
     } else if (path === '/settings/github') {
       return 'GitHub Settings';
+    } else if (path === '/settings/cursor') {
+      return 'Cursor Integration';
     }
     
     return 'Dashboard';
@@ -95,13 +100,17 @@ function AppContent() {
         <Route path="/codebase/connect" element={<GitHubSettings />} />
         <Route path="/codebase/files" element={<CodebaseViewer />} />
         <Route path="/codebase/files/:repositoryName" element={<CodebaseViewer />} />
-        <Route path="/codebase/file-extractor" element={<FileExtractionTool />} />
+        <Route path="/codebase">
+          <Route path="file-extractor" element={<FileExtractionTool />} />
+          <Route path="cursor-extractor" element={<CursorExtractionTool />} />
+        </Route>
         <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<UserProfile />} />
           <Route path="profile" element={<UserProfile />} />
           <Route path="github" element={<GitHubSettings />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="admin" element={<AdminSettings />} />
+          <Route path="cursor" element={<CursorSettings />} />
         </Route>
         <Route path="/repository/:repoName" element={<CodebaseViewer />} />
         <Route path="/repository/:repoName/file/:filePath" element={<CodebaseViewer />} />
@@ -109,6 +118,11 @@ function AppContent() {
     </Routes>
   );
 }
+
+const router = createBrowserRouter([
+  // ... other routes ...
+  ...settingsRoutes  // Make sure this is included
+]);
 
 function App() {
   return (

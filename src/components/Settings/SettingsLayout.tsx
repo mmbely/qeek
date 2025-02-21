@@ -1,13 +1,20 @@
 import React from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
-import { Users, Github, Settings, User, Shield } from 'lucide-react';
+import { Users, Github, Settings, User, Shield, Code2, FileText, LucideIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+
+interface NavItem {
+  label: string;
+  path?: string;
+  icon?: LucideIcon;
+  type?: 'divider' | 'header';
+}
 
 export default function SettingsLayout() {
   const { user } = useAuth();
   const location = useLocation();
 
-  const navItems = [
+  const navItems: NavItem[] = [
     {
       label: 'Profile',
       path: '/settings/profile',
@@ -28,7 +35,12 @@ export default function SettingsLayout() {
       label: 'Admin',
       path: '/settings/admin',
       icon: Shield
-    }] : [])
+    }] : []),
+    {
+      label: 'Cursor Integration',
+      path: '/settings/cursor',
+      icon: Code2
+    }
   ];
 
   return (
@@ -42,9 +54,25 @@ export default function SettingsLayout() {
           </h2>
         </div>
         <nav className="p-2">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
+          {navItems.map((item, index) => {
+            if (item.type === 'divider') {
+              return <div key={index} className="my-2 border-t border-gray-200 dark:border-gray-700" />;
+            }
+
+            if (item.type === 'header') {
+              return (
+                <div key={index} className="px-3 py-2 text-sm font-semibold text-gray-500 dark:text-gray-400">
+                  {item.label}
+                </div>
+              );
+            }
+
+            if (!item.path || !item.icon) {
+              return null;
+            }
+
             const Icon = item.icon;
+            const isActive = location.pathname === item.path;
             
             return (
               <Link

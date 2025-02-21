@@ -1,0 +1,26 @@
+{
+  "rules": [
+    {
+      "pattern": "**/*.tsx",
+      "context": {
+        "imports": true,
+        "functions": true,
+        "classes": true,
+        "summary": true
+      }
+    },
+    {
+      "pattern": "src/services/**/*",
+      "context": {
+        "dependencies": true,
+        "apiEndpoints": true
+      }
+    }
+  ],
+  "contextProviders": [
+    {
+      "name": "repository-metadata",
+      "path": ".cursor/metadata/"
+    }
+  ]
+}
