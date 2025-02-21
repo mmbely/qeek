@@ -1,12 +1,20 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { CodeFunction, CodeClass } from '../../../types/repository';
 
-export const ExpandableCell = ({ items }: { items?: string[] | { name: string }[] }) => {
+type ItemType = string | { name: string } | CodeFunction | CodeClass;
+
+export const ExpandableCell = ({ items }: { items?: ItemType[] }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (!items?.length) return <span className="text-gray-500 dark:text-gray-400">-</span>;
 
   const displayItems = isExpanded ? items : items.slice(0, 2);
+
+  const getDisplayName = (item: ItemType): string => {
+    if (typeof item === 'string') return item;
+    return item.name;
+  };
 
   return (
     <div>
@@ -18,7 +26,7 @@ export const ExpandableCell = ({ items }: { items?: string[] | { name: string }[
                      bg-gray-100 dark:bg-gray-700 
                      text-gray-700 dark:text-gray-300"
           >
-            {typeof item === 'string' ? item : item.name}
+            {getDisplayName(item)}
           </span>
         ))}
         {items.length > 2 && (

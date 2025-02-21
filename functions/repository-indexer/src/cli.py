@@ -31,12 +31,13 @@ async def main():
             'projectId': config['firebase_project_id']
         })
     
-    # Process repository
+    # Process repository with max files limit
     result = await process_repository(
         repo_full_name=args.repo_name,
         user_id='test_user',  # Only used for logging
         account_id=args.account_id,
-        config=config
+        config=config,
+        max_files=args.max_files
     )
     
     print("\nProcessing completed!")

@@ -9,7 +9,6 @@ import { TicketBoard } from './components/Tickets/TicketBoard';
 import Layout from './components/Layout';
 import { TicketForm } from './components/Tickets';
 import GitHubSettings from './components/Settings/GitHubSettings';
-import { FolderOpen } from 'lucide-react';
 import CodebaseViewer from './components/Codebase/CodebaseViewer';
 import { CodebaseProvider } from './context/CodebaseContext';
 import { AccountProvider } from './context/AccountContext';
@@ -104,6 +103,8 @@ function AppContent() {
           <Route path="users" element={<UserManagement />} />
           <Route path="admin" element={<AdminSettings />} />
         </Route>
+        <Route path="/repository/:repoName" element={<CodebaseViewer />} />
+        <Route path="/repository/:repoName/file/:filePath" element={<CodebaseViewer />} />
       </Route>
     </Routes>
   );

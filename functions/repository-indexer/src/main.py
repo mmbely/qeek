@@ -84,8 +84,23 @@ def should_analyze_file(file_path: str) -> bool:
     
     return Path(file_path).suffix.lower() in valid_extensions
 
-async def process_repository(repo_full_name: str, user_id: str, account_id: str, config: dict):
-    """Main repository processing logic with progress tracking"""
+async def process_repository(
+    repo_full_name: str, 
+    user_id: str, 
+    account_id: str, 
+    config: dict,
+    max_files: int = None
+):
+    """
+    Process repository files and generate AI analysis
+    
+    Args:
+        repo_full_name: Full repository name (owner/repo)
+        user_id: User ID for logging
+        account_id: Account ID for GitHub token
+        config: Configuration dictionary
+        max_files: Optional maximum number of files to process
+    """
     try:
         print(f"Processing repository: {repo_full_name}")
         
@@ -104,8 +119,14 @@ async def process_repository(repo_full_name: str, user_id: str, account_id: str,
         # Get all files
         print("Fetching repository files...")
         files = github_service.get_repository_files(repo_full_name)
+        
+        # Limit files if max_files is specified
+        if max_files is not None:
+            print(f"Limiting to {max_files} files for testing")
+            files = files[:max_files]
+            
         total_files = len(files)
-        print(f"Found {total_files} files")
+        print(f"Processing {total_files} files")
         
         # Update initial progress
         firestore_service.update_sync_status(
@@ -115,7 +136,6 @@ async def process_repository(repo_full_name: str, user_id: str, account_id: str,
         )
         
         # Process files with progress bar
-        print("\nProcessing files with AI analysis...")
         processed_files = []
         with tqdm(total=total_files, desc="Analyzing files") as pbar:
             for i, file in enumerate(files):

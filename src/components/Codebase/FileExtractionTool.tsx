@@ -130,8 +130,15 @@ Keep it under 4000 chars and development-focused.`
   useEffect(() => {
     // Load repository files
     const loadFiles = async () => {
-      const repoFiles = await getRepositoryFiles('mmbely/qeek'); // hardcode for now
-      setFiles(repoFiles.map((f: RepositoryFile) => f.path));
+      try {
+        const repoFiles = await getRepositoryFiles('mmbely/qeek'); // hardcode for now
+        // Type assertion to handle the mapping
+        const filePaths = (repoFiles as RepositoryFile[]).map(f => f.path);
+        setFiles(filePaths);
+      } catch (error) {
+        console.error('Error loading files:', error);
+        setFiles([]);
+      }
     };
     loadFiles();
   }, []);

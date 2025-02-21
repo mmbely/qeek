@@ -1,21 +1,44 @@
 export interface RepositoryFile {
   path: string;
+  name: string;
   content: string;
   sha: string;
-  size: number;
   type: string;
-  status?: 'active' | 'deleted' | 'modified';
-  language?: string;
-  last_updated?: string;
-  last_commit_message?: string;
-  metadata?: {
+  size: number;
+  status: string;
+  language: string;
+  last_commit_message: string;
+  last_updated: string;
+  metadata: {
     content_type: string;
     sha: string;
     type: string;
   };
-  functions?: string[];
-  classes?: string[];
-  lastModified?: Date;
+  classes: CodeClass[];
+  functions: CodeFunction[];
+  imports: string[];
+  exports: string[];
+  summary?: string;
+  first_indexed_at: {
+    seconds: number;
+    nanoseconds: number;
+  };
+  updated_at: {
+    seconds: number;
+    nanoseconds: number;
+  };
+}
+
+export interface CodeFunction {
+  name: string;
+  purpose?: string;
+  params?: string[];
+}
+
+export interface CodeClass {
+  name: string;
+  purpose?: string;
+  methods?: string[];
 }
 
 export interface Repository {

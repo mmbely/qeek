@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { db } from '../../services/firebase';
 import { collection, query, getDocs, doc, getDoc, onSnapshot, orderBy, limit, Firestore, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { 
@@ -18,32 +18,18 @@ import {
   Github, 
   Settings, 
   AlertTriangle, 
-  CheckCircle, 
-  ChevronDown, 
-  ChevronUp 
+  CheckCircle
 } from 'lucide-react';
 import { useAccount } from '../../context/AccountContext';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment, FormControl, Select, MenuItem } from '@mui/material';
 import { 
   SiPython, 
   SiJavascript, 
   SiTypescript, 
   SiReact, 
-  SiVuedotjs,
-  SiHtml5,
-  SiCss3,
-  SiJavascript as SiJava,
-  SiPhp,
-  SiRuby,
-  SiSwift,
-  SiKotlin,
-  SiGo,
-  SiRust,
-  SiMarkdown,
-  SiDocker,
-  SiGit
+  SiVuedotjs
 } from 'react-icons/si';
 import { syncRepository } from '../../services/github';
 import { 
@@ -55,11 +41,33 @@ import {
   Legend,
   ResponsiveContainer 
 } from 'recharts';
-import { Theme } from '@mui/material/styles';
 import { FileViewer } from './FileViewer';
 import { RepositoryFile } from '../../types/repository';
 import { ExpandableCell } from './components/ExpandableCell';
 import { FileIcon } from './components/FileIcon';
+
+// Add these interfaces at the top of the file
+interface CodeFunction {
+  name: string;
+  purpose?: string;
+  params?: string[];
+  returns?: string;
+}
+
+interface CodeClass {
+  name: string;
+  purpose?: string;
+  methods?: string[];
+  properties?: string[];
+}
+
+// Add this helper function at the top of the file, before the component
+const safeToString = (value: any): string => {
+  if (typeof value === 'string') return value.toLowerCase();
+  if (Array.isArray(value)) return value.join(' ').toLowerCase();
+  if (value === null || value === undefined) return '';
+  return String(value).toLowerCase();
+};
 
 // Remove the duplicate formatFileSize function and keep only one at the top level
 const formatFileSize = (bytes: number): string => {
@@ -81,6 +89,7 @@ interface Repository {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const formatDate = (timestamp: any) => {
   if (!timestamp) return '-';
   // Handle both Firestore Timestamps and regular dates/numbers
@@ -97,7 +106,7 @@ const getFileIcon = (filePath: string) => {
   return <FileIcon filePath={filePath} className="h-4 w-4 text-gray-400" />;
 };
 
-type SortColumn = 'path' | 'status' | 'language' | 'size' | 'last_updated' | 'functions' | 'classes';
+type SortColumn = 'path' | 'status' | 'language' | 'size' | 'last_updated' | 'functions' | 'classes' | 'summary';
 type SortDirection = 'asc' | 'desc';
 
 // Add status type
@@ -271,6 +280,7 @@ const columns: { id: string; label: string; minWidth?: number }[] = [
   { id: 'path', label: 'File Path', minWidth: 200 },
   { id: 'status', label: 'Status', minWidth: 100 },
   { id: 'language', label: 'Language', minWidth: 100 },
+  { id: 'summary', label: 'Summary', minWidth: 300 },
   { id: 'functions', label: 'Functions', minWidth: 120 },
   { id: 'classes', label: 'Classes', minWidth: 120 },
   { id: 'size', label: 'Size', minWidth: 100 },
@@ -285,30 +295,71 @@ const getName = (item: string | { name: string }): string => {
   return item.name;
 };
 
-// Add this helper function for searching
-const searchFile = (file: RepositoryFile, searchTerm: string): boolean => {
-  const searchLower = searchTerm.toLowerCase();
+// Add a helper function to get the summary
+const getFileSummary = (file: RepositoryFile): string => {
+  return file.summary || '-';
+};
+
+// Update the search function
+const searchFile = (file: RepositoryFile, term: string): boolean => {
+  const searchTerm = term.toLowerCase();
   
-  // Search in file path
-  if (file.path.toLowerCase().includes(searchLower)) {
+  // Basic field search
+  if (
+    safeToString(file.path).includes(searchTerm) ||
+    safeToString(file.language).includes(searchTerm) ||
+    safeToString(file.summary).includes(searchTerm) ||
+    safeToString(file.last_commit_message).includes(searchTerm)
+  ) {
     return true;
   }
-  
+
   // Search in functions
-  if (file.functions?.some(func => 
-    func.toLowerCase().includes(searchLower)
+  if (file.functions?.some((func: CodeFunction) => 
+    safeToString(func.name).includes(searchTerm) || 
+    safeToString(func.purpose).includes(searchTerm)
   )) {
     return true;
   }
-  
+
   // Search in classes
-  if (file.classes?.some(cls => 
-    cls.toLowerCase().includes(searchLower)
+  if (file.classes?.some((cls: CodeClass) => 
+    safeToString(cls.name).includes(searchTerm) || 
+    safeToString(cls.purpose).includes(searchTerm)
   )) {
     return true;
   }
-  
+
+  // Search in imports/exports
+  if (
+    file.imports?.some(imp => safeToString(imp).includes(searchTerm)) ||
+    file.exports?.some(exp => safeToString(exp).includes(searchTerm))
+  ) {
+    return true;
+  }
+
   return false;
+};
+
+const sortFiles = (files: RepositoryFile[], sortBy: string, sortDirection: 'asc' | 'desc'): RepositoryFile[] => {
+  const multiplier = sortDirection === 'asc' ? 1 : -1;
+  
+  return [...files].sort((a, b) => {
+    switch (sortBy) {
+      case 'name':
+        return multiplier * (a.name.localeCompare(b.name));
+      case 'size':
+        return multiplier * (a.size - b.size);
+      case 'language':
+        return multiplier * ((a.language || '').localeCompare(b.language || ''));
+      case 'last_updated':
+        return multiplier * (new Date(a.last_updated).getTime() - new Date(b.last_updated).getTime());
+      case 'summary':
+        return multiplier * ((a.summary || '').localeCompare(b.summary || ''));
+      default:
+        return 0;
+    }
+  });
 };
 
 export default function CodebaseViewer() {
@@ -319,6 +370,7 @@ export default function CodebaseViewer() {
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<RepositoryFile | null>(null);
   const navigate = useNavigate();
+  const { repoName, filePath } = useParams();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
@@ -329,7 +381,7 @@ export default function CodebaseViewer() {
     lastSynced?: Date;
     error?: string;
   }>({ status: 'idle' });
-  const [githubStatus, setGithubStatus] = useState<{
+  const [githubStatus] = useState<{
     isConnected: boolean;
     lastSynced?: Date;
     error?: string;
@@ -402,6 +454,7 @@ export default function CodebaseViewer() {
             name: data.name || '',
             path: data.path || '',
             size: data.size || 0,
+            summary: data.summary || '',
             status: data.status || 'active',
             updated_at: data.updated_at || new Date().toISOString()
           } as RepositoryFile;
@@ -461,13 +514,21 @@ export default function CodebaseViewer() {
     }
   };
 
+  // Add this effect to reset page when search results change
+  useEffect(() => {
+    setPage(0); // Reset to first page when search/filter changes
+  }, [searchTerm, filterStatus]);
+
+  // Update the pagination handling
   const handleChangePage = (event: unknown, newPage: number) => {
-    setPage(newPage);
+    // Ensure page is within bounds
+    const maxPage = Math.max(0, Math.ceil(sortedAndFilteredFiles.length / rowsPerPage) - 1);
+    setPage(Math.min(newPage, maxPage));
   };
 
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
+    setPage(0); // Reset to first page when changing rows per page
   };
 
   const handleSort = (column: SortColumn) => {
@@ -508,6 +569,9 @@ export default function CodebaseViewer() {
         
         case 'classes':
           return multiplier * ((a.classes?.length || 0) - (b.classes?.length || 0));
+        
+        case 'summary':
+          return multiplier * ((a.summary || '').localeCompare(b.summary || ''));
         
         default:
           return 0;
@@ -604,14 +668,18 @@ export default function CodebaseViewer() {
     </div>
   );
 
-  // Update the sortedAndFilteredFiles calculation
-  const sortedAndFilteredFiles = getSortedFiles(
-    files.filter((file) => {
+  // Update the filtering logic to log results
+  const sortedAndFilteredFiles = useMemo(() => {
+    const filtered = files.filter((file) => {
       const matchesSearch = searchTerm ? searchFile(file, searchTerm) : true;
       const matchesStatus = filterStatus === 'all' ? true : (file.status || 'active') === filterStatus;
       return matchesSearch && matchesStatus;
-    })
-  );
+    });
+
+    console.log('Filtered files count:', filtered.length);
+    return getSortedFiles(filtered);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, searchTerm, filterStatus]);
 
   // Update the header section to include the search bar
   const renderHeader = () => (
@@ -664,6 +732,24 @@ export default function CodebaseViewer() {
       </div>
     </header>
   );
+
+  // Handle file selection
+  const handleFileSelect = (file: RepositoryFile) => {
+    setSelectedFile(file);
+    // Update URL with the file path
+    navigate(`/repository/${repoName}/file/${encodeURIComponent(file.path)}`);
+  };
+
+  // Load file from URL on mount
+  useEffect(() => {
+    if (filePath && !selectedFile) {
+      const decodedPath = decodeURIComponent(filePath);
+      const file = files.find(f => f.path === decodedPath);
+      if (file) {
+        setSelectedFile(file);
+      }
+    }
+  }, [filePath, files, selectedFile]);
 
   // Modify the early return for when no repository is selected
   if (!currentAccount?.settings?.githubRepository) {
@@ -823,7 +909,7 @@ export default function CodebaseViewer() {
                   .map((file) => (
                     <TableRow
                       key={file.path}
-                      onClick={() => setSelectedFile(file)}
+                      onClick={() => handleFileSelect(file)}
                       className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150"
                     >
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
@@ -844,6 +930,13 @@ export default function CodebaseViewer() {
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
                         {file.language || '-'}
                       </TableCell>
+                      <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">
+                        <div className="max-w-lg">
+                          <p className="truncate text-sm">
+                            {getFileSummary(file)}
+                          </p>
+                        </div>
+                      </TableCell>
                       <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 max-w-[200px]">
                         <ExpandableCell items={file.functions} />
                       </TableCell>
@@ -861,13 +954,25 @@ export default function CodebaseViewer() {
               </TableBody>
             </Table>
             <TablePagination
+              rowsPerPageOptions={[10, 25, 50, 100]}
               component="div"
               count={sortedAndFilteredFiles.length}
               rowsPerPage={rowsPerPage}
               page={page}
-              onPageChange={handleChangePage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-              className="text-gray-900 dark:text-gray-100 sticky bottom-0 bg-white dark:bg-gray-800"
+              onPageChange={(event, newPage) => setPage(newPage)}
+              onRowsPerPageChange={(event) => {
+                setRowsPerPage(parseInt(event.target.value, 10));
+                setPage(0);
+              }}
+              className="text-gray-900 dark:text-gray-100"
+              sx={{
+                '.MuiTablePagination-select': {
+                  color: 'inherit'
+                },
+                '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+                  color: 'inherit'
+                }
+              }}
             />
           </TableContainer>
         ) : (
@@ -882,7 +987,11 @@ export default function CodebaseViewer() {
       {selectedFile && (
         <FileViewer
           file={selectedFile}
-          onClose={() => setSelectedFile(null)}
+          onClose={() => {
+            setSelectedFile(null);
+            // Remove file path from URL when closing
+            navigate(`/repository/${repoName}`);
+          }}
         />
       )}
     </div>
