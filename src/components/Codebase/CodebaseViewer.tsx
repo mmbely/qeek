@@ -1,36 +1,18 @@
 import { useEffect, useState, useMemo } from 'react';
 import { db } from '../../services/firebase';
-import { collection, query, getDocs, doc, getDoc, onSnapshot, orderBy, limit, Firestore, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { collection, query, getDocs, doc, getDoc, onSnapshot, orderBy, limit, DocumentData } from 'firebase/firestore';
 import { 
   Loader2, 
-  FolderIcon, 
   XCircle, 
   Search, 
-  FileTextIcon, 
-  FileCodeIcon, 
-  FileJsonIcon, 
-  ImageIcon, 
-  FileTypeIcon, 
-  PackageIcon, 
-  Settings2Icon, 
-  DatabaseIcon, 
-  LockIcon, 
   Github, 
   Settings, 
   AlertTriangle, 
-  CheckCircle
 } from 'lucide-react';
 import { useAccount } from '../../context/AccountContext';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Paper, TextField, InputAdornment, FormControl, Select, MenuItem } from '@mui/material';
-import { 
-  SiPython, 
-  SiJavascript, 
-  SiTypescript, 
-  SiReact, 
-  SiVuedotjs
-} from 'react-icons/si';
 import { syncRepository } from '../../services/github';
 import { 
   BarChart, 
@@ -76,30 +58,6 @@ const formatFileSize = (bytes: number): string => {
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-};
-
-interface Repository {
-  files: RepositoryFile[];
-  metadata: {
-    name: string;
-    description?: string;
-    default_branch: string;
-    sync_status: string;
-    last_synced?: Date;
-  };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const formatDate = (timestamp: any) => {
-  if (!timestamp) return '-';
-  // Handle both Firestore Timestamps and regular dates/numbers
-  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-  return date.toLocaleString();
-};
-
-const getContentPreview = (content: string | undefined) => {
-  if (!content) return '-';
-  return content.slice(0, 100) + (content.length > 100 ? '...' : '');
 };
 
 const getFileIcon = (filePath: string) => {
@@ -287,14 +245,6 @@ const columns: { id: string; label: string; minWidth?: number }[] = [
   { id: 'last_updated', label: 'Last Updated', minWidth: 160 }
 ];
 
-// Helper function to get the name from either a string or an object with name property
-const getName = (item: string | { name: string }): string => {
-  if (typeof item === 'string') {
-    return item;
-  }
-  return item.name;
-};
-
 // Add a helper function to get the summary
 const getFileSummary = (file: RepositoryFile): string => {
   return file.summary || '-';
@@ -341,27 +291,6 @@ const searchFile = (file: RepositoryFile, term: string): boolean => {
   return false;
 };
 
-const sortFiles = (files: RepositoryFile[], sortBy: string, sortDirection: 'asc' | 'desc'): RepositoryFile[] => {
-  const multiplier = sortDirection === 'asc' ? 1 : -1;
-  
-  return [...files].sort((a, b) => {
-    switch (sortBy) {
-      case 'name':
-        return multiplier * (a.name.localeCompare(b.name));
-      case 'size':
-        return multiplier * (a.size - b.size);
-      case 'language':
-        return multiplier * ((a.language || '').localeCompare(b.language || ''));
-      case 'last_updated':
-        return multiplier * (new Date(a.last_updated).getTime() - new Date(b.last_updated).getTime());
-      case 'summary':
-        return multiplier * ((a.summary || '').localeCompare(b.summary || ''));
-      default:
-        return 0;
-    }
-  });
-};
-
 export default function CodebaseViewer() {
   const { user } = useAuth();
   const { currentAccount, isLoading: accountLoading } = useAccount();
@@ -381,11 +310,6 @@ export default function CodebaseViewer() {
     lastSynced?: Date;
     error?: string;
   }>({ status: 'idle' });
-  const [githubStatus] = useState<{
-    isConnected: boolean;
-    lastSynced?: Date;
-    error?: string;
-  }>({ isConnected: false });
   const [filterStatus, setFilterStatus] = useState<FileStatus>('all');
 
   // Add debug logging
@@ -542,43 +466,6 @@ export default function CodebaseViewer() {
     }
   };
 
-  const getSortedFiles = (files: RepositoryFile[]) => {
-    return [...files].sort((a, b) => {
-      const multiplier = sortDirection === 'asc' ? 1 : -1;
-
-      switch (sortColumn) {
-        case 'path':
-          return multiplier * a.path.localeCompare(b.path);
-        
-        case 'status':
-          return multiplier * (a.status || 'active').localeCompare(b.status || 'active');
-        
-        case 'language':
-          return multiplier * (a.language || '').localeCompare(b.language || '');
-        
-        case 'size':
-          return multiplier * (a.size - b.size);
-        
-        case 'last_updated':
-          const dateA = a.last_updated ? new Date(a.last_updated).getTime() : 0;
-          const dateB = b.last_updated ? new Date(b.last_updated).getTime() : 0;
-          return multiplier * (dateA - dateB);
-        
-        case 'functions':
-          return multiplier * ((a.functions?.length || 0) - (b.functions?.length || 0));
-        
-        case 'classes':
-          return multiplier * ((a.classes?.length || 0) - (b.classes?.length || 0));
-        
-        case 'summary':
-          return multiplier * ((a.summary || '').localeCompare(b.summary || ''));
-        
-        default:
-          return 0;
-      }
-    });
-  };
-
   const SortIcon = ({ column }: { column: SortColumn }) => {
     if (sortColumn !== column) {
       return (
@@ -670,16 +557,49 @@ export default function CodebaseViewer() {
 
   // Update the filtering logic to log results
   const sortedAndFilteredFiles = useMemo(() => {
+    // First filter the files
     const filtered = files.filter((file) => {
       const matchesSearch = searchTerm ? searchFile(file, searchTerm) : true;
       const matchesStatus = filterStatus === 'all' ? true : (file.status || 'active') === filterStatus;
       return matchesSearch && matchesStatus;
     });
 
-    console.log('Filtered files count:', filtered.length);
-    return getSortedFiles(filtered);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [files, searchTerm, filterStatus]);
+    // Then sort the filtered files
+    const multiplier = sortDirection === 'asc' ? 1 : -1;
+    
+    return [...filtered].sort((a, b) => {
+      switch (sortColumn) {
+        case 'path':
+          return multiplier * a.path.localeCompare(b.path);
+        
+        case 'status':
+          return multiplier * (a.status || 'active').localeCompare(b.status || 'active');
+        
+        case 'language':
+          return multiplier * (a.language || '').localeCompare(b.language || '');
+        
+        case 'size':
+          return multiplier * (a.size - b.size);
+        
+        case 'last_updated':
+          const dateA = a.last_updated ? new Date(a.last_updated).getTime() : 0;
+          const dateB = b.last_updated ? new Date(b.last_updated).getTime() : 0;
+          return multiplier * (dateA - dateB);
+        
+        case 'functions':
+          return multiplier * ((a.functions?.length || 0) - (b.functions?.length || 0));
+        
+        case 'classes':
+          return multiplier * ((a.classes?.length || 0) - (b.classes?.length || 0));
+        
+        case 'summary':
+          return multiplier * ((a.summary || '').localeCompare(b.summary || ''));
+        
+        default:
+          return 0;
+      }
+    });
+  }, [files, searchTerm, filterStatus, sortColumn, sortDirection]);
 
   // Update the header section to include the search bar
   const renderHeader = () => (

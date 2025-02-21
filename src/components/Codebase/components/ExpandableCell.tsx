@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+// import { ChevronDown, ChevronUp } from 'lucide-react';
 import { CodeFunction, CodeClass } from '../../../types/repository';
 
 type ItemType = string | { name: string } | CodeFunction | CodeClass;
