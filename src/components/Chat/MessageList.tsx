@@ -8,7 +8,7 @@ import { getTimestampMillis, timestampToDate, formatMessageDate } from '../../ut
 import { deleteMessage } from '../../services/chat';
 import { updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { doc } from 'firebase/firestore';
-import { db } from '../../services/firebase';
+import { db } from '../../config/firebase';
 
 export interface MessageListProps {
   messages: Message[];

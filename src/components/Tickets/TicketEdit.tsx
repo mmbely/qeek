@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ticketService } from '../../services/ticketService';
 import { Ticket } from '../../types/ticket';
-import { db } from '../../services/firebase';
+import { db } from '../../config/firebase';
 
 export default function TicketEdit() {
   const { id } = useParams<{ id: string }>();

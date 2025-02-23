@@ -1,24 +1,31 @@
+export type SortColumn = 'path' | 'language' | 'size' | 'last_updated';
+export type SortDirection = 'asc' | 'desc';
+export type FileStatus = 'synced' | 'unsynced' | 'error' | 'all';
+
 export interface RepositoryFile {
   path: string;
-  name: string;
-  content: string;
-  sha: string;
-  type: string;
-  size: number;
-  status: string;
+  name?: string;
   language: string;
-  last_commit_message: string;
+  size: number;
   last_updated: string;
-  metadata: {
-    content_type: string;
+  last_commit_message: string;
+  type: string;
+  content?: string;
+  imports?: string[];
+  ai_analysis?: {
+    summary?: string;
+    imports?: Array<{ path: string; purpose: string }>;
+    functions?: Array<{ name: string; purpose: string }>;
+    classes?: Array<{ name: string; purpose: string }>;
+    exports?: Array<{ name: string; purpose: string }>;
+    primary_features?: string[];
+    integrationPoints?: Array<{ name: string; purpose: string; type: string }>;
+  };
+  metadata?: {
     sha: string;
     type: string;
+    content_type: string;
   };
-  classes: CodeClass[];
-  functions: CodeFunction[];
-  imports: string[];
-  exports: string[];
-  summary?: string;
   first_indexed_at: {
     seconds: number;
     nanoseconds: number;
@@ -27,41 +34,20 @@ export interface RepositoryFile {
     seconds: number;
     nanoseconds: number;
   };
+  status: string;
 }
 
 export interface CodeFunction {
   name: string;
-  purpose?: string;
-  params?: string[];
+  parameters: Array<{ name: string; type: string }>;
+  returnType: string;
+  description?: string;
+  code?: string;
 }
 
 export interface CodeClass {
   name: string;
-  purpose?: string;
-  methods?: string[];
+  methods: CodeFunction[];
+  properties: Array<{ name: string; type: string }>;
+  description?: string;
 }
-
-export interface Repository {
-  files: RepositoryFile[];
-  metadata: {
-    name: string;
-    description?: string;
-    default_branch: string;
-    sync_status: string;
-    last_synced?: Date;
-    accountId: string;
-  };
-}
-
-// Optional: Add repository status types for better type safety
-export type RepositorySyncStatus = 
-  | 'not_synced'
-  | 'syncing'
-  | 'synced'
-  | 'error';
-
-// Optional: Add repository type for better organization
-export type RepositoryType = 
-  | 'github'
-  | 'gitlab'
-  | 'bitbucket';

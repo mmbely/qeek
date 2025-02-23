@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { XCircle, GitBranch, FileText, Code2, Box, Brain, Info } from 'lucide-react';
 import { RepositoryFile } from '../../types/repository';
 import { formatFileSize, getFileIcon } from './utils';
-import { ExpandableCell } from './components/ExpandableCell';
+import ExpandableCell from './components/ExpandableCell';
 
 interface FileViewerProps {
   file: RepositoryFile;
@@ -13,9 +13,34 @@ type TabType = 'info' | 'ai-analysis';
 
 export const FileViewer = ({ file, onClose }: FileViewerProps) => {
   const [activeTab, setActiveTab] = useState<TabType>('info');
+  const [fileContent, setFileContent] = useState<string>('');
   
   // Debug logging
   console.log('Raw file prop:', file);
+
+  // Add fetchFileContent function
+  const fetchFileContent = async (path: string): Promise<string> => {
+    try {
+      const response = await fetch(`/api/file-content?path=${encodeURIComponent(path)}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch file content');
+      }
+      const data = await response.json();
+      return data.content || '';
+    } catch (error) {
+      console.error('Error fetching file content:', error);
+      return '';
+    }
+  };
+
+  // Update the useEffect hook
+  useEffect(() => {
+    if (file.path) {
+      fetchFileContent(file.path).then((content: string) => {
+        setFileContent(content || 'No content available');
+      });
+    }
+  }, [file.path]);
 
   const TabButton = ({ tab, label, icon: Icon }: { tab: TabType; label: string; icon: React.ElementType }) => (
     <button
@@ -32,79 +57,31 @@ export const FileViewer = ({ file, onClose }: FileViewerProps) => {
   );
 
   const renderAIAnalysis = () => {
-    const functions = file.functions;
-    const classes = file.classes;
-    const imports = file.imports;
-    const exports = file.exports;
+    const functions = file.ai_analysis?.functions || [];
+    const classes = file.ai_analysis?.classes || [];
+    const imports = file.ai_analysis?.imports || [];
+    const exports = file.ai_analysis?.exports || [];
 
     return (
       <div className="space-y-6">
-        {/* Summary Section */}
-        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+        {/* Summary */}
+        <div>
           <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">File Summary</h4>
           <p className="text-gray-700 dark:text-gray-300">
-            {file.summary || 'No summary available'}
+            {file.ai_analysis?.summary || 'No summary available'}
           </p>
         </div>
 
-        {/* Language and Analysis */}
-        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-          <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">File Analysis</h4>
-          <div className="space-y-4">
-            <div>
-              <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Language</h5>
-              <p className="text-gray-600 dark:text-gray-400">{file.language}</p>
-            </div>
-            
-            {/* Exports */}
-            {exports && exports.length > 0 && (
-              <div>
-                <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Exports</h5>
-                <div className="flex flex-wrap gap-2">
-                  {exports.map((exp, index) => (
-                    <span key={index} className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
-                      {exp}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Imports */}
-            {imports && imports.length > 0 && (
-              <div>
-                <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Imports</h5>
-                <div className="flex flex-wrap gap-2">
-                  {imports.map((imp, index) => (
-                    <span key={index} className="px-2 py-1 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded-full text-sm">
-                      {imp}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Functions */}
-        {functions && functions.length > 0 && (
-          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+        {functions.length > 0 && (
+          <div>
             <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Functions</h4>
             <div className="space-y-3">
-              {functions.map((func, index) => (
+              {functions.map((func: { name: string; purpose: string }, index: number) => (
                 <div key={index} className="border-l-2 border-blue-500 pl-3">
                   <h5 className="text-sm font-medium text-gray-900 dark:text-white">{func.name}</h5>
                   {func.purpose && (
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{func.purpose}</p>
-                  )}
-                  {func.params && func.params.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {func.params.map((param, pIndex) => (
-                        <span key={pIndex} className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded">
-                          {param}
-                        </span>
-                      ))}
-                    </div>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">{func.purpose}</p>
                   )}
                 </div>
               ))}
@@ -113,15 +90,15 @@ export const FileViewer = ({ file, onClose }: FileViewerProps) => {
         )}
 
         {/* Classes */}
-        {classes && classes.length > 0 && (
-          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+        {classes.length > 0 && (
+          <div>
             <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Classes</h4>
             <div className="space-y-3">
-              {classes.map((cls, index) => (
+              {classes.map((cls: { name: string; purpose: string }, index: number) => (
                 <div key={index} className="border-l-2 border-green-500 pl-3">
                   <h5 className="text-sm font-medium text-gray-900 dark:text-white">{cls.name}</h5>
                   {cls.purpose && (
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{cls.purpose}</p>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">{cls.purpose}</p>
                   )}
                 </div>
               ))}
@@ -183,14 +160,10 @@ export const FileViewer = ({ file, onClose }: FileViewerProps) => {
                       <span className="text-gray-500 dark:text-gray-400">Language</span>
                       <span className="text-gray-900 dark:text-white">{file.language || '-'}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div>
                       <span className="text-gray-500 dark:text-gray-400">Status</span>
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        (file.status || 'active') === 'active'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                      }`}>
-                        {file.status || 'active'}
+                      <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                        Active
                       </span>
                     </div>
                   </div>
@@ -205,7 +178,9 @@ export const FileViewer = ({ file, onClose }: FileViewerProps) => {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <span className="text-gray-500 dark:text-gray-400">SHA</span>
-                      <span className="text-gray-900 dark:text-white font-mono text-sm">{file.sha}</span>
+                      <span className="text-gray-900 dark:text-white font-mono text-sm">
+                        {file.metadata?.sha || 'N/A'}
+                      </span>
                     </div>
                     <div>
                       <span className="text-gray-500 dark:text-gray-400">Last Commit Message</span>
@@ -222,11 +197,11 @@ export const FileViewer = ({ file, onClose }: FileViewerProps) => {
                   <div className="space-y-4">
                     <div>
                       <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Functions</h5>
-                      <ExpandableCell items={file.functions} />
+                      <ExpandableCell content={JSON.stringify(file.ai_analysis?.functions || [])} maxLength={100} />
                     </div>
                     <div>
                       <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Classes</h5>
-                      <ExpandableCell items={file.classes} />
+                      <ExpandableCell content={JSON.stringify(file.ai_analysis?.classes || [])} maxLength={100} />
                     </div>
                   </div>
                 </div>
@@ -234,12 +209,9 @@ export const FileViewer = ({ file, onClose }: FileViewerProps) => {
                 {/* Content Preview */}
                 {!file.metadata?.type || file.metadata.type !== 'directory' ? (
                   <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      Content Preview
-                    </h4>
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">File Content</h4>
                     <pre className="font-mono text-sm text-gray-900 dark:text-gray-100 overflow-auto max-h-[200px]">
-                      <code>{file.content || 'No content available'}</code>
+                      <code>{fileContent}</code>
                     </pre>
                   </div>
                 ) : (

@@ -1,5 +1,5 @@
 import { collection, doc, getDocs, updateDoc, query, where, orderBy, limit, addDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { db } from '../config/firebase';
 import { Ticket } from '../types/ticket';
 import { useState, useCallback } from 'react';
 import { useAccount } from '../context/AccountContext';

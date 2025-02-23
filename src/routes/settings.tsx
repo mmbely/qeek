@@ -3,7 +3,7 @@ import SettingsLayout from '../components/Settings/SettingsLayout';
 import GitHubSettings from '../components/Settings/GitHubSettings';
 import UserManagement from '../components/Settings/UserManagement';
 import CursorSettings from '../components/Settings/CursorSettings';
-import CursorExtractionTool from '../components/Codebase/CursorExtractionTool';
+import ToolSection from '../components/Codebase/ToolSection/ToolSection';
 
 export const settingsRoutes: RouteObject[] = [
   {
@@ -28,7 +28,7 @@ export const settingsRoutes: RouteObject[] = [
       },
       {
         path: 'codebase/cursor-extractor',
-        element: <CursorExtractionTool />
+        element: <ToolSection files={[]} />
       }
     ]
   }

@@ -27,7 +27,5 @@
       "recharts"
     ]
   },
-  "include": [
-    "src"
-, "functions"  ]
+  "include": ["src", "functions"]
 }

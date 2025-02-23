@@ -19,7 +19,8 @@ import AdminSettings from './components/Settings/AdminSettings';
 import FileExtractionTool from './components/Codebase/FileExtractionTool';
 import { settingsRoutes } from './routes/settings';
 import CursorSettings from './components/Settings/CursorSettings';
-import CursorExtractionTool from './components/Codebase/CursorExtractionTool';
+import ToolSection from './components/Codebase/ToolSection/ToolSection';
+import { ThemeProvider } from './context/ThemeContext';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -102,7 +103,7 @@ function AppContent() {
         <Route path="/codebase/files/:repositoryName" element={<CodebaseViewer />} />
         <Route path="/codebase">
           <Route path="file-extractor" element={<FileExtractionTool />} />
-          <Route path="cursor-extractor" element={<CursorExtractionTool />} />
+          <Route path="cursor-extractor" element={<ToolSection files={[]} />} />
         </Route>
         <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<UserProfile />} />
@@ -126,15 +127,17 @@ const router = createBrowserRouter([
 
 function App() {
   return (
-    <AuthProvider>
-      <AccountProvider>
-        <CodebaseProvider>
-          <Router>
-            <AppContent />
-          </Router>
-        </CodebaseProvider>
-      </AccountProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AccountProvider>
+          <CodebaseProvider>
+            <Router>
+              <AppContent />
+            </Router>
+          </CodebaseProvider>
+        </AccountProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

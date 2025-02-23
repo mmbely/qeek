@@ -8130,7 +8130,6 @@
           "src/services/auth.ts",
           "src/services/chat.ts",
           "src/services/email.ts",
-          "src/services/firebase.ts",
           "src/services/geminiFrontend.ts",
           "src/services/github.ts",
           "src/services/ticketService.ts"

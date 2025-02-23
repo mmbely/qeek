@@ -1,5 +1,5 @@
 import { collection, addDoc, updateDoc, deleteDoc, doc, getDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { db } from '../config/firebase';
 import { Ticket } from '../types/ticket';
 import { getAuth } from 'firebase/auth';
 import { database } from '../config/firebase';

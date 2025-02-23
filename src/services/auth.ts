@@ -1,4 +1,4 @@
-import { auth, database } from './firebase';
+import { auth, database } from '../config/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { ref, set } from "firebase/database";
 import { CustomUser } from '../types/user';

@@ -12,7 +12,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { ref, set } from 'firebase/database';
-import { auth, db, database } from '../services/firebase';
+import { auth, db, database } from '../config/firebase';
 import { registerUser, loginUser, logoutUser } from '../services/auth';
 import { CustomUser } from '../types/user';
 

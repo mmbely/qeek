@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { doc, updateDoc, collection, addDoc, getDocs, query, where, writeBatch, orderBy, limit, getDoc } from 'firebase/firestore';
-import { db } from '../../services/firebase';
+import { db } from '../../config/firebase';
 import { Ticket, TicketStatus, TicketPriority, TicketType } from '../../types/ticket';
 import { CustomUser } from '../../types/user';
 import { useAuth } from '../../context/AuthContext';

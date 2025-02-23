@@ -13,7 +13,7 @@ import { useCodebase } from '../../context/CodebaseContext';
 import { useAccount } from '../../context/AccountContext';
 import { syncRepository } from '../../services/github';
 import { onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
-import { db } from '../../services/firebase';
+import { db } from '../../config/firebase';
 
 export default function GitHubSettings() {
   const { user } = useAuth();
@@ -23,7 +23,7 @@ export default function GitHubSettings() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
-  const [repositories, setRepositories] = useState<GitHubRepo[]>([]);
+  const [repos, setRepositories] = useState<GitHubRepo[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,11 +37,11 @@ export default function GitHubSettings() {
 
   // Filter repositories based on search query
   const filteredRepositories = useMemo(() => {
-    return repositories.filter(repo => 
+    return repos.filter(repo => 
       repo.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (repo.description?.toLowerCase() || '').includes(searchQuery.toLowerCase())
     );
-  }, [repositories, searchQuery]);
+  }, [repos, searchQuery]);
 
   // Add debug logging for account state
   useEffect(() => {
@@ -50,15 +50,15 @@ export default function GitHubSettings() {
 
   // Initialize selected repository from account settings
   useEffect(() => {
-    if (currentAccount?.settings?.githubRepository && repositories.length > 0) {
-      const savedRepo = repositories.find(
+    if (currentAccount?.settings?.githubRepository && repos.length > 0) {
+      const savedRepo = repos.find(
         repo => repo.full_name === currentAccount.settings.githubRepository
       );
       if (savedRepo) {
         setSelectedRepo(savedRepo);
       }
     }
-  }, [currentAccount?.settings?.githubRepository, repositories]);
+  }, [currentAccount?.settings?.githubRepository, repos]);
 
   useEffect(() => {
     const loadGitHubStatus = async () => {
@@ -359,7 +359,7 @@ export default function GitHubSettings() {
       )}
 
       {/* Repository Selection UI */}
-      {isConnected && repositories.length > 0 && (
+      {isConnected && repos.length > 0 && (
         <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-200">
