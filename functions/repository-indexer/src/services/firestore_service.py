@@ -116,6 +116,13 @@ class FirestoreService:
                 'ai_analysis': file.get('ai_analysis', {}),
                 'analysis_metadata': file.get('analysis_metadata', {}),
                 
+                # Important: Store metadata including SHA
+                'metadata': {
+                    'sha': file.get('metadata', {}).get('sha'),
+                    'type': file.get('metadata', {}).get('type'),
+                    'content_type': file.get('metadata', {}).get('content_type')
+                },
+                
                 'status': 'active',
                 'updated_at': firestore.SERVER_TIMESTAMP,
                 'first_indexed_at': existing_files.get(doc_id, {}).get('first_indexed_at') or firestore.SERVER_TIMESTAMP
@@ -196,3 +203,15 @@ class FirestoreService:
             update_data['metadata']['progress_updated_at'] = firestore.SERVER_TIMESTAMP
             
         repo_ref.set(update_data, merge=True)
+
+    def get_repository_files(self, repo_ref) -> List[Dict]:
+        """
+        Get existing repository files from Firestore
+        """
+        try:
+            files_collection = repo_ref.collection('files')
+            files = files_collection.stream()
+            return [doc.to_dict() for doc in files]
+        except Exception as e:
+            print(f"Error fetching repository files from Firestore: {str(e)}")
+            return []

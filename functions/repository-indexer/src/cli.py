@@ -6,6 +6,7 @@ from pathlib import Path
 from main import process_repository
 from config import load_config
 from services.github_service import GitHubService
+from datetime import datetime
 
 async def main():
     parser = argparse.ArgumentParser(description='Repository Indexer CLI')
@@ -31,13 +32,17 @@ async def main():
             'projectId': config['firebase_project_id']
         })
     
+    # Convert skip_types to a set for efficient lookup
+    skip_types = set(args.skip_types.lower().split(',')) if args.skip_types else set()
+
     # Process repository with max files limit
     result = await process_repository(
         repo_full_name=args.repo_name,
         user_id='test_user',  # Only used for logging
         account_id=args.account_id,
         config=config,
-        max_files=args.max_files
+        max_files=args.max_files,
+        skip_types=skip_types  # Pass skip_types to the processing function
     )
     
     print("\nProcessing completed!")

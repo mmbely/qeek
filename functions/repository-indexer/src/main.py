@@ -89,7 +89,8 @@ async def process_repository(
     user_id: str, 
     account_id: str, 
     config: dict,
-    max_files: int = None
+    max_files: int = None,
+    skip_types: set = None
 ):
     """
     Process repository files and generate AI analysis
@@ -100,6 +101,7 @@ async def process_repository(
         account_id: Account ID for GitHub token
         config: Configuration dictionary
         max_files: Optional maximum number of files to process
+        skip_types: Optional set of file extensions to skip
     """
     try:
         print(f"Processing repository: {repo_full_name}")
@@ -109,24 +111,80 @@ async def process_repository(
         firestore_service = FirestoreService(config['firebase_project_id'])
         gemini_service = GeminiService(config['gemini_api_key'])
         
-        # Get repository metadata
-        repo_metadata = github_service.get_repository_metadata(repo_full_name)
-        repo_ref = firestore_service.store_repository_metadata(
-            repo_full_name.replace('/', '_'),
-            repo_metadata
-        )
+        # Get repository metadata including last_synced timestamp
+        repo_id = repo_full_name.replace('/', '_')
+        repo_ref = firestore_service.db.collection('repositories').document(repo_id)
+        repo_doc = repo_ref.get()
         
-        # Get all files
+        last_synced = None
+        if repo_doc.exists:
+            last_synced = repo_doc.to_dict().get('metadata', {}).get('last_synced')
+            print(f"Last sync timestamp: {last_synced}")
+        
+        # Convert last_synced to datetime if it's a string
+        if last_synced and isinstance(last_synced, str):
+            try:
+                # Try parsing ISO format first
+                last_synced = datetime.fromisoformat(last_synced)
+            except ValueError:
+                # Fallback to other formats if needed
+                try:
+                    last_synced = datetime.strptime(last_synced, '%Y-%m-%d %H:%M:%S.%f%z')
+                except ValueError:
+                    last_synced = datetime.strptime(last_synced, '%Y-%m-%d %H:%M:%S%z')
+        
+        # Get repository metadata and store it
+        repo_metadata = github_service.get_repository_metadata(repo_full_name)
+        repo_ref = firestore_service.store_repository_metadata(repo_id, repo_metadata)
+        
+        # Get existing files from Firestore
+        existing_files = firestore_service.get_repository_files(repo_ref)
+        existing_files_map = {f['path']: f for f in existing_files}
+        
+        # Get current files from GitHub
         print("Fetching repository files...")
-        files = github_service.get_repository_files(repo_full_name)
+        current_files = github_service.get_repository_files(repo_full_name)
         
         # Limit files if max_files is specified
         if max_files is not None:
             print(f"Limiting to {max_files} files for testing")
-            files = files[:max_files]
+            current_files = current_files[:max_files]
+        
+        # Determine which files need processing
+        files_to_process = []
+        for file in current_files:
+            # Skip files with extensions in skip_types
+            file_extension = file['path'].split('.')[-1].lower()
+            if skip_types and file_extension in skip_types:
+                continue
+                
+            existing_file = existing_files_map.get(file['path'])
+            should_process = False
             
-        total_files = len(files)
-        print(f"Processing {total_files} files")
+            if existing_file is None:
+                # New file
+                print(f"New file found: {file['path']}")
+                should_process = True
+            else:
+                # Check SHA if available
+                existing_sha = existing_file.get('metadata', {}).get('sha')
+                current_sha = file.get('metadata', {}).get('sha')
+                
+                if existing_sha and current_sha:
+                    # We have SHAs to compare
+                    if existing_sha != current_sha:
+                        print(f"SHA changed for file: {file['path']}")
+                        should_process = True
+                else:
+                    # No SHA, process to be safe
+                    print(f"No SHA available, processing: {file['path']}")
+                    should_process = True
+            
+            if should_process:
+                files_to_process.append(file)
+        
+        total_files = len(files_to_process)
+        print(f"Found {total_files} files that need processing out of {len(current_files)} total files")
         
         # Update initial progress
         firestore_service.update_sync_status(
@@ -135,10 +193,10 @@ async def process_repository(
             progress={'processed': 0, 'total': total_files}
         )
         
-        # Process files with progress bar
+        # Process only changed files
         processed_files = []
         with tqdm(total=total_files, desc="Analyzing files") as pbar:
-            for i, file in enumerate(files):
+            for i, file in enumerate(files_to_process):
                 processed_file = await process_file(
                     github_service, 
                     gemini_service, 
@@ -162,7 +220,7 @@ async def process_repository(
                     except Exception as e:
                         print(f"Warning: Failed to update progress: {str(e)}")
         
-        # Store results
+        # Store only the processed files
         print("\nStoring results in Firestore...")
         firestore_service.store_repository_files(repo_ref, processed_files)
         firestore_service.update_sync_status(repo_ref, 'completed')
@@ -171,7 +229,8 @@ async def process_repository(
         return {
             'status': 'success',
             'repository': repo_metadata,
-            'file_count': total_files
+            'file_count': total_files,
+            'changed_files': total_files
         }
         
     except Exception as e:
