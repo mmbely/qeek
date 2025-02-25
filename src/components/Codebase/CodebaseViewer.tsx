@@ -318,7 +318,6 @@ export default function CodebaseViewer() {
         isOpen={!!selectedFile}
         onClose={() => setSelectedFile(null)}
       />
-      <ToolSection files={files.map(f => f.path)} />
     </div>
   );
 }

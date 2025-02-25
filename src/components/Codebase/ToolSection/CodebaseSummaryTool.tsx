@@ -5,6 +5,11 @@ import { getRepositoryFiles, getRepositoryFile } from '../../../services/github'
 import { analyzeCodebase } from '../../../utils/analyzeCodebase';
 import { summaryPrompt } from '../../../constants/prompts';
 import { useTheme } from '../../../context/ThemeContext';
+import { RepositoryFile } from '../../../types/repository';
+import { Timestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { db } from '../../../config/firebase';
+import { useAccount } from '../../../context/AccountContext';
 
 interface CodebaseSummaryToolProps {
   files: string[];
@@ -15,20 +20,47 @@ const CodebaseSummaryTool = ({ files }: CodebaseSummaryToolProps) => {
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const { isDarkMode } = useTheme();
+  const { currentAccount } = useAccount();
 
   const handleGenerateSummary = async () => {
     setLoading(true);
     setError(null);
     
     try {
-      // Fetch files and generate summary
-      const repoFiles = await Promise.all(
-        files.map(async (filePath: string) => {
-          return await getRepositoryFile(filePath);
-        })
-      );
+      if (!currentAccount?.settings?.githubRepository) {
+        throw new Error('No repository connected');
+      }
 
-      const metadata = analyzeCodebase(repoFiles);
+      // Fetch repository data
+      const repoId = currentAccount.settings.githubRepository.replace('/', '_');
+      const repoRef = doc(db, 'repositories', repoId);
+      const repoDoc = await getDoc(repoRef);
+
+      if (!repoDoc.exists()) {
+        throw new Error('Repository not found');
+      }
+
+      // Fetch files from the 'files' subcollection
+      const filesCollection = collection(db, `repositories/${repoId}/files`);
+      const filesSnapshot = await getDocs(filesCollection);
+      const repoFiles = filesSnapshot.docs.map((doc) => doc.data() as RepositoryFile);
+
+      console.log('Fetched repository files:', repoFiles);
+
+      // Filter out files with empty ai_analysis
+      const validFiles = repoFiles.filter((file): file is RepositoryFile & { ai_analysis: object } => {
+        return !!file.ai_analysis && Object.keys(file.ai_analysis).length > 0;
+      });
+
+      console.log('Valid files with ai_analysis:', validFiles);
+
+      if (validFiles.length === 0) {
+        throw new Error('No valid files with AI analysis found');
+      }
+
+      const metadata = analyzeCodebase(validFiles);
+      console.log('Generated metadata:', metadata);
+
       const fullPrompt = summaryPrompt
         .replace('{{DIRECTORIES}}', Array.from(metadata.directories).join('\n'))
         .replace('{{FILE_TYPES}}', Array.from(metadata.fileTypes).join(', '))
@@ -42,8 +74,18 @@ const CodebaseSummaryTool = ({ files }: CodebaseSummaryToolProps) => {
         .replace('{{ENV_VARS}}', Array.from(metadata.envVars).join(', '))
         .replace('{{SCRIPTS}}', Array.from(metadata.scripts).join(', '));
 
+      console.log('Full prompt:', fullPrompt);
+
       const aiResponse = await generateAISummary(
-        JSON.stringify(metadata),
+        JSON.stringify({
+          files: validFiles.map(file => ({
+            path: file.path,
+            language: file.language,
+            size: file.size,
+            ai_analysis: file.ai_analysis
+          })),
+          metadata
+        }),
         'codebase-summary',
         fullPrompt
       );
@@ -52,7 +94,8 @@ const CodebaseSummaryTool = ({ files }: CodebaseSummaryToolProps) => {
         throw new Error('Invalid AI response');
       }
 
-      setSummary(aiResponse.candidates[0].content.parts[0].text);
+      const summaryText = aiResponse.candidates[0].content.parts[0].text;
+      setSummary(summaryText);
     } catch (error) {
       console.error('Failed to generate summary:', error);
       setError(error instanceof Error ? error.message : 'An error occurred');
