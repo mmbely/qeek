@@ -10,10 +10,11 @@ import ErrorState from '././ErrorState';
 import NotConnectedState from './NotConnectedState';
 import FileViewerModal from '././FileViewerModal';
 import LoadingState from './LoadingState';
-import { syncRepository } from '../../services/github';
+import { syncRepository, getRepositoryFiles } from '../../services/github';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Cog } from 'lucide-react';
+import ToolSection from './ToolSection/ToolSection';
 
 export default function CodebaseViewer() {
   // Hooks
@@ -317,6 +318,7 @@ export default function CodebaseViewer() {
         isOpen={!!selectedFile}
         onClose={() => setSelectedFile(null)}
       />
+      <ToolSection files={files.map(f => f.path)} />
     </div>
   );
 }

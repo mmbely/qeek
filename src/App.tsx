@@ -16,10 +16,10 @@ import SettingsLayout from './components/Settings/SettingsLayout';
 import UserManagement from './components/Settings/UserManagement';
 import UserProfile from './components/Settings/UserProfile';
 import AdminSettings from './components/Settings/AdminSettings';
-import FileExtractionTool from './components/Codebase/FileExtractionTool';
 import { settingsRoutes } from './routes/settings';
 import CursorSettings from './components/Settings/CursorSettings';
 import ToolSection from './components/Codebase/ToolSection/ToolSection';
+import FileExtractionTool from './components/Codebase/FileExtractionTool';
 import { ThemeProvider } from './context/ThemeContext';
 
 interface ProtectedRouteProps {
