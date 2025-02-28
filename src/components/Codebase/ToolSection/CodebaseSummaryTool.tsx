@@ -153,7 +153,7 @@ const CodebaseSummaryTool = ({ files }: CodebaseSummaryToolProps) => {
                 </h3>
               </div>
               <div className="p-4">
-                <pre className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto">
+                <pre className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px]">
                   {summary}
                 </pre>
               </div>

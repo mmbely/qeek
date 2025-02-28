@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { RefreshCw, AlertTriangle, Component } from 'lucide-react';
 import { generateComponentMetadata } from '../../../utils/generateComponentMetadata';
 import { useTheme } from '../../../context/ThemeContext';
+import { useAccount } from '../../../context/AccountContext';
 
 interface ComponentMetadataToolProps {
   files: string[];
@@ -12,16 +13,25 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { isDarkMode } = useTheme();
+  const { currentAccount } = useAccount();
 
   const handleGenerateMetadata = async () => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      setError(null);
-      const metadata = await generateComponentMetadata(files);
+      if (!currentAccount?.settings?.githubRepository) {
+        throw new Error('No repository connected');
+      }
+
+      const metadata = await generateComponentMetadata(
+        files,
+        currentAccount.settings.githubRepository
+      );
       setMetadata(metadata);
     } catch (error) {
       console.error('Failed to generate metadata:', error);
-      setError(error instanceof Error ? error.message : 'Failed to generate metadata');
+      setError(error instanceof Error ? error.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -76,8 +86,13 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                 </h3>
               </div>
               <div className="p-4">
-                <pre className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto">
-                  {JSON.stringify(metadata, null, 2)}
+                <pre className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px]">
+                  {typeof metadata === 'string' ? 
+                    // Try to parse the string as JSON
+                    JSON.stringify(JSON.parse(metadata.replace(/```json\n|\n```/g, '')), null, 2) :
+                    // If it's already an object, just stringify it
+                    JSON.stringify(metadata, null, 2)
+                  }
                 </pre>
               </div>
             </div>
