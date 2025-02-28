@@ -1,8 +1,57 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { RefreshCw, AlertTriangle, Component } from 'lucide-react';
 import { generateComponentMetadata } from '../../../utils/generateComponentMetadata';
 import { useTheme } from '../../../context/ThemeContext';
 import { useAccount } from '../../../context/AccountContext';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { materialDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+interface SimpleTabsProps {
+  defaultValue: string;
+  children: React.ReactNode;
+}
+
+interface TabProps {
+  value: string;
+  label: string;
+  children: React.ReactNode;
+}
+
+// Simple tab implementation
+const SimpleTabs = ({ defaultValue, children }: SimpleTabsProps) => {
+  const [activeTab, setActiveTab] = useState(defaultValue);
+  return (
+    <div>
+      <div className="flex gap-2 mb-4">
+        {React.Children.map(children, (child) => {
+          if (React.isValidElement(child)) {
+            return (
+              <button
+                className={`px-4 py-2 rounded-md ${
+                  activeTab === child.props.value
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200'
+                }`}
+                onClick={() => setActiveTab(child.props.value)}
+              >
+                {child.props.label}
+              </button>
+            );
+          }
+          return null;
+        })}
+      </div>
+      {React.Children.map(children, (child) =>
+        React.isValidElement(child) && activeTab === child.props.value ? child : null
+      )}
+    </div>
+  );
+};
+
+const Tab = ({ value, label, children }: TabProps) => {
+  return <div>{children}</div>;
+};
 
 interface ComponentMetadataToolProps {
   files: string[];
@@ -86,14 +135,42 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                 </h3>
               </div>
               <div className="p-4">
-                <pre className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px]">
-                  {typeof metadata === 'string' ? 
-                    // Try to parse the string as JSON
-                    JSON.stringify(JSON.parse(metadata.replace(/```json\n|\n```/g, '')), null, 2) :
-                    // If it's already an object, just stringify it
-                    JSON.stringify(metadata, null, 2)
-                  }
-                </pre>
+                <SimpleTabs defaultValue="raw">
+                  <Tab value="raw" label="Raw Response">
+                    <div className="overflow-auto max-h-[500px]">
+                      <pre className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+                        {JSON.stringify(metadata, null, 2)}
+                      </pre>
+                    </div>
+                  </Tab>
+                  <Tab value="formatted" label="Formatted">
+                    <div className="overflow-auto max-h-[500px]">
+                      <ReactMarkdown
+                        components={{
+                          code({ node, className, children, ...props }) {
+                            const match = /language-(\w+)/.exec(className || '');
+                            return match ? (
+                              <SyntaxHighlighter
+                                style={materialDark as any}
+                                language={match[1]}
+                                PreTag="div"
+                                {...(props as any)}
+                              >
+                                {String(children).replace(/\n$/, '')}
+                              </SyntaxHighlighter>
+                            ) : (
+                              <code className={className} {...props}>
+                                {children}
+                              </code>
+                            );
+                          }
+                        }}
+                      >
+                        {`\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\``}
+                      </ReactMarkdown>
+                    </div>
+                  </Tab>
+                </SimpleTabs>
               </div>
             </div>
           )}
