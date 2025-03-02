@@ -16,6 +16,13 @@ import { db } from '../../config/firebase';
 import { Cog } from 'lucide-react';
 import ToolSection from './ToolSection/ToolSection';
 
+// Add this helper function to map legacy 'active' status to 'unchanged'
+const normalizeFileStatus = (status: string | undefined): FileStatus => {
+  if (!status) return 'unchanged';
+  if (status === 'active') return 'unchanged';
+  return status as FileStatus;
+};
+
 export default function CodebaseViewer() {
   // Hooks
   const { user } = useAuth();
@@ -153,12 +160,9 @@ export default function CodebaseViewer() {
         file.path?.split('/').pop()?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         file.ai_analysis?.summary?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // Handle both 'active' and 'unchanged' as the same for filtering
-      const matchesStatus =
-        filterStatus === 'all' || 
-        file.status === filterStatus || 
-        (filterStatus === 'unchanged' && file.status === 'active') || 
-        (filterStatus === 'active' && file.status === 'unchanged');
+      // Normalize the file status before comparing
+      const normalizedStatus = normalizeFileStatus(file.status);
+      const matchesStatus = filterStatus === 'all' || normalizedStatus === filterStatus;
 
       const matchesLanguage =
         filterLanguage === 'all' || file.language === filterLanguage;

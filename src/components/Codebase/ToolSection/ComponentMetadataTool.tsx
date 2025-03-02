@@ -84,7 +84,6 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
       }
 
       try {
-        // Fix: getRepositoryFile expects only one argument (the repository path)
         const existingFile = await getRepositoryFile(
           `${currentAccount.settings.githubRepository}/.cursor/components.json`
         );
@@ -182,69 +181,6 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
     URL.revokeObjectURL(url);
   };
 
-  // Render GitHub not connected message
-  if (!currentAccount?.settings?.githubRepository && !checkingExisting) {
-    return (
-      <div className="w-full">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-200">
-              Component Metadata
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Extract metadata from your components
-            </p>
-          </div>
-          <Component className="h-8 w-8 text-gray-400" />
-        </div>
-
-        <div className="bg-white dark:bg-[#1e2132] rounded-lg shadow-sm p-6">
-          <div className="text-center py-8">
-            <GitPullRequest className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-              GitHub Repository Not Connected
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              Connect your GitHub repository in settings to use this feature.
-            </p>
-            <Button 
-              onClick={() => window.location.href = '/settings/github'}
-              className="bg-blue-500 hover:bg-blue-600 text-white"
-            >
-              Go to GitHub Settings
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Render loading state
-  if (checkingExisting) {
-    return (
-      <div className="w-full">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-200">
-              Component Metadata
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Extract metadata from your components
-            </p>
-          </div>
-          <Component className="h-8 w-8 text-gray-400" />
-        </div>
-
-        <div className="bg-white dark:bg-[#1e2132] rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-center py-8">
-            <RefreshCw className="h-8 w-8 animate-spin text-blue-500" />
-            <span className="ml-2 text-gray-700 dark:text-gray-300">Checking for existing metadata...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-6">
@@ -256,33 +192,14 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
             Extract metadata from your components
           </p>
         </div>
-        <Component className="h-8 w-8 text-gray-400" />
-      </div>
-
-      <div className="bg-white dark:bg-[#1e2132] rounded-lg shadow-sm p-6">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md flex items-start">
-            <AlertTriangle className="h-5 w-5 text-red-500 dark:text-red-400 mr-3 mt-0.5" />
-            <div>
-              <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Error</h3>
-              <p className="text-sm text-red-700 dark:text-red-400 mt-1">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {pushSuccess && (
-          <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
-            <p className="text-sm text-green-700 dark:text-green-400">
-              Successfully pushed components.json to GitHub!
-            </p>
-          </div>
-        )}
-
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <Button
+        
+        {/* Action buttons moved to top right */}
+        <div className="flex gap-2">
+          <button
             onClick={handleGenerateMetadata}
             disabled={loading}
-            className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white"
+            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 
+                     disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {loading ? (
               <>
@@ -295,31 +212,108 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                 Generate Metadata
               </>
             )}
-          </Button>
-
+          </button>
+          
           {generatedMetadata && (
-            <>
-              <Button
-                onClick={() => setShowPushDialog(true)}
-                className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white"
-              >
-                <GitPullRequest className="h-4 w-4" />
-                Push to GitHub
-              </Button>
-
-              <Button
-                onClick={() => downloadJson(generatedMetadata, 'components.json')}
-                className="flex items-center gap-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
-              >
-                <Download className="h-4 w-4" />
-                Download JSON
-              </Button>
-            </>
+            <button
+              onClick={() => setShowPushDialog(true)}
+              className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 
+                       flex items-center gap-2"
+            >
+              <GitPullRequest className="h-4 w-4" />
+              Push to GitHub
+            </button>
+          )}
+          
+          {(existingMetadata || generatedMetadata) && (
+            <button
+              onClick={() => downloadJson(generatedMetadata || existingMetadata, 'components.json')}
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 
+                       rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Download JSON
+            </button>
           )}
         </div>
+      </div>
 
-        {(existingMetadata || generatedMetadata) && (
-          <div className="mt-6">
+      {/* GitHub not connected message */}
+      {!currentAccount?.settings?.githubRepository && !checkingExisting && (
+        <div className="bg-white dark:bg-[#1e2132] rounded-lg shadow-sm p-6">
+          <div className="text-center py-8">
+            <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+              GitHub Repository Not Connected
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              Connect your GitHub repository in settings to use this feature.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {checkingExisting && (
+        <div className="bg-white dark:bg-[#1e2132] rounded-lg shadow-sm p-6">
+          <div className="text-center py-8">
+            <RefreshCw className="h-12 w-12 text-blue-500 mx-auto mb-4 animate-spin" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+              Checking for existing metadata...
+            </h3>
+          </div>
+        </div>
+      )}
+
+      {/* Error message */}
+      {error && (
+        <div className="bg-white dark:bg-[#1e2132] rounded-lg shadow-sm p-6 mb-6">
+          <div className="text-center py-4">
+            <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+            <h3 className="text-lg font-medium text-red-600 dark:text-red-400 mb-2">
+              Error
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Success message */}
+      {pushSuccess && (
+        <div className="bg-white dark:bg-[#1e2132] rounded-lg shadow-sm p-6 mb-6 border-l-4 border-green-500">
+          <div className="flex items-center py-2">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-green-800 dark:text-green-400">
+                Successfully pushed to GitHub!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main content */}
+      {!checkingExisting && !error && currentAccount?.settings?.githubRepository && (
+        <div className="bg-white dark:bg-[#1e2132] rounded-lg shadow-sm p-6">
+          {/* No metadata found state */}
+          {!existingMetadata && !generatedMetadata && (
+            <div className="text-center py-8">
+              <Component className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+                No Component Metadata Found
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Generate component metadata to document your UI components.
+              </p>
+            </div>
+          )}
+
+          {/* Metadata content */}
+          {(existingMetadata || generatedMetadata) && (
             <SimpleTabs defaultValue={activeTab}>
               {existingMetadata && (
                 <Tab value="existing" label="Existing Metadata">
@@ -386,7 +380,6 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                       </h3>
                     </div>
                     <div className="p-4">
-                      {/* Since we don't have ReactDiffViewer, we'll use a simple side-by-side comparison */}
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Existing</h4>
@@ -406,9 +399,9 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                 </Tab>
               )}
             </SimpleTabs>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Push to GitHub confirmation dialog */}
       {showPushDialog && (
