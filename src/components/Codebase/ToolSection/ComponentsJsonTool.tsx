@@ -8,8 +8,8 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { materialDark, materialLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { RepositoryFile } from '../../../types/repository';
 import { getRepositoryFile } from '../../../services/github';
-import { Dialog } from '../../../components/ui/dialog';
-import { Button } from '../../../components/ui/button';
+import { Dialog } from '../../ui/dialog';
+import { Button } from '../../ui/button';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { diffJson } from 'diff';
@@ -75,9 +75,9 @@ interface ComponentMetadataToolProps {
   files: RepositoryFile[];
 }
 
-const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
-  const [existingMetadata, setExistingMetadata] = useState<any>(null);
-  const [generatedMetadata, setGeneratedMetadata] = useState<any>(null);
+const ComponentsJsonTool = ({ files }: ComponentMetadataToolProps) => {
+  const [existingComponents, setExistingComponents] = useState<any>(null);
+  const [generatedComponents, setGeneratedComponents] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [checkingExisting, setCheckingExisting] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -118,7 +118,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
           if (response.ok) {
             const jsonData = await response.json();
             console.log("Successfully fetched components.json from GitHub raw URL");
-            setExistingMetadata(jsonData);
+            setExistingComponents(jsonData);
             setActiveTab('existing');
             return; // Exit early if successful
           } else {
@@ -158,7 +158,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                     try {
                       const parsedContent = JSON.parse(decodedContent);
                       console.log("Successfully parsed content from GitHub blob");
-                      setExistingMetadata(parsedContent);
+                      setExistingComponents(parsedContent);
                       setActiveTab('existing');
                       return; // Exit early if successful
                     } catch (parseError) {
@@ -177,7 +177,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
             // Check if the document has a 'components' field
             if (data.components) {
               console.log("Found 'components' field in document");
-              setExistingMetadata(data);
+              setExistingComponents(data);
               setActiveTab('existing');
             } else {
               // As a last resort, try to fetch the file content using the path
@@ -187,7 +187,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                 if (fileContent.ok) {
                   const jsonData = await fileContent.json();
                   console.log("Successfully fetched file content");
-                  setExistingMetadata(jsonData);
+                  setExistingComponents(jsonData);
                   setActiveTab('existing');
                 } else {
                   console.error("Failed to fetch file content:", fileContent.statusText);
@@ -217,7 +217,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
     checkExistingFile();
   }, [currentAccount, db]);
 
-  const handleGenerateMetadata = async () => {
+  const handleGenerateComponents = async () => {
     setLoading(true);
     setError(null);
     setPushSuccess(false);
@@ -227,14 +227,14 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
         throw new Error('No repository connected');
       }
 
-      const metadata = await generateComponentMetadata(
+      const components = await generateComponentMetadata(
         files,
         currentAccount.settings.githubRepository
       );
-      setGeneratedMetadata(metadata);
+      setGeneratedComponents(components);
       setActiveTab('generated');
     } catch (error) {
-      console.error('Failed to generate metadata:', error);
+      console.error('Failed to generate components.json:', error);
       setError(error instanceof Error ? error.message : 'An error occurred');
     } finally {
       setLoading(false);
@@ -253,7 +253,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
   };
 
   const handlePushToGitHub = async () => {
-    if (!generatedMetadata || !currentAccount?.settings?.githubRepository || !currentAccount?.id) {
+    if (!generatedComponents || !currentAccount?.settings?.githubRepository || !currentAccount?.id) {
       setPushError('Missing repository information or account ID');
       return;
     }
@@ -265,7 +265,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
     try {
       const [owner, repo] = currentAccount.settings.githubRepository.split('/');
       const filePath = '.cursor/components.json';
-      const content = JSON.stringify(generatedMetadata, null, 2);
+      const content = JSON.stringify(generatedComponents, null, 2);
       const commitMessage = 'Update components.json via Qeek';
       
       // Get GitHub token from secure_tokens collection
@@ -328,7 +328,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
         });
         
         setPushSuccess(true);
-        setExistingMetadata(generatedMetadata);
+        setExistingComponents(generatedComponents);
         setShowPushDialog(false);
       } catch (apiError: any) {
         console.error('GitHub API error:', apiError);
@@ -364,15 +364,15 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
     URL.revokeObjectURL(url);
   };
 
-  // Generate diff when both metadata are available and compare tab is active
+  // Generate diff when both components are available and compare tab is active
   useEffect(() => {
-    if (existingMetadata && generatedMetadata && activeTab === 'compare') {
-      console.log("Generating diff between existing and generated metadata");
+    if (existingComponents && generatedComponents && activeTab === 'compare') {
+      console.log("Generating diff between existing and generated components.json");
       
       try {
         // Generate diff using properly formatted JSON strings
-        const existingStr = JSON.stringify(existingMetadata, null, 2);
-        const generatedStr = JSON.stringify(generatedMetadata, null, 2);
+        const existingStr = JSON.stringify(existingComponents, null, 2);
+        const generatedStr = JSON.stringify(generatedComponents, null, 2);
         
         const differences = diffJson(existingStr, generatedStr);
         
@@ -387,24 +387,24 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
         setHasDifferences(false);
       }
     }
-  }, [existingMetadata, generatedMetadata, activeTab]);
+  }, [existingComponents, generatedComponents, activeTab]);
 
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-200">
-            Component Metadata
+            Components JSON
           </h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Extract metadata from your components
+            Generate and manage your components.json file
           </p>
         </div>
         
         {/* Action buttons moved to top right */}
         <div className="flex gap-2">
           <button
-            onClick={handleGenerateMetadata}
+            onClick={handleGenerateComponents}
             disabled={loading}
             className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 
                      disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -417,12 +417,12 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
             ) : (
               <>
                 <RefreshCw className="h-4 w-4" />
-                Generate Metadata
+                Generate components.json
               </>
             )}
           </button>
           
-          {generatedMetadata && (
+          {generatedComponents && (
             <button
               onClick={() => setShowPushDialog(true)}
               className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 
@@ -433,9 +433,9 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
             </button>
           )}
           
-          {(existingMetadata || generatedMetadata) && (
+          {(existingComponents || generatedComponents) && (
             <button
-              onClick={() => downloadJson(generatedMetadata || existingMetadata, 'components.json')}
+              onClick={() => downloadJson(generatedComponents || existingComponents, 'components.json')}
               className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 
                        rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center gap-2"
             >
@@ -526,7 +526,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
       {!checkingExisting && !error && currentAccount?.settings?.githubRepository && (
         <div className="bg-white dark:bg-[#1e2132] rounded-lg shadow-sm p-6">
           {/* No metadata found state */}
-          {!existingMetadata && !generatedMetadata && (
+          {!existingComponents && !generatedComponents && (
             <div className="text-center py-8">
               <Component className="h-12 w-12 text-blue-500 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
@@ -539,18 +539,18 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
           )}
 
           {/* Metadata content */}
-          {(existingMetadata || generatedMetadata) && (
+          {(existingComponents || generatedComponents) && (
             <SimpleTabs defaultValue={activeTab} onValueChange={setActiveTab}>
-              {existingMetadata && (
-                <Tab value="existing" label="Existing Metadata">
+              {existingComponents && (
+                <Tab value="existing" label="Existing components.json">
                   <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                     <div className="border-b border-gray-200 dark:border-gray-700">
                       <div className="flex justify-between items-center p-2">
                         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 px-2">
-                          Existing Metadata
+                          Existing components.json
                         </h3>
                         <button
-                          onClick={() => copyToClipboard(JSON.stringify(existingMetadata, null, 2))}
+                          onClick={() => copyToClipboard(JSON.stringify(existingComponents, null, 2))}
                           className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 
                                    dark:hover:bg-gray-600 rounded-md flex items-center gap-2 
                                    text-gray-700 dark:text-gray-300 transition-colors"
@@ -562,23 +562,23 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                     </div>
                     <div className="p-4">
                       <pre className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px] font-mono">
-                        {JSON.stringify(existingMetadata, null, 2)}
+                        {JSON.stringify(existingComponents, null, 2)}
                       </pre>
                     </div>
                   </div>
                 </Tab>
               )}
               
-              {generatedMetadata && (
-                <Tab value="generated" label="Generated Metadata">
+              {generatedComponents && (
+                <Tab value="generated" label="Generated components.json">
                   <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                     <div className="border-b border-gray-200 dark:border-gray-700">
                       <div className="flex justify-between items-center p-2">
                         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 px-2">
-                          Generated Metadata
+                          Generated components.json
                         </h3>
                         <button
-                          onClick={() => copyToClipboard(JSON.stringify(generatedMetadata, null, 2))}
+                          onClick={() => copyToClipboard(JSON.stringify(generatedComponents, null, 2))}
                           className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 
                                    dark:hover:bg-gray-600 rounded-md flex items-center gap-2 
                                    text-gray-700 dark:text-gray-300 transition-colors"
@@ -590,15 +590,15 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                     </div>
                     <div className="p-4">
                       <pre className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px] font-mono">
-                        {JSON.stringify(generatedMetadata, null, 2)}
+                        {JSON.stringify(generatedComponents, null, 2)}
                       </pre>
                     </div>
                   </div>
                 </Tab>
               )}
               
-              {existingMetadata && generatedMetadata && (
-                <Tab value="compare" label="Compare">
+              {existingComponents && generatedComponents && (
+                <Tab value="compare" label="Compare Changes">
                   <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                     <div className="border-b border-gray-200 dark:border-gray-700">
                       <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 p-4">
@@ -697,4 +697,4 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
   );
 };
 
-export default ComponentMetadataTool;
+export default ComponentsJsonTool;

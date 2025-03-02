@@ -20,7 +20,7 @@
   "contextProviders": [
     {
       "name": "repository-metadata",
-      "path": ".cursor/metadata/"
+      "path": ".cursor/components/"
     }
   ]
 }

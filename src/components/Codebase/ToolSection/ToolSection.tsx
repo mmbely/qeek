@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Code2, FileCode, Component, ScrollText, Settings } from 'lucide-react';
 import CodebaseSummaryTool from './CodebaseSummaryTool';
-import ComponentMetadataTool from './ComponentMetadataTool';
+import ComponentsJsonTool from './ComponentsJsonTool';
 import RulesGenerationTool from './RulesGenerationTool';
 import SettingsGenerationTool from './SettingsGenerationTool';
 import { useTheme } from '../../../context/ThemeContext';
@@ -21,7 +21,7 @@ const ToolSection = ({ files }: ToolSectionProps) => {
   const getToolFromPath = () => {
     const path = location.pathname;
     if (path.includes('/summary')) return 'summary';
-    if (path.includes('/metadata')) return 'metadata';
+    if (path.includes('/components')) return 'metadata';
     if (path.includes('/rules')) return 'rules';
     if (path.includes('/settings')) return 'settings';
     return 'summary'; // Default
@@ -34,7 +34,7 @@ const ToolSection = ({ files }: ToolSectionProps) => {
     const basePath = '/codebase/cursor-extractor';
     const toolPaths = {
       summary: `${basePath}/summary`,
-      metadata: `${basePath}/metadata`,
+      metadata: `${basePath}/components`,
       rules: `${basePath}/rules`,
       settings: `${basePath}/settings`,
     };
@@ -49,7 +49,7 @@ const ToolSection = ({ files }: ToolSectionProps) => {
 
   const tools = [
     { id: 'summary', label: 'Codebase Summary', icon: FileCode },
-    { id: 'metadata', label: 'Component Metadata', icon: Component },
+    { id: 'metadata', label: 'Components JSON', icon: Component },
     { id: 'rules', label: 'Rules Generation', icon: ScrollText },
     { id: 'settings', label: 'Settings Generation', icon: Settings },
   ];
@@ -91,7 +91,7 @@ const ToolSection = ({ files }: ToolSectionProps) => {
       {/* Main Content */}
       <div className="flex-1 bg-gray-50 dark:bg-[#171923] p-6">
         {activeTool === 'summary' && <CodebaseSummaryTool files={files} />}
-        {activeTool === 'metadata' && <ComponentMetadataTool files={files} />}
+        {activeTool === 'metadata' && <ComponentsJsonTool files={files} />}
         {activeTool === 'rules' && <RulesGenerationTool files={files} />}
         {activeTool === 'settings' && <SettingsGenerationTool files={files} />}
       </div>
