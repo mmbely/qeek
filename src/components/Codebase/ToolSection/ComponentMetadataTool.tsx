@@ -88,12 +88,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
   const leftPanelRef = useRef<HTMLDivElement>(null);
   const rightPanelRef = useRef<HTMLDivElement>(null);
   const [hasDifferences, setHasDifferences] = useState(false);
-  const [isScrollingSynced, setIsScrollingSynced] = useState(true);
-  const [differences, setDifferences] = useState<{path: string, existing: any, generated: any}[]>([]);
-  const [highlightedCode, setHighlightedCode] = useState<{existing: React.ReactNode, generated: React.ReactNode}>({
-    existing: null,
-    generated: null
-  });
+  const [diffResult, setDiffResult] = useState<any[]>([]);
 
   // Check for existing components.json file
   useEffect(() => {
@@ -296,357 +291,27 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
     URL.revokeObjectURL(url);
   };
 
-  // Find differences between objects
-  const findObjectDifferences = (obj1: any, obj2: any, path = ''): {path: string, existing: any, generated: any}[] => {
-    const result: {path: string, existing: any, generated: any}[] = [];
-    
-    // Helper function to check if a value is an object
-    const isObject = (value: any) => 
-      value !== null && typeof value === 'object' && !Array.isArray(value);
-    
-    // Get all keys from both objects
-    const keys1 = Object.keys(obj1 || {});
-    const keys2 = Object.keys(obj2 || {});
-    const allKeys: string[] = [];
-    
-    // Add keys from obj1
-    keys1.forEach(key => {
-      if (!allKeys.includes(key)) {
-        allKeys.push(key);
-      }
-    });
-    
-    // Add keys from obj2
-    keys2.forEach(key => {
-      if (!allKeys.includes(key)) {
-        allKeys.push(key);
-      }
-    });
-    
-    for (const key of allKeys) {
-      const currentPath = path ? `${path}.${key}` : key;
-      
-      // Key exists in both objects
-      if (key in obj1 && key in obj2) {
-        const val1 = obj1[key];
-        const val2 = obj2[key];
-        
-        // Both values are objects - recurse
-        if (isObject(val1) && isObject(val2)) {
-          result.push(...findObjectDifferences(val1, val2, currentPath));
-        } 
-        // Both values are arrays - compare them
-        else if (Array.isArray(val1) && Array.isArray(val2)) {
-          if (JSON.stringify(val1) !== JSON.stringify(val2)) {
-            result.push({
-              path: currentPath,
-              existing: val1,
-              generated: val2
-            });
-          }
-        }
-        // Values are different
-        else if (JSON.stringify(val1) !== JSON.stringify(val2)) {
-          result.push({
-            path: currentPath,
-            existing: val1,
-            generated: val2
-          });
-        }
-      }
-      // Key only in obj1
-      else if (key in obj1) {
-        result.push({
-          path: currentPath,
-          existing: obj1[key],
-          generated: undefined
-        });
-      }
-      // Key only in obj2
-      else {
-        result.push({
-          path: currentPath,
-          existing: undefined,
-          generated: obj2[key]
-        });
-      }
-    }
-    
-    return result;
-  };
-
   // Generate diff when both metadata are available and compare tab is active
   useEffect(() => {
     if (existingMetadata && generatedMetadata && activeTab === 'compare') {
-      console.log("Finding differences between existing and generated metadata");
+      console.log("Generating diff between existing and generated metadata");
       
       try {
-        // Find differences between objects
-        const diffs = findObjectDifferences(existingMetadata, generatedMetadata);
-        console.log("Differences found:", diffs.length);
+        // Generate diff
+        const differences = diffJson(existingMetadata, generatedMetadata);
         
-        if (diffs.length > 0) {
-          console.log("First difference:", diffs[0]);
-        }
+        // Check if there are differences
+        const hasChanges = differences.some(part => part.added || part.removed);
+        setHasDifferences(hasChanges);
+        setDiffResult(differences);
         
-        setDifferences(diffs);
-        setHasDifferences(diffs.length > 0);
-        
-        // Generate highlighted code
-        if (diffs.length > 0) {
-          generateHighlightedCode(existingMetadata, generatedMetadata, diffs);
-        }
+        console.log("Diff generated:", differences.length, "parts, has changes:", hasChanges);
       } catch (error) {
-        console.error("Error finding differences:", error);
+        console.error("Error generating diff:", error);
         setHasDifferences(false);
       }
     }
   }, [existingMetadata, generatedMetadata, activeTab]);
-
-  // Generate highlighted code with differences
-  const generateHighlightedCode = (existing: any, generated: any, diffs: {path: string, existing: any, generated: any}[]) => {
-    // Convert objects to pretty JSON strings
-    const existingStr = JSON.stringify(existing, null, 2);
-    const generatedStr = JSON.stringify(generated, null, 2);
-    
-    // Split into lines
-    const existingLines = existingStr.split('\n');
-    const generatedLines = generatedStr.split('\n');
-    
-    // Create a more precise path-to-line mapping
-    const existingLineInfo = analyzeJsonLines(existingLines);
-    const generatedLineInfo = analyzeJsonLines(generatedLines);
-    
-    // Create highlighted versions
-    const highlightedExisting = (
-      <div>
-        {existingLines.map((line, index) => {
-          // Get the path for this line
-          const lineInfo = existingLineInfo[index];
-          if (!lineInfo) return <div key={index}>{line}</div>;
-          
-          // Check if this line contains a property that has a difference
-          const isDiffLine = diffs.some(diff => {
-            // For property lines, check if the property path matches exactly
-            if (lineInfo.type === 'property') {
-              return lineInfo.path === diff.path;
-            }
-            // For value lines, check if the parent property path matches
-            else if (lineInfo.type === 'value' && lineInfo.parentPath) {
-              return lineInfo.parentPath === diff.path;
-            }
-            return false;
-          });
-          
-          return (
-            <div 
-              key={index} 
-              className={isDiffLine ? 'bg-red-100 dark:bg-red-900/30' : ''}
-              style={{ padding: '1px 0' }}
-            >
-              {line}
-            </div>
-          );
-        })}
-      </div>
-    );
-    
-    const highlightedGenerated = (
-      <div>
-        {generatedLines.map((line, index) => {
-          // Get the path for this line
-          const lineInfo = generatedLineInfo[index];
-          if (!lineInfo) return <div key={index}>{line}</div>;
-          
-          // Check if this line contains a property that has a difference
-          const isDiffLine = diffs.some(diff => {
-            // For property lines, check if the property path matches exactly
-            if (lineInfo.type === 'property') {
-              return lineInfo.path === diff.path;
-            }
-            // For value lines, check if the parent property path matches
-            else if (lineInfo.type === 'value' && lineInfo.parentPath) {
-              return lineInfo.parentPath === diff.path;
-            }
-            return false;
-          });
-          
-          return (
-            <div 
-              key={index} 
-              className={isDiffLine ? 'bg-green-100 dark:bg-green-900/30' : ''}
-              style={{ padding: '1px 0' }}
-            >
-              {line}
-            </div>
-          );
-        })}
-      </div>
-    );
-    
-    setHighlightedCode({
-      existing: highlightedExisting,
-      generated: highlightedGenerated
-    });
-  };
-
-  // Analyze JSON lines to get detailed path information for each line
-  const analyzeJsonLines = (lines: string[]) => {
-    const lineInfo: {
-      path: string;
-      parentPath: string | null;
-      type: 'property' | 'value' | 'object' | 'array' | 'other';
-    }[] = [];
-    
-    // Stack to keep track of current path and context
-    const stack: {path: string, isArray: boolean, arrayIndex?: number}[] = [];
-    
-    lines.forEach((line, index) => {
-      // Calculate indentation level
-      const indent = line.match(/^(\s*)/)?.[1].length || 0;
-      
-      // Pop stack items with greater or equal indentation when closing brackets are found
-      if (line.trim() === '}' || line.trim() === '},') {
-        while (stack.length > 0 && !stack[stack.length - 1].isArray) {
-          stack.pop();
-        }
-        lineInfo[index] = { 
-          path: stack.length > 0 ? stack[stack.length - 1].path : '', 
-          parentPath: stack.length > 1 ? stack[stack.length - 2].path : null,
-          type: 'object' 
-        };
-        return;
-      }
-      
-      if (line.trim() === ']' || line.trim() === '],') {
-        while (stack.length > 0 && stack[stack.length - 1].isArray) {
-          stack.pop();
-        }
-        lineInfo[index] = { 
-          path: stack.length > 0 ? stack[stack.length - 1].path : '', 
-          parentPath: stack.length > 1 ? stack[stack.length - 2].path : null,
-          type: 'array' 
-        };
-        return;
-      }
-      
-      // Check if line contains a property name
-      const propMatch = line.match(/^\s*"([^"]+)"\s*:/);
-      if (propMatch) {
-        const propName = propMatch[1];
-        
-        // Adjust stack based on indentation
-        while (stack.length > 0 && stack[stack.length - 1].path.split('.').length * 2 >= indent) {
-          stack.pop();
-        }
-        
-        // Build the current path
-        const parentPath = stack.length > 0 ? stack[stack.length - 1].path : '';
-        const currentPath = parentPath ? `${parentPath}.${propName}` : propName;
-        
-        // Check if this is an object or array opening
-        if (line.includes('{')) {
-          stack.push({ path: currentPath, isArray: false });
-          lineInfo[index] = { 
-            path: currentPath, 
-            parentPath,
-            type: 'property' 
-          };
-        } else if (line.includes('[')) {
-          stack.push({ path: currentPath, isArray: true });
-          lineInfo[index] = { 
-            path: currentPath, 
-            parentPath,
-            type: 'property' 
-          };
-        } else {
-          // This is a simple property with a value
-          lineInfo[index] = { 
-            path: currentPath, 
-            parentPath,
-            type: 'property' 
-          };
-        }
-      }
-      // Check for array items
-      else if (line.trim().startsWith('{') && stack.length > 0 && stack[stack.length - 1].isArray) {
-        const arrayPath = stack[stack.length - 1].path;
-        const arrayIndex = stack[stack.length - 1].arrayIndex || 0;
-        const itemPath = `${arrayPath}[${arrayIndex}]`;
-        
-        stack.push({ path: itemPath, isArray: false });
-        stack[stack.length - 2].arrayIndex = arrayIndex + 1;
-        
-        lineInfo[index] = { 
-          path: itemPath, 
-          parentPath: arrayPath,
-          type: 'object' 
-        };
-      }
-      // Check for value lines (lines that don't contain property names but have values)
-      else if (!propMatch && line.trim() && !line.trim().startsWith('{') && !line.trim().startsWith('[')) {
-        const currentPath = stack.length > 0 ? stack[stack.length - 1].path : '';
-        lineInfo[index] = { 
-          path: currentPath, 
-          parentPath: stack.length > 1 ? stack[stack.length - 2].path : null,
-          type: 'value' 
-        };
-      }
-      // Other lines (brackets, commas, etc.)
-      else {
-        const currentPath = stack.length > 0 ? stack[stack.length - 1].path : '';
-        lineInfo[index] = { 
-          path: currentPath, 
-          parentPath: stack.length > 1 ? stack[stack.length - 2].path : null,
-          type: 'other' 
-        };
-      }
-    });
-    
-    return lineInfo;
-  };
-
-  // Synchronized scrolling for compare panels
-  useEffect(() => {
-    if (activeTab !== 'compare' || !leftPanelRef.current || !rightPanelRef.current || !isScrollingSynced) {
-      return;
-    }
-
-    console.log("Setting up synchronized scrolling");
-    const leftPanel = leftPanelRef.current;
-    const rightPanel = rightPanelRef.current;
-    
-    // Flag to prevent infinite scroll loops
-    let isScrolling = false;
-
-    const syncScroll = (source: HTMLElement, target: HTMLElement) => {
-      if (isScrolling) return;
-      
-      isScrolling = true;
-      
-      // Calculate scroll percentage
-      const scrollPercentage = source.scrollTop / (source.scrollHeight - source.clientHeight || 1);
-      
-      // Apply the same percentage to the target
-      target.scrollTop = scrollPercentage * (target.scrollHeight - target.clientHeight || 1);
-      
-      // Reset the flag after a short delay
-      setTimeout(() => {
-        isScrolling = false;
-      }, 50);
-    };
-
-    const handleLeftScroll = () => syncScroll(leftPanel, rightPanel);
-    const handleRightScroll = () => syncScroll(rightPanel, leftPanel);
-
-    leftPanel.addEventListener('scroll', handleLeftScroll);
-    rightPanel.addEventListener('scroll', handleRightScroll);
-
-    return () => {
-      leftPanel.removeEventListener('scroll', handleLeftScroll);
-      rightPanel.removeEventListener('scroll', handleRightScroll);
-    };
-  }, [activeTab, isScrollingSynced]);
 
   return (
     <div className="w-full">
@@ -847,64 +512,38 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                       </h3>
                     </div>
                     <div className="p-4">
-                      <div className="flex justify-between items-center mb-4">
-                        <div>
-                          {hasDifferences ? (
-                            <span className="text-sm text-red-500 font-medium">
-                              {differences.length} difference{differences.length !== 1 ? 's' : ''} found
-                            </span>
-                          ) : (
-                            <span className="text-sm text-green-500 font-medium">
-                              No differences found
-                            </span>
-                          )}
-                        </div>
-                        <div>
-                          <label className="inline-flex items-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={isScrollingSynced}
-                              onChange={() => setIsScrollingSynced(!isScrollingSynced)}
-                              className="sr-only peer"
-                            />
-                            <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                            <span className="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">
-                              Sync scrolling
-                            </span>
-                          </label>
-                        </div>
+                      <div className="mb-4">
+                        {hasDifferences ? (
+                          <span className="text-sm text-red-500 dark:text-red-400 font-medium">
+                            Differences found between files
+                          </span>
+                        ) : (
+                          <span className="text-sm text-green-500 dark:text-green-400 font-medium">
+                            No differences found between files
+                          </span>
+                        )}
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                            Existing <span className="text-red-500">(differences highlighted)</span>
-                          </h4>
-                          <div 
-                            ref={leftPanelRef}
-                            className="text-xs text-gray-600 dark:text-gray-400 overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded"
-                          >
-                            {highlightedCode.existing || (
-                              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-                                {JSON.stringify(existingMetadata, null, 2)}
-                              </pre>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                            Generated <span className="text-green-500">(differences highlighted)</span>
-                          </h4>
-                          <div 
-                            ref={rightPanelRef}
-                            className="text-xs text-gray-600 dark:text-gray-400 overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded"
-                          >
-                            {highlightedCode.generated || (
-                              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-                                {JSON.stringify(generatedMetadata, null, 2)}
-                              </pre>
-                            )}
-                          </div>
+                      {/* Diff visualization */}
+                      <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-4">
+                        <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                          {hasDifferences ? 'Differences' : 'Content'}
+                        </h4>
+                        <div className="text-xs overflow-auto max-h-[600px] font-mono">
+                          {diffResult.map((part, index) => (
+                            <span 
+                              key={index} 
+                              className={
+                                part.added 
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' 
+                                  : part.removed 
+                                    ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' 
+                                    : 'text-gray-800 dark:text-gray-300'
+                              }
+                            >
+                              {part.value}
+                            </span>
+                          ))}
                         </div>
                       </div>
                     </div>
