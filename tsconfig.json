@@ -25,7 +25,14 @@
       "react-dom",
       "firebase",
       "recharts"
-    ]
+    ],
+    "baseUrl": "src",
+    "paths": {
+      "@/*": ["*"],
+      "@components/*": ["components/*"],
+      "@config/*": ["config/*"],
+      "@services/*": ["services/*"]
+    }
   },
   "include": ["src", "functions"]
 }

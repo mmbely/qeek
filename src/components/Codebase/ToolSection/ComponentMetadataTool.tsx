@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { RefreshCw, AlertTriangle, Component, Copy, GitPullRequest, Download, Clock } from 'lucide-react';
 import { generateComponentMetadata } from '../../../utils/generateComponentMetadata';
 import { useTheme } from '../../../context/ThemeContext';
@@ -10,6 +10,8 @@ import { RepositoryFile } from '../../../types/repository';
 import { getRepositoryFile } from '../../../services/github';
 import { Dialog } from '../../../components/ui/dialog';
 import { Button } from '../../../components/ui/button';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../../config/firebase';
 
 // We'll use our own SimpleTabs implementation since ui/tabs is not available
 interface SimpleTabsProps {
@@ -74,6 +76,9 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
   const { isDarkMode } = useTheme();
   const { currentAccount } = useAccount();
   const [activeTab, setActiveTab] = useState('existing');
+  const leftPanelRef = useRef<HTMLPreElement>(null);
+  const rightPanelRef = useRef<HTMLPreElement>(null);
+  const [differences, setDifferences] = useState<{path: string, existing: any, generated: any}[]>([]);
 
   // Check for existing components.json file
   useEffect(() => {
@@ -84,25 +89,120 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
       }
 
       try {
-        const existingFile = await getRepositoryFile(
-          `${currentAccount.settings.githubRepository}/.cursor/components.json`
-        );
+        console.log("Checking for existing components.json file...");
         
-        if (existingFile && existingFile.content) {
-          // Parse the content (it might be base64 encoded)
-          const decodedContent = atob(existingFile.content);
-          setExistingMetadata(JSON.parse(decodedContent));
-          setActiveTab('existing');
+        // Get repository ID for Firestore
+        const repoId = currentAccount.settings.githubRepository.replace('/', '_');
+        console.log("Repository ID:", repoId);
+        
+        // Try direct GitHub raw URL first (most reliable method)
+        try {
+          console.log("Trying direct GitHub raw URL...");
+          const rawUrl = `https://raw.githubusercontent.com/${currentAccount.settings.githubRepository}/main/.cursor/components.json`;
+          console.log(`Fetching from URL: ${rawUrl}`);
+          
+          const response = await fetch(rawUrl);
+          if (response.ok) {
+            const jsonData = await response.json();
+            console.log("Successfully fetched components.json from GitHub raw URL");
+            setExistingMetadata(jsonData);
+            setActiveTab('existing');
+            return; // Exit early if successful
+          } else {
+            console.error("Failed to fetch from GitHub raw URL:", response.statusText);
+          }
+        } catch (fetchError) {
+          console.error("Error fetching from GitHub raw URL:", fetchError);
+        }
+        
+        // If direct fetch fails, try Firestore
+        try {
+          console.log("Trying direct Firestore query...");
+          const fileRef = doc(db, 'repositories', repoId, 'files', '.cursor_components.json');
+          const docSnapshot = await getDoc(fileRef);
+          
+          if (docSnapshot.exists()) {
+            console.log("Found file in Firestore!");
+            const data = docSnapshot.data();
+            console.log("File data:", data);
+            
+            // Try to extract the SHA from metadata
+            const sha = data.metadata?.sha;
+            if (sha) {
+              console.log(`Found SHA: ${sha}, trying to fetch content from GitHub`);
+              
+              // Use GitHub's blob API to get the content using the SHA
+              try {
+                const blobUrl = `https://api.github.com/repos/${currentAccount.settings.githubRepository}/git/blobs/${sha}`;
+                console.log(`Fetching blob from: ${blobUrl}`);
+                
+                const response = await fetch(blobUrl);
+                if (response.ok) {
+                  const blobData = await response.json();
+                  if (blobData.content) {
+                    // Decode base64 content
+                    const decodedContent = atob(blobData.content.replace(/\n/g, ''));
+                    try {
+                      const parsedContent = JSON.parse(decodedContent);
+                      console.log("Successfully parsed content from GitHub blob");
+                      setExistingMetadata(parsedContent);
+                      setActiveTab('existing');
+                      return; // Exit early if successful
+                    } catch (parseError) {
+                      console.error("Error parsing blob content:", parseError);
+                    }
+                  }
+                }
+              } catch (blobError) {
+                console.error("Error fetching blob:", blobError);
+              }
+            }
+            
+            // If we still don't have metadata, use the document data itself
+            console.log("Using document data as fallback");
+            
+            // Check if the document has a 'components' field
+            if (data.components) {
+              console.log("Found 'components' field in document");
+              setExistingMetadata(data);
+              setActiveTab('existing');
+            } else {
+              // As a last resort, try to fetch the file content using the path
+              try {
+                console.log(`Trying to fetch file content using path: ${data.path}`);
+                const fileContent = await fetch(`https://raw.githubusercontent.com/${currentAccount.settings.githubRepository}/main/${data.path}`);
+                if (fileContent.ok) {
+                  const jsonData = await fileContent.json();
+                  console.log("Successfully fetched file content");
+                  setExistingMetadata(jsonData);
+                  setActiveTab('existing');
+                } else {
+                  console.error("Failed to fetch file content:", fileContent.statusText);
+                  setError("Could not fetch components.json content");
+                }
+              } catch (contentError) {
+                console.error("Error fetching file content:", contentError);
+                setError("Error fetching components.json");
+              }
+            }
+          } else {
+            console.log("Document not found in Firestore");
+            setError("Components.json file not found");
+          }
+        } catch (firestoreError) {
+          console.error("Error querying Firestore:", firestoreError);
+          setError("Error accessing database");
         }
       } catch (error) {
-        console.log('No existing components.json file found');
+        console.error("Error checking for components.json:", error);
+        setError("Unexpected error occurred");
       } finally {
         setCheckingExisting(false);
       }
     };
 
     checkExistingFile();
-  }, [currentAccount]);
+  }, [currentAccount, db]);
 
   const handleGenerateMetadata = async () => {
     setLoading(true);
@@ -180,6 +280,123 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  // Generate diff when both metadata are available and compare tab is active
+  useEffect(() => {
+    if (existingMetadata && generatedMetadata && activeTab === 'compare') {
+      console.log("Finding differences between existing and generated metadata");
+      
+      // Custom function to find differences between two objects
+      const findDifferences = (obj1: any, obj2: any, path = '') => {
+        const result: {path: string, existing: any, generated: any}[] = [];
+        
+        // Helper function to check if a value is an object
+        const isObject = (value: any) => 
+          value !== null && typeof value === 'object' && !Array.isArray(value);
+        
+        // Get all keys from both objects (without using Set)
+        const keys1 = Object.keys(obj1);
+        const keys2 = Object.keys(obj2);
+        const allKeys: string[] = [];
+        
+        // Add keys from obj1
+        keys1.forEach(key => {
+          if (!allKeys.includes(key)) {
+            allKeys.push(key);
+          }
+        });
+        
+        // Add keys from obj2
+        keys2.forEach(key => {
+          if (!allKeys.includes(key)) {
+            allKeys.push(key);
+          }
+        });
+        
+        for (const key of allKeys) {
+          const currentPath = path ? `${path}.${key}` : key;
+          
+          // Key exists in both objects
+          if (key in obj1 && key in obj2) {
+            const val1 = obj1[key];
+            const val2 = obj2[key];
+            
+            // Both values are objects - recurse
+            if (isObject(val1) && isObject(val2)) {
+              result.push(...findDifferences(val1, val2, currentPath));
+            } 
+            // Both values are arrays - compare them
+            else if (Array.isArray(val1) && Array.isArray(val2)) {
+              if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+                result.push({
+                  path: currentPath,
+                  existing: val1,
+                  generated: val2
+                });
+              }
+            }
+            // Values are different
+            else if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+              result.push({
+                path: currentPath,
+                existing: val1,
+                generated: val2
+              });
+            }
+          }
+          // Key only in obj1
+          else if (key in obj1) {
+            result.push({
+              path: currentPath,
+              existing: obj1[key],
+              generated: undefined
+            });
+          }
+          // Key only in obj2
+          else {
+            result.push({
+              path: currentPath,
+              existing: undefined,
+              generated: obj2[key]
+            });
+          }
+        }
+        
+        return result;
+      };
+      
+      const diffs = findDifferences(existingMetadata, generatedMetadata);
+      setDifferences(diffs);
+    }
+  }, [existingMetadata, generatedMetadata, activeTab]);
+
+  // Synchronized scrolling for compare panels
+  useEffect(() => {
+    if (activeTab !== 'compare' || !leftPanelRef.current || !rightPanelRef.current) {
+      return;
+    }
+
+    const leftPanel = leftPanelRef.current;
+    const rightPanel = rightPanelRef.current;
+
+    const handleLeftScroll = () => {
+      rightPanel.scrollTop = leftPanel.scrollTop;
+      rightPanel.scrollLeft = leftPanel.scrollLeft;
+    };
+
+    const handleRightScroll = () => {
+      leftPanel.scrollTop = rightPanel.scrollTop;
+      leftPanel.scrollLeft = rightPanel.scrollLeft;
+    };
+
+    leftPanel.addEventListener('scroll', handleLeftScroll);
+    rightPanel.addEventListener('scroll', handleRightScroll);
+
+    return () => {
+      leftPanel.removeEventListener('scroll', handleLeftScroll);
+      rightPanel.removeEventListener('scroll', handleRightScroll);
+    };
+  }, [activeTab]);
 
   return (
     <div className="w-full">
@@ -380,16 +597,74 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                       </h3>
                     </div>
                     <div className="p-4">
+                      {differences.length > 0 ? (
+                        <div className="grid grid-cols-1 gap-4 mb-4">
+                          <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md">
+                            <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                              Differences Found ({differences.length})
+                            </h4>
+                            <div className="text-xs text-gray-600 dark:text-gray-400 overflow-auto max-h-[200px]">
+                              <table className="w-full border-collapse">
+                                <thead>
+                                  <tr className="border-b dark:border-gray-700">
+                                    <th className="text-left p-2">Path</th>
+                                    <th className="text-left p-2">Existing</th>
+                                    <th className="text-left p-2">Generated</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {differences.map((diff, index) => (
+                                    <tr key={index} className="border-b dark:border-gray-700">
+                                      <td className="p-2 font-mono">{diff.path}</td>
+                                      <td className="p-2 bg-red-50 dark:bg-red-900/20">
+                                        {diff.existing !== undefined ? (
+                                          typeof diff.existing === 'object' ? 
+                                            JSON.stringify(diff.existing).substring(0, 50) + (JSON.stringify(diff.existing).length > 50 ? '...' : '') : 
+                                            String(diff.existing)
+                                        ) : (
+                                          <span className="text-red-500">missing</span>
+                                        )}
+                                      </td>
+                                      <td className="p-2 bg-green-50 dark:bg-green-900/20">
+                                        {diff.generated !== undefined ? (
+                                          typeof diff.generated === 'object' ? 
+                                            JSON.stringify(diff.generated).substring(0, 50) + (JSON.stringify(diff.generated).length > 50 ? '...' : '') : 
+                                            String(diff.generated)
+                                        ) : (
+                                          <span className="text-red-500">missing</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md mb-4">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            No differences found between existing and generated metadata.
+                          </p>
+                        </div>
+                      )}
+                      
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Existing</h4>
-                          <pre className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded">
+                          <pre 
+                            ref={leftPanelRef}
+                            className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded"
+                          >
                             {JSON.stringify(existingMetadata, null, 2)}
                           </pre>
                         </div>
                         <div>
                           <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Generated</h4>
-                          <pre className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded">
+                          <pre 
+                            ref={rightPanelRef}
+                            className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded"
+                          >
                             {JSON.stringify(generatedMetadata, null, 2)}
                           </pre>
                         </div>
