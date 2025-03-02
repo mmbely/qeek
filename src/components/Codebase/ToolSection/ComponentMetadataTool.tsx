@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { RefreshCw, AlertTriangle, Component } from 'lucide-react';
+import { RefreshCw, AlertTriangle, Component, Copy } from 'lucide-react';
 import { generateComponentMetadata } from '../../../utils/generateComponentMetadata';
 import { useTheme } from '../../../context/ThemeContext';
 import { useAccount } from '../../../context/AccountContext';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { materialDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { materialDark, materialLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { RepositoryFile } from '../../../types/repository';
 
 interface SimpleTabsProps {
   defaultValue: string;
@@ -54,7 +55,7 @@ const Tab = ({ value, label, children }: TabProps) => {
 };
 
 interface ComponentMetadataToolProps {
-  files: string[];
+  files: RepositoryFile[];
 }
 
 const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
@@ -63,6 +64,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
   const [error, setError] = useState<string | null>(null);
   const { isDarkMode } = useTheme();
   const { currentAccount } = useAccount();
+  const [activeTab, setActiveTab] = useState('raw');
 
   const handleGenerateMetadata = async () => {
     setLoading(true);
@@ -83,6 +85,16 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
       setError(error instanceof Error ? error.message : 'An error occurred');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+      return false;
     }
   };
 
@@ -128,49 +140,90 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
           )}
 
           {metadata && (
-            <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="mt-6">
+              <div className="mb-4">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
                   Generated Metadata
                 </h3>
               </div>
-              <div className="p-4">
-                <SimpleTabs defaultValue="raw">
-                  <Tab value="raw" label="Raw Response">
-                    <div className="overflow-auto max-h-[500px]">
-                      <pre className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                <div className="border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex gap-2 p-2">
+                    <button
+                      className={`px-4 py-2 rounded-md ${
+                        activeTab === 'raw'
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                      }`}
+                      onClick={() => setActiveTab('raw')}
+                    >
+                      Raw Response
+                    </button>
+                    <button
+                      className={`px-4 py-2 rounded-md ${
+                        activeTab === 'formatted'
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                      }`}
+                      onClick={() => setActiveTab('formatted')}
+                    >
+                      Formatted
+                    </button>
+                  </div>
+                </div>
+                <div className="p-4">
+                  {activeTab === 'raw' ? (
+                    <div>
+                      <div className="flex items-center justify-end mb-2">
+                        <button
+                          onClick={() => copyToClipboard(JSON.stringify(metadata, null, 2))}
+                          className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 
+                                   dark:hover:bg-gray-600 rounded-md flex items-center gap-2 
+                                   text-gray-700 dark:text-gray-300 transition-colors"
+                        >
+                          <Copy className="h-4 w-4" />
+                          Copy
+                        </button>
+                      </div>
+                      <pre className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px] font-mono">
                         {JSON.stringify(metadata, null, 2)}
                       </pre>
                     </div>
-                  </Tab>
-                  <Tab value="formatted" label="Formatted">
-                    <div className="overflow-auto max-h-[500px]">
+                  ) : (
+                    <div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px] font-mono">
                       <ReactMarkdown
-                        components={{
-                          code({ node, className, children, ...props }) {
-                            const match = /language-(\w+)/.exec(className || '');
-                            return match ? (
-                              <SyntaxHighlighter
-                                style={materialDark as any}
-                                language={match[1]}
-                                PreTag="div"
-                                {...(props as any)}
-                              >
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
-                            ) : (
-                              <code className={className} {...props}>
-                                {children}
-                              </code>
-                            );
-                          }
-                        }}
-                      >
-                        {`\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\``}
-                      </ReactMarkdown>
+                            className="w-full break-words"
+                            components={{
+                              code({ className, children }) {
+                                const match = /language-(\w+)/.exec(className || '');
+                                return match ? (
+                                  <SyntaxHighlighter
+                                    style={isDarkMode ? materialDark : materialLight}
+                                    language={match[1]}
+                                    customStyle={{
+                                      margin: 0,
+                                      padding: '1rem',
+                                      background: isDarkMode ? 'rgba(17, 24, 39, 0.5)' : '#f3f4f6',
+                                      borderRadius: '0.375rem',
+                                    }}
+                                  >
+                                    {String(children).replace(/\n$/, '')}
+                                  </SyntaxHighlighter>
+                                ) : (
+                                  <code className={className}>
+                                    {children}
+                                  </code>
+                                );
+                              },
+                            }}
+                          >
+                            {`\`\`\`json\n${JSON.stringify(metadata, null, 2)}\n\`\`\``}
+                          </ReactMarkdown>
+                      </div>
                     </div>
-                  </Tab>
-                </SimpleTabs>
+                  )}
+                </div>
               </div>
             </div>
           )}

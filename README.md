@@ -31,13 +31,87 @@ See the section about [deployment](https://facebook.github.io/create-react-app/d
 
 ### `npm run eject`
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+**Note: this is a one-way operation. Once you `eject`, you can't go back!**
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+
+## Repository Indexer
+
+The repository indexer is a Python tool that analyzes GitHub repositories, extracts metadata, and generates AI-powered insights about the codebase.
+
+### Setup and Installation
+
+1. Navigate to the repository-indexer directory:
+   ```bash
+   cd functions/repository-indexer
+   ```
+
+2. Create and activate a virtual environment:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+### Usage
+
+#### Syncing a Repository
+
+To sync a GitHub repository and analyze its contents:
+   ```bash
+   python3 src/cli.py <repository_name> --account-id <account_id>
+   ```
+
+Example:
+   ```bash
+   
+python3 src/cli.py mmbely/qeek --account-id slakjdsakjdkajsdksajdlksaj
+   ```
+
+
+#### Additional Options
+
+The CLI supports several options to customize the sync process:
+
+   ```bash 
+python3 src/cli.py <repository_name> --account-id <account_id> [OPTIONS]
+   ```
+
+Available options:
+- `--max-files <number>`: Limit the number of files to process
+- `--skip-types <extensions>`: Skip files with specific extensions (comma-separated)
+- `--force`: Force reprocessing of all files, even if they haven't changed
+- `--verbose`: Enable verbose logging for debugging
+
+Example with options:
+
+   ```bash 
+python3 src/cli.py mmbely/qeek --account-id sadsadsadsad --max-files 50 --skip-types .jpg,.png,.svg --verbose
+   ```
+
+
+### Monitoring Progress
+
+The sync process updates the repository status in Firestore in real-time. You can monitor the progress in the application UI under the GitHub Settings section.
+
+### Troubleshooting
+
+If you encounter issues:
+
+1. Ensure your GitHub token has the necessary permissions
+2. Check that your account ID is correct
+3. Verify that the Firebase project is properly configured
+4. Look for error messages in the CLI output
+
+For detailed logs, run the command with the `--verbose` flag.
 
 ## Learn More
 

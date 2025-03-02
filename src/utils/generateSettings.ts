@@ -1,6 +1,10 @@
 import { generateAISummary } from '../services/ai';
+import { RepositoryFile } from '../types/repository';
 
-export const generateSettings = async (files: string[]) => {
+export const generateSettings = async (files: RepositoryFile[]) => {
+  // Map files to their paths when needed
+  const filePaths = files.map(file => file.path);
+  
   const prompt = `Analyze the provided codebase files and recommend settings and configurations in the following format:
 {
   "settings": {
@@ -20,7 +24,7 @@ export const generateSettings = async (files: string[]) => {
 }`;
 
   const response = await generateAISummary(
-    JSON.stringify({ files }),
+    JSON.stringify({ files: filePaths }),
     'settings-generation',
     prompt
   );

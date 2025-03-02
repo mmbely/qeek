@@ -5,8 +5,13 @@ import ComponentMetadataTool from './ComponentMetadataTool';
 import RulesGenerationTool from './RulesGenerationTool';
 import SettingsGenerationTool from './SettingsGenerationTool';
 import { useTheme } from '../../../context/ThemeContext';
+import { RepositoryFile } from '../../../types/repository';
 
-const ToolSection = ({ files }: { files: string[] }) => {
+interface ToolSectionProps {
+  files: RepositoryFile[];
+}
+
+const ToolSection = ({ files }: ToolSectionProps) => {
   const [activeTool, setActiveTool] = useState<'summary' | 'metadata' | 'rules' | 'settings'>('summary');
   const { isDarkMode } = useTheme();
 

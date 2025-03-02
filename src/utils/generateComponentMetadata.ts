@@ -36,14 +36,20 @@ interface NewMetadata {
   directories: { [path: string]: DirectoryMetadata };
 }
 
-export const generateComponentMetadata = async (files: string[], githubRepository: string) => {
+export const generateComponentMetadata = async (
+  files: RepositoryFile[],
+  repoPath: string
+) => {
   try {
-    if (!githubRepository) {
+    if (!repoPath) {
       throw new Error('No repository connected');
     }
 
+    // Map files to their paths when needed
+    const filePaths = files.map(file => file.path);
+
     // Fetch repository data
-    const repoId = githubRepository.replace('/', '_');
+    const repoId = repoPath.replace('/', '_');
     const filesCollection = collection(db, `repositories/${repoId}/files`);
     const filesSnapshot = await getDocs(filesCollection);
     const repoFiles = filesSnapshot.docs.map((doc) => doc.data() as RepositoryFile);
@@ -116,16 +122,29 @@ export const generateComponentMetadata = async (files: string[], githubRepositor
         // Find the corresponding repository file
         const repoFile = repoFiles.find(rf => rf.path === filePath);
         let purpose = 'Unknown';
+        let dependencies: string[] = [];
         
-        if (repoFile?.ai_analysis?.summary) {
-          // Extract first sentence or up to 150 characters
-          purpose = cleanSummary(repoFile.ai_analysis.summary);
-        } else {
+        if (repoFile?.ai_analysis) {
+          // Extract purpose from summary
+          if (repoFile.ai_analysis.summary) {
+            purpose = cleanSummary(repoFile.ai_analysis.summary);
+          }
+          
+          // Extract dependencies from imports
+          if (repoFile.ai_analysis.imports) {
+            dependencies = repoFile.ai_analysis.imports.map(imp => imp.path);
+          }
+        }
+
+        if (purpose === 'Unknown') {
           // Fallback to basic purpose detection
           purpose = determinePurpose(file);
         }
 
-        const dependencies = file.imports || [];
+        if (dependencies.length === 0) {
+          // Fallback to extracted imports
+          dependencies = file.imports || [];
+        }
 
         components[groupName].components.push({
           name,

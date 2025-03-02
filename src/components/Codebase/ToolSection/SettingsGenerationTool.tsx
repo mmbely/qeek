@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { RefreshCw, AlertTriangle, Settings } from 'lucide-react';
 import { generateSettings } from '../../../utils/generateSettings';
 import { useTheme } from '../../../context/ThemeContext';
+import { RepositoryFile } from '../../../types/repository';
 
 interface SettingsGenerationToolProps {
-  files: string[];
+  files: RepositoryFile[];
 }
 
 const SettingsGenerationTool = ({ files }: SettingsGenerationToolProps) => {

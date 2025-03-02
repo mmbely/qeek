@@ -6,6 +6,7 @@ import ToolSection from './ToolSection/ToolSection';
 import { RepositoryFile } from '../../types/repository';
 import LoadingState from './LoadingState';
 import ErrorState from './ErrorState';
+import { getRepositoryFiles } from '../../services/github';
 
 const ToolView = () => {
   const [files, setFiles] = useState<RepositoryFile[]>([]);
@@ -14,48 +15,22 @@ const ToolView = () => {
   const { currentAccount } = useAccount();
 
   useEffect(() => {
-    const fetchFiles = async () => {
-      if (!currentAccount?.settings?.githubRepository) {
-        setLoading(false);
-        return;
-      }
-
+    const loadFiles = async () => {
       try {
         setLoading(true);
-        setError(null);
-
-        // Fetch repository data
-        const repoId = currentAccount.settings.githubRepository.replace('/', '_');
-        const repoRef = doc(db, 'repositories', repoId);
-        const repoDoc = await getDoc(repoRef);
-
-        if (!repoDoc.exists()) {
-          throw new Error('Repository not found');
-        }
-
-        // Fetch files from the 'files' subcollection
-        const filesCollection = collection(repoRef, 'files');
-        const filesSnapshot = await getDocs(filesCollection);
-        
-        const repoFiles = filesSnapshot.docs.map((doc) => {
-          const fileData = doc.data() as RepositoryFile;
-          return {
-            ...fileData,
-          };
-        });
-
-        console.log('Fetched files:', repoFiles);
-        setFiles(repoFiles);
+        const repoFiles = await getRepositoryFiles('mmbely/qeek');
+        setFiles(repoFiles as RepositoryFile[]);
       } catch (error) {
-        console.error('Failed to fetch repository files:', error);
-        setError(error instanceof Error ? error.message : 'Failed to fetch files');
+        console.error('Error loading files:', error);
+        setError(error instanceof Error ? error.message : 'Failed to load files');
+        setFiles([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchFiles();
-  }, [currentAccount]);
+    loadFiles();
+  }, []);
 
   const filePaths = useMemo(() => 
     files.map((file: RepositoryFile) => file.path),
@@ -98,7 +73,7 @@ const ToolView = () => {
     );
   }
 
-  return <ToolSection files={filePaths} />;
+  return <ToolSection files={files} />;
 };
 
 export default ToolView;
