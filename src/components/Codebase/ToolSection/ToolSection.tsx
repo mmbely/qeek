@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Code2, FileCode, Component, ScrollText, Settings } from 'lucide-react';
 import CodebaseSummaryTool from './CodebaseSummaryTool';
 import ComponentMetadataTool from './ComponentMetadataTool';
@@ -6,14 +6,46 @@ import RulesGenerationTool from './RulesGenerationTool';
 import SettingsGenerationTool from './SettingsGenerationTool';
 import { useTheme } from '../../../context/ThemeContext';
 import { RepositoryFile } from '../../../types/repository';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface ToolSectionProps {
   files: RepositoryFile[];
 }
 
 const ToolSection = ({ files }: ToolSectionProps) => {
-  const [activeTool, setActiveTool] = useState<'summary' | 'metadata' | 'rules' | 'settings'>('summary');
+  const location = useLocation();
+  const navigate = useNavigate();
   const { isDarkMode } = useTheme();
+  
+  // Extract the active tool from the URL
+  const getToolFromPath = () => {
+    const path = location.pathname;
+    if (path.includes('/summary')) return 'summary';
+    if (path.includes('/metadata')) return 'metadata';
+    if (path.includes('/rules')) return 'rules';
+    if (path.includes('/settings')) return 'settings';
+    return 'summary'; // Default
+  };
+  
+  const [activeTool, setActiveTool] = useState<'summary' | 'metadata' | 'rules' | 'settings'>(getToolFromPath());
+  
+  // Update URL when active tool changes
+  useEffect(() => {
+    const basePath = '/codebase/cursor-extractor';
+    const toolPaths = {
+      summary: `${basePath}/summary`,
+      metadata: `${basePath}/metadata`,
+      rules: `${basePath}/rules`,
+      settings: `${basePath}/settings`,
+    };
+    
+    navigate(toolPaths[activeTool], { replace: true });
+  }, [activeTool, navigate]);
+  
+  // Update active tool when URL changes
+  useEffect(() => {
+    setActiveTool(getToolFromPath());
+  }, [location.pathname]);
 
   const tools = [
     { id: 'summary', label: 'Codebase Summary', icon: FileCode },
