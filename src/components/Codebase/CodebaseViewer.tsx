@@ -16,10 +16,11 @@ import { db } from '../../config/firebase';
 import { Cog } from 'lucide-react';
 import ToolSection from './ToolSection/ToolSection';
 
-// Add this helper function to map legacy 'active' status to 'unchanged'
+// Improved helper function to map statuses consistently
 const normalizeFileStatus = (status: string | undefined): FileStatus => {
   if (!status) return 'unchanged';
   if (status === 'active') return 'unchanged';
+  if (status === 'updated') return 'modified'; // Map 'updated' to 'modified'
   return status as FileStatus;
 };
 
@@ -122,6 +123,30 @@ export default function CodebaseViewer() {
     fetchRepo();
   }, [currentAccount]);
 
+  // Debug logging for file statuses
+  useEffect(() => {
+    if (files.length > 0) {
+      // Log status distribution
+      const statusCounts: Record<string, number> = {};
+      files.forEach(file => {
+        const status = file.status || 'undefined';
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+      });
+      console.log('File status distribution:', statusCounts);
+      
+      // Log a few examples of each status
+      const statusExamples: Record<string, string[]> = {};
+      files.forEach(file => {
+        const status = file.status || 'undefined';
+        if (!statusExamples[status]) statusExamples[status] = [];
+        if (statusExamples[status].length < 3) {
+          statusExamples[status].push(file.path || 'unknown');
+        }
+      });
+      console.log('Status examples:', statusExamples);
+    }
+  }, [files]);
+
   // Handle file selection
   const handleFileSelect = (file: RepositoryFile) => {
     setSelectedFile(file);
@@ -153,7 +178,11 @@ export default function CodebaseViewer() {
     }
   };
 
+  // Update the filteredFiles function with better logging
   const filteredFiles = useMemo(() => {
+    // Log the current filter status
+    console.log('Current filter status:', filterStatus);
+    
     return files.filter((file) => {
       const matchesSearch =
         file.path?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -163,6 +192,11 @@ export default function CodebaseViewer() {
       // Normalize the file status before comparing
       const normalizedStatus = normalizeFileStatus(file.status);
       const matchesStatus = filterStatus === 'all' || normalizedStatus === filterStatus;
+      
+      // Debug log for status matching (for a few files)
+      if (file.path && (file.path.includes('README') || Math.random() < 0.05)) {
+        console.log(`File: ${file.path}, Original status: ${file.status}, Normalized: ${normalizedStatus}, Matches ${filterStatus}? ${matchesStatus}`);
+      }
 
       const matchesLanguage =
         filterLanguage === 'all' || file.language === filterLanguage;

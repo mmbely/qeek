@@ -123,7 +123,7 @@ class FirestoreService:
                     'content_type': file.get('metadata', {}).get('content_type')
                 },
                 
-                'status': 'active',
+                'status': file.get('status', 'active'),
                 'updated_at': firestore.SERVER_TIMESTAMP,
                 'first_indexed_at': existing_files.get(doc_id, {}).get('first_indexed_at') or firestore.SERVER_TIMESTAMP
             })
