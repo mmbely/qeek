@@ -144,14 +144,18 @@ async def process_repository(
         # Get current files from GitHub
         print("Fetching repository files...")
         current_files = github_service.get_repository_files(repo_full_name)
+        current_files_paths = {f['path'] for f in current_files}
         
         # Limit files if max_files is specified
         if max_files is not None:
             print(f"Limiting to {max_files} files for testing")
             current_files = current_files[:max_files]
+            current_files_paths = {f['path'] for f in current_files}
         
         # Determine which files need processing
         files_to_process = []
+        unchanged_files = []
+        
         for file in current_files:
             # Skip files with extensions in skip_types
             file_extension = file['path'].split('.')[-1].lower()
@@ -164,6 +168,7 @@ async def process_repository(
             if existing_file is None:
                 # New file
                 print(f"New file found: {file['path']}")
+                file['status'] = 'new'
                 should_process = True
             else:
                 # Check SHA if available
@@ -174,17 +179,33 @@ async def process_repository(
                     # We have SHAs to compare
                     if existing_sha != current_sha:
                         print(f"SHA changed for file: {file['path']}")
+                        file['status'] = 'modified'
                         should_process = True
+                    else:
+                        # File exists and hasn't changed
+                        file['status'] = 'unchanged'
+                        unchanged_files.append(file)
                 else:
                     # No SHA, process to be safe
                     print(f"No SHA available, processing: {file['path']}")
+                    file['status'] = 'unknown'
                     should_process = True
             
             if should_process:
                 files_to_process.append(file)
         
+        # Mark files that no longer exist as deleted
+        deleted_files = []
+        for path, existing_file in existing_files_map.items():
+            if path not in current_files_paths:
+                print(f"File no longer exists: {path}")
+                existing_file['status'] = 'deleted'
+                deleted_files.append(existing_file)
+        
         total_files = len(files_to_process)
         print(f"Found {total_files} files that need processing out of {len(current_files)} total files")
+        print(f"Found {len(unchanged_files)} unchanged files")
+        print(f"Found {len(deleted_files)} deleted files")
         
         # Update initial progress
         firestore_service.update_sync_status(
@@ -220,7 +241,13 @@ async def process_repository(
                     except Exception as e:
                         print(f"Warning: Failed to update progress: {str(e)}")
         
-        # Store only the processed files
+        # Add unchanged files to processed_files
+        processed_files.extend(unchanged_files)
+        
+        # Add deleted files to processed_files
+        processed_files.extend(deleted_files)
+        
+        # Store all files (processed, unchanged, and deleted)
         print("\nStoring results in Firestore...")
         firestore_service.store_repository_files(repo_ref, processed_files)
         firestore_service.update_sync_status(repo_ref, 'completed')

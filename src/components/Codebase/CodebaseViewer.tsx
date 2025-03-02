@@ -95,9 +95,7 @@ export default function CodebaseViewer() {
         const files = filesSnapshot.docs.map((doc) => {
           const fileData = doc.data() as RepositoryFile;
           console.log('File data:', fileData); // Debug log
-          return {
-            ...fileData,
-          };
+          return fileData;
         });
         console.log('Fetched files:', files); // Debug log
 
@@ -152,9 +150,11 @@ export default function CodebaseViewer() {
     return files.filter((file) => {
       const matchesSearch =
         file.path?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        file.path?.split('/').pop()?.toLowerCase().includes(searchTerm.toLowerCase());
+        file.path?.split('/').pop()?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        file.ai_analysis?.summary?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesStatus = filterStatus === 'all';
+      const matchesStatus =
+        filterStatus === 'all' || file.status === filterStatus;
 
       const matchesLanguage =
         filterLanguage === 'all' || file.language === filterLanguage;

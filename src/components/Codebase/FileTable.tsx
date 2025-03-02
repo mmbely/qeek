@@ -68,6 +68,17 @@ export default function FileTable({
               >
                 Last Updated {sortColumn === 'last_updated' && (sortDirection === 'asc' ? '↑' : '↓')}
               </TableCell>
+              <TableCell
+                className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600 cursor-pointer"
+                onClick={() => onSort('status')}
+              >
+                Status {sortColumn === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </TableCell>
+              <TableCell
+                className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600"
+              >
+                Summary
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody className="dark:bg-gray-800">
@@ -91,6 +102,19 @@ export default function FileTable({
                 <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">{file.language}</TableCell>
                 <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">{formatFileSize(file.size)}</TableCell>
                 <TableCell className="text-gray-600 dark:text-gray-400 border-b dark:border-gray-600">{file.last_updated}</TableCell>
+                <TableCell className="text-gray-600 dark:text-gray-400 border-b dark:border-gray-600">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    file.status === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                    file.status === 'archived' ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' :
+                    file.status === 'deprecated' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                    'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                  }`}>
+                    {file.status || 'active'}
+                  </span>
+                </TableCell>
+                <TableCell className="text-gray-600 dark:text-gray-400 border-b dark:border-gray-600">
+                  <ExpandableCell text={file.ai_analysis?.summary || 'No summary available'} maxLength={100} />
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

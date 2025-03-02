@@ -1,6 +1,6 @@
-export type SortColumn = 'path' | 'language' | 'size' | 'last_updated';
+export type SortColumn = 'path' | 'language' | 'size' | 'last_updated' | 'status';
 export type SortDirection = 'asc' | 'desc';
-export type FileStatus = 'synced' | 'unsynced' | 'error' | 'all';
+export type FileStatus = 'active' | 'archived' | 'deprecated' | 'all';
 
 export interface RepositoryFile {
   path: string;
