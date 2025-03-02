@@ -1,0 +1,157 @@
+{
+    "models": [
+      {
+        "name": "RepositoryFile",
+        "path": "src/types/repository.ts",
+        "key_fields": [
+          "path",
+          "name",
+          "language",
+          "size",
+          "last_updated",
+          "last_commit_message",
+          "status",
+          "ai_analysis"
+        ],
+        "important_notes": "ai_analysis is an optional nested object containing summary and other analysis data. Status can be 'active', 'unchanged', 'new', 'modified', 'deleted', or 'unknown'."
+      },
+      {
+        "name": "Repository",
+        "path": "src/types/repository.ts",
+        "key_fields": [
+          "id",
+          "name",
+          "full_name",
+          "description",
+          "owner",
+          "default_branch",
+          "created_at",
+          "updated_at",
+          "metadata"
+        ],
+        "important_notes": "metadata contains sync_status, last_synced, and other repository-level metadata."
+      },
+      {
+        "name": "Account",
+        "path": "src/types/account.ts",
+        "key_fields": [
+          "id",
+          "name",
+          "email",
+          "settings",
+          "created_at",
+          "updated_at"
+        ],
+        "important_notes": "settings contains githubRepository, githubToken, and other account-specific settings."
+      },
+      {
+        "name": "User",
+        "path": "src/types/user.ts",
+        "key_fields": [
+          "uid",
+          "email",
+          "displayName",
+          "photoURL",
+          "accounts"
+        ],
+        "important_notes": "accounts is an array of account IDs the user has access to."
+      },
+      {
+        "name": "FileAnalysis",
+        "path": "src/types/analysis.ts",
+        "key_fields": [
+          "summary",
+          "primary_features",
+          "state_management",
+          "modification_points",
+          "functions",
+          "classes",
+          "imports",
+          "exports"
+        ],
+        "important_notes": "This is the structure inside ai_analysis for repository files."
+      },
+      {
+        "name": "SyncStatus",
+        "path": "src/types/repository.ts",
+        "key_fields": [
+          "status",
+          "progress",
+          "last_synced",
+          "error"
+        ],
+        "important_notes": "status can be 'idle', 'in_progress', 'completed', 'error'. progress contains processed and total counts."
+      },
+      {
+        "name": "FileStatus",
+        "path": "src/types/repository.ts",
+        "key_fields": [
+          "active",
+          "unchanged",
+          "new",
+          "modified",
+          "deleted",
+          "unknown",
+          "all"
+        ],
+        "important_notes": "'active' is a legacy status equivalent to 'unchanged'. 'all' is used for filtering purposes."
+      },
+      {
+        "name": "SortColumn",
+        "path": "src/types/repository.ts",
+        "key_fields": [
+          "path",
+          "language",
+          "size",
+          "last_updated",
+          "status"
+        ],
+        "important_notes": "Used for sorting repository files in the FileTable component."
+      },
+      {
+        "name": "SortDirection",
+        "path": "src/types/repository.ts",
+        "key_fields": [
+          "asc",
+          "desc"
+        ],
+        "important_notes": "Used for sorting direction in the FileTable component."
+      },
+      {
+        "name": "FirestoreSchema",
+        "path": "functions/repository-indexer/src/services/firestore_service.py",
+        "key_fields": [
+          "repositories/{repo_id}",
+          "repositories/{repo_id}/files/{file_path}",
+          "accounts/{account_id}"
+        ],
+        "important_notes": "The repository-indexer stores file metadata in Firestore using this schema."
+      }
+    ],
+    "relationships": [
+      {
+        "source": "User",
+        "target": "Account",
+        "type": "one-to-many",
+        "description": "A user can have multiple accounts"
+      },
+      {
+        "source": "Account",
+        "target": "Repository",
+        "type": "one-to-one",
+        "description": "An account is associated with one GitHub repository"
+      },
+      {
+        "source": "Repository",
+        "target": "RepositoryFile",
+        "type": "one-to-many",
+        "description": "A repository contains multiple files"
+      },
+      {
+        "source": "RepositoryFile",
+        "target": "FileAnalysis",
+        "type": "one-to-one",
+        "description": "A repository file has one AI analysis"
+      }
+    ]
+  }

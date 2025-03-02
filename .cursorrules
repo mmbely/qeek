@@ -1,0 +1,36 @@
+{
+  "rules": [
+    {
+      "name": "Preserve existing styling",
+      "description": "When modifying components, maintain the existing styling patterns and don't change unrelated styling attributes."
+    },
+    {
+      "name": "Minimal changes approach",
+      "description": "Make only the necessary changes to achieve the requested functionality without modifying unrelated code."
+    },
+    {
+      "name": "TypeScript type safety",
+      "description": "Ensure all code changes maintain proper TypeScript typing and resolve any type errors."
+    },
+    {
+      "name": "Status handling",
+      "description": "Support both legacy 'active' status and newer statuses like 'unchanged', 'new', 'modified', 'deleted'."
+    },
+    {
+      "name": "Dark mode compatibility",
+      "description": "All UI changes should support both light and dark mode with appropriate styling."
+    },
+    {
+      "name": "Nested data access",
+      "description": "Use optional chaining when accessing nested properties like file.ai_analysis?.summary."
+    },
+    {
+      "name": "Component structure",
+      "description": "Maintain the existing component structure and separation of concerns."
+    },
+    {
+      "name": "Firestore data handling",
+      "description": "Be careful with Firestore data structures and maintain compatibility with existing database schemas."
+    }
+  ]
+}

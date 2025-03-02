@@ -1,0 +1,570 @@
+{
+  "Auth": {
+    "location": "src/components/Auth",
+    "components": [
+      {
+        "name": "Login",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Auth/Login.tsx"
+      },
+      {
+        "name": "Register",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Auth/Register.tsx"
+      }
+    ]
+  },
+  "Chat": {
+    "location": "src/components/Chat",
+    "components": [
+      {
+        "name": "ChatInterface",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Chat/ChatInterface.tsx"
+      },
+      {
+        "name": "EmojiPicker",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Chat/EmojiPicker.tsx"
+      },
+      {
+        "name": "MessageInput",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Chat/MessageInput.tsx"
+      },
+      {
+        "name": "MessageList",
+        "purpose": "displays a list of chat messages, grouped by date and sender",
+        "dependencies": [
+          "react",
+          "../../types/message",
+          "../../types/user",
+          "../../styles",
+          "lucide-react",
+          "date-fns",
+          "../../utils/dateUtils",
+          "../../services/chat",
+          "firebase/firestore",
+          "../../config/firebase"
+        ],
+        "location": "src/components/Chat/MessageList.tsx"
+      }
+    ]
+  },
+  "Codebase": {
+    "location": "src/components/Codebase",
+    "components": [
+      {
+        "name": "CodebaseViewer",
+        "purpose": "displays a codebase viewer for a connected GitHub repository, allowing users to browse, search, filter, and sort files",
+        "dependencies": [
+          "react",
+          "../../context/AuthContext",
+          "../../context/AccountContext",
+          "react-router-dom",
+          "../../types/repository",
+          "./FileTable",
+          "./FileFilters",
+          "././SyncStatus",
+          "././ErrorState",
+          "./NotConnectedState",
+          "././FileViewerModal",
+          "./LoadingState",
+          "../../services/github",
+          "firebase/firestore",
+          "../../config/firebase",
+          "lucide-react",
+          "./ToolSection/ToolSection"
+        ],
+        "location": "src/components/Codebase/CodebaseViewer.tsx"
+      },
+      {
+        "name": "CursorExtractionTool",
+        "purpose": "provides a tool for generating Cursor AI configuration and codebase summaries using Gemini",
+        "dependencies": [
+          "react",
+          "lucide-react",
+          "react-markdown",
+          "../../services/github",
+          "../../services/geminiFrontend",
+          "../../styles/theme",
+          "../../context/AccountContext",
+          "firebase/firestore",
+          "../../config/firebase"
+        ],
+        "location": "src/components/Codebase/CursorExtractionTool.tsx"
+      },
+      {
+        "name": "ErrorState",
+        "purpose": "displays an error message with a retry button",
+        "dependencies": [
+          "lucide-react"
+        ],
+        "location": "src/components/Codebase/ErrorState.tsx"
+      },
+      {
+        "name": "FileExtractionTool",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Codebase/FileExtractionTool.tsx"
+      },
+      {
+        "name": "FileFilters",
+        "purpose": "Provides filtering UI elements for searching and filtering files by name, status, language, and component",
+        "dependencies": [
+          "@mui/material",
+          "lucide-react",
+          "../../types/repository"
+        ],
+        "location": "src/components/Codebase/FileFilters.tsx"
+      },
+      {
+        "name": "FileTable",
+        "purpose": "displays a paginated, sortable table of repository files",
+        "dependencies": [
+          "@mui/material",
+          "../../types/repository",
+          "../../utils/format",
+          "./components/FileIcon",
+          "./components/ExpandableCell"
+        ],
+        "location": "src/components/Codebase/FileTable.tsx"
+      },
+      {
+        "name": "FileViewer",
+        "purpose": "A React component to view file details and AI-powered code analysis",
+        "dependencies": [
+          "react",
+          "lucide-react",
+          "../../types/repository",
+          "./utils",
+          "./components/ExpandableCell"
+        ],
+        "location": "src/components/Codebase/FileViewer.tsx"
+      },
+      {
+        "name": "FileViewerModal",
+        "purpose": "This React component displays a modal window for viewing file details and analysis",
+        "dependencies": [
+          "@mui/material",
+          "lucide-react",
+          "react-syntax-highlighter",
+          "react-syntax-highlighter/dist/esm/styles/hljs",
+          "../../context/ThemeContext",
+          "../../types/repository"
+        ],
+        "location": "src/components/Codebase/FileViewerModal.tsx"
+      },
+      {
+        "name": "LoadingState",
+        "purpose": "displays a loading state with a spinning animation and text",
+        "dependencies": [
+          "lucide-react"
+        ],
+        "location": "src/components/Codebase/LoadingState.tsx"
+      },
+      {
+        "name": "NotConnectedState",
+        "purpose": "displays a call to action for the user to connect their GitHub account and select a repository for analysis",
+        "dependencies": [
+          "react-router-dom",
+          "lucide-react"
+        ],
+        "location": "src/components/Codebase/NotConnectedState.tsx"
+      },
+      {
+        "name": "SyncStatus",
+        "purpose": "A React component displaying the synchronization status and offering buttons to trigger synchronization or access settings",
+        "dependencies": [
+          "@mui/material",
+          "lucide-react"
+        ],
+        "location": "src/components/Codebase/SyncStatus.tsx"
+      },
+      {
+        "name": "ToolView",
+        "purpose": "displays a list of files from a GitHub repository",
+        "dependencies": [
+          "react",
+          "firebase/firestore",
+          "../../config/firebase",
+          "../../context/AccountContext",
+          "./ToolSection/ToolSection",
+          "../../types/repository",
+          "./LoadingState",
+          "./ErrorState",
+          "../../services/github"
+        ],
+        "location": "src/components/Codebase/ToolView.tsx"
+      }
+    ]
+  },
+  "ToolSection": {
+    "location": "src/components/Codebase/ToolSection",
+    "components": [
+      {
+        "name": "CodebaseSummaryTool",
+        "purpose": "generates a codebase summary using AI",
+        "dependencies": [
+          "react",
+          "lucide-react",
+          "../../../services/ai",
+          "../../../services/github",
+          "../../../utils/analyzeCodebase",
+          "../../../constants/prompts",
+          "../../../context/ThemeContext",
+          "../../../types/repository",
+          "firebase/firestore",
+          "../../../config/firebase",
+          "../../../context/AccountContext",
+          "react-markdown",
+          "react-syntax-highlighter"
+        ],
+        "location": "src/components/Codebase/ToolSection/CodebaseSummaryTool.tsx"
+      },
+      {
+        "name": "ComponentMetadataTool",
+        "purpose": "allows users to generate metadata for their components using the `generateComponentMetadata` utility function",
+        "dependencies": [
+          "react",
+          "lucide-react",
+          "../../../utils/generateComponentMetadata",
+          "../../../context/ThemeContext",
+          "../../../context/AccountContext",
+          "react-markdown",
+          "react-syntax-highlighter",
+          "react-syntax-highlighter/dist/esm/styles/prism",
+          "../../../types/repository"
+        ],
+        "location": "src/components/Codebase/ToolSection/ComponentMetadataTool.tsx"
+      },
+      {
+        "name": "RulesGenerationTool",
+        "purpose": "allows users to generate coding rules and best practices for their connected GitHub repository using an AI",
+        "dependencies": [
+          "react",
+          "lucide-react",
+          "../../../utils/generateRules",
+          "../../../context/ThemeContext",
+          "../../../context/AccountContext",
+          "react-markdown",
+          "react-syntax-highlighter",
+          "react-syntax-highlighter/dist/esm/styles/prism",
+          "../../../types/repository"
+        ],
+        "location": "src/components/Codebase/ToolSection/RulesGenerationTool.tsx"
+      },
+      {
+        "name": "SettingsGenerationTool",
+        "purpose": "provides a UI for generating settings based on the provided repository files",
+        "dependencies": [
+          "react",
+          "lucide-react",
+          "../../../utils/generateSettings",
+          "../../../context/ThemeContext",
+          "../../../types/repository"
+        ],
+        "location": "src/components/Codebase/ToolSection/SettingsGenerationTool.tsx"
+      },
+      {
+        "name": "ToolSection",
+        "purpose": "renders a tool section with a left-side navigation and a main content area",
+        "dependencies": [
+          "react",
+          "lucide-react",
+          "./CodebaseSummaryTool",
+          "./ComponentMetadataTool",
+          "./RulesGenerationTool",
+          "./SettingsGenerationTool",
+          "../../../context/ThemeContext",
+          "../../../types/repository"
+        ],
+        "location": "src/components/Codebase/ToolSection/ToolSection.tsx"
+      }
+    ]
+  },
+  "components": {
+    "location": "src/components/Codebase/components",
+    "components": [
+      {
+        "name": "ExpandableCell",
+        "purpose": "A React component that renders text content and provides an expandable view if the text exceeds a specified maximum length",
+        "dependencies": [
+          "react",
+          "../../../types/repository"
+        ],
+        "location": "src/components/Codebase/components/ExpandableCell.tsx"
+      },
+      {
+        "name": "FileIcon",
+        "purpose": "renders a file icon based on the provided `language` prop",
+        "dependencies": [
+          "react",
+          "react-icons/si",
+          "lucide-react"
+        ],
+        "location": "src/components/Codebase/components/FileIcon.tsx"
+      },
+      {
+        "name": "Layout",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Layout.tsx"
+      }
+    ]
+  },
+  "utils": {
+    "location": "src/components/Codebase/utils",
+    "components": [
+      {
+        "name": "index",
+        "purpose": "Provides utility functions for formatting data (file size, date, content preview) and rendering file icons based on file extensions",
+        "dependencies": [
+          "react",
+          "./formatters",
+          "../components/FileIcon"
+        ],
+        "location": "src/components/Codebase/utils/index.tsx"
+      }
+    ]
+  },
+  "Navigation": {
+    "location": "src/components/Navigation",
+    "components": [
+      {
+        "name": "Sidebar",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Navigation/Sidebar.tsx"
+      }
+    ]
+  },
+  "Settings": {
+    "location": "src/components/Settings",
+    "components": [
+      {
+        "name": "AdminSettings",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Settings/AdminSettings.tsx"
+      },
+      {
+        "name": "CursorSettings",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Settings/CursorSettings.tsx"
+      },
+      {
+        "name": "GitHubSettings",
+        "purpose": "manages GitHub integration settings, allowing users to connect their GitHub account, select a repository, and synchronize its contents",
+        "dependencies": [
+          "react",
+          "lucide-react",
+          "../../services/github",
+          "../../context/AuthContext",
+          "../../context/CodebaseContext",
+          "../../context/AccountContext",
+          "firebase/firestore",
+          "../../config/firebase"
+        ],
+        "location": "src/components/Settings/GitHubSettings.tsx"
+      },
+      {
+        "name": "SettingsLayout",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Settings/SettingsLayout.tsx"
+      },
+      {
+        "name": "UserManagement",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Settings/UserManagement.tsx"
+      },
+      {
+        "name": "UserProfile",
+        "purpose": "allows users to view and update their profile information, including display name, bio, location, company, and avatar",
+        "dependencies": [
+          "react",
+          "../../context/AuthContext",
+          "firebase/firestore",
+          "../../config/firebase",
+          "lucide-react",
+          "firebase/storage"
+        ],
+        "location": "src/components/Settings/UserProfile.tsx"
+      }
+    ]
+  },
+  "Tickets": {
+    "location": "src/components/Tickets",
+    "components": [
+      {
+        "name": "TicketBoard",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Tickets/TicketBoard.tsx"
+      },
+      {
+        "name": "TicketEdit",
+        "purpose": "allows users to edit existing tickets",
+        "dependencies": [
+          "react",
+          "react-router-dom",
+          "../../services/ticketService",
+          "../../types/ticket",
+          "../../config/firebase"
+        ],
+        "location": "src/components/Tickets/TicketEdit.tsx"
+      },
+      {
+        "name": "TicketForm",
+        "purpose": "provides a form for creating new tickets",
+        "dependencies": [
+          "react",
+          "react-router-dom",
+          "firebase/firestore",
+          "../../config/firebase",
+          "../../context/AuthContext",
+          "../../types/ticket",
+          "../../context/AccountContext"
+        ],
+        "location": "src/components/Tickets/TicketForm.tsx"
+      },
+      {
+        "name": "TicketList",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Tickets/TicketList.tsx"
+      },
+      {
+        "name": "TicketModal",
+        "purpose": "A modal component for creating and editing tickets",
+        "dependencies": [
+          "react",
+          "firebase/firestore",
+          "../../config/firebase",
+          "../../types/ticket",
+          "../../types/user",
+          "../../context/AuthContext",
+          "../../styles",
+          "lucide-react",
+          "react-responsive-modal",
+          "react-markdown",
+          "react-syntax-highlighter",
+          "react-syntax-highlighter/dist/esm/styles/prism",
+          "react-markdown",
+          "../../context/AccountContext",
+          "../../hooks/useTickets",
+          "../../types/board"
+        ],
+        "location": "src/components/Tickets/TicketModal.tsx"
+      },
+      {
+        "name": "TicketsContainer",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Tickets/TicketsContainer.tsx"
+      },
+      {
+        "name": "TicketViewSwitch",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/Tickets/TicketViewSwitch.tsx"
+      }
+    ]
+  },
+  "ui": {
+    "location": "src/components/ui",
+    "components": [
+      {
+        "name": "avatar",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/ui/avatar.tsx"
+      },
+      {
+        "name": "button",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/ui/button.tsx"
+      },
+      {
+        "name": "command",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/ui/command.tsx"
+      },
+      {
+        "name": "dialog",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/ui/dialog.tsx"
+      },
+      {
+        "name": "dropdown-menu",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/ui/dropdown-menu.tsx"
+      },
+      {
+        "name": "input",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/ui/input.tsx"
+      },
+      {
+        "name": "popover",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/ui/popover.tsx"
+      },
+      {
+        "name": "scroll-area",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/ui/scroll-area.tsx"
+      },
+      {
+        "name": "textarea",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/ui/textarea.tsx"
+      },
+      {
+        "name": "tooltip",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/components/ui/tooltip.tsx"
+      }
+    ]
+  },
+  "pages": {
+    "location": "src/pages",
+    "components": [
+      {
+        "name": "InvitationPage",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/pages/InvitationPage.tsx"
+      },
+      {
+        "name": "LoginPage",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/pages/LoginPage.tsx"
+      },
+      {
+        "name": "RegisterPage",
+        "purpose": "Unknown",
+        "dependencies": [],
+        "location": "src/pages/RegisterPage.tsx"
+      }
+    ]
+  }
+}

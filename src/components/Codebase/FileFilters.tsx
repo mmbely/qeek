@@ -12,6 +12,16 @@ interface FileFiltersProps {
   onFilterChange: (key: string, value: string) => void;
 }
 
+const statusOptions = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'new', label: 'New' },
+  { value: 'modified', label: 'Modified' },
+  { value: 'unchanged', label: 'Unchanged' },
+  { value: 'active', label: 'Active (Legacy)' },
+  { value: 'deleted', label: 'Deleted' },
+  { value: 'unknown', label: 'Unknown' }
+];
+
 export default function FileFilters({
   searchTerm,
   filterStatus,
@@ -90,9 +100,11 @@ export default function FileFilters({
               },
             }}
           >
-            <MenuItem value="all" className="dark:text-gray-200">All Status</MenuItem>
-            <MenuItem value="active" className="dark:text-gray-200">Active</MenuItem>
-            <MenuItem value="deleted" className="dark:text-gray-200">Deleted</MenuItem>
+            {statusOptions.map(({ value, label }) => (
+              <MenuItem key={value} value={value} className="dark:text-gray-200">
+                {label}
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 200 }}>

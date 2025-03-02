@@ -16,6 +16,25 @@ interface FileTableProps {
   onFileSelect: (file: RepositoryFile) => void;
 }
 
+// Helper function to get status styling
+const getStatusStyle = (status: string) => {
+  switch (status) {
+    case 'new':
+      return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+    case 'modified':
+      return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+    case 'unchanged':
+    case 'active': // Handle legacy 'active' status
+      return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+    case 'deleted':
+      return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+    case 'unknown':
+      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+    default:
+      return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+  }
+};
+
 export default function FileTable({
   files,
   page,
@@ -103,13 +122,8 @@ export default function FileTable({
                 <TableCell className="text-gray-900 dark:text-gray-100 border-b dark:border-gray-600">{formatFileSize(file.size)}</TableCell>
                 <TableCell className="text-gray-600 dark:text-gray-400 border-b dark:border-gray-600">{file.last_updated}</TableCell>
                 <TableCell className="text-gray-600 dark:text-gray-400 border-b dark:border-gray-600">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    file.status === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                    file.status === 'archived' ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' :
-                    file.status === 'deprecated' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                    'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                  }`}>
-                    {file.status || 'active'}
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusStyle(file.status)}`}>
+                    {file.status === 'active' ? 'unchanged' : file.status}
                   </span>
                 </TableCell>
                 <TableCell className="text-gray-600 dark:text-gray-400 border-b dark:border-gray-600">

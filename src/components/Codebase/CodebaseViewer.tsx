@@ -153,8 +153,12 @@ export default function CodebaseViewer() {
         file.path?.split('/').pop()?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         file.ai_analysis?.summary?.toLowerCase().includes(searchTerm.toLowerCase());
 
+      // Handle both 'active' and 'unchanged' as the same for filtering
       const matchesStatus =
-        filterStatus === 'all' || file.status === filterStatus;
+        filterStatus === 'all' || 
+        file.status === filterStatus || 
+        (filterStatus === 'unchanged' && file.status === 'active') || 
+        (filterStatus === 'active' && file.status === 'unchanged');
 
       const matchesLanguage =
         filterLanguage === 'all' || file.language === filterLanguage;
