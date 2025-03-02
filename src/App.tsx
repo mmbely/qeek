@@ -21,6 +21,8 @@ import CursorSettings from './components/Settings/CursorSettings';
 import ToolSection from './components/Codebase/ToolSection/ToolSection';
 import FileExtractionTool from './components/Codebase/FileExtractionTool';
 import { ThemeProvider } from './context/ThemeContext';
+import ArchitectureMdTool from './components/Codebase/ToolSection/ArchitectureMdTool';
+import ComponentsJsonTool from './components/Codebase/ToolSection/ComponentsJsonTool';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -63,7 +65,9 @@ function usePageTitle() {
       return 'GitHub Settings';
     } else if (path === '/settings/cursor') {
       return 'Cursor Integration';
-    } else if (path === '/codebase/cursor-extractor/components') {
+    } else if (path.includes('/codebase/cursor-extractor/summary')) {
+      return 'Architecture MD';
+    } else if (path.includes('/codebase/cursor-extractor/metadata')) {
       return 'Components JSON';
     }
     
@@ -107,7 +111,7 @@ function AppContent() {
           <Route path="file-extractor" element={<FileExtractionTool />} />
           <Route path="cursor-extractor" element={<ToolSection files={[]} />} />
           <Route path="cursor-extractor/summary" element={<ToolSection files={[]} />} />
-          <Route path="cursor-extractor/components" element={<ToolSection files={[]} />} />
+          <Route path="cursor-extractor/metadata" element={<ToolSection files={[]} />} />
           <Route path="cursor-extractor/rules" element={<ToolSection files={[]} />} />
           <Route path="cursor-extractor/settings" element={<ToolSection files={[]} />} />
         </Route>
