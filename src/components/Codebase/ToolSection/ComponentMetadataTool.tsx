@@ -297,8 +297,11 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
       console.log("Generating diff between existing and generated metadata");
       
       try {
-        // Generate diff
-        const differences = diffJson(existingMetadata, generatedMetadata);
+        // Generate diff using properly formatted JSON strings
+        const existingStr = JSON.stringify(existingMetadata, null, 2);
+        const generatedStr = JSON.stringify(generatedMetadata, null, 2);
+        
+        const differences = diffJson(existingStr, generatedStr);
         
         // Check if there are differences
         const hasChanges = differences.some(part => part.added || part.removed);
@@ -529,21 +532,23 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                         <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                           {hasDifferences ? 'Differences' : 'Content'}
                         </h4>
-                        <div className="text-xs overflow-auto max-h-[600px] font-mono">
-                          {diffResult.map((part, index) => (
-                            <span 
-                              key={index} 
-                              className={
-                                part.added 
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' 
-                                  : part.removed 
-                                    ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' 
-                                    : 'text-gray-800 dark:text-gray-300'
-                              }
-                            >
-                              {part.value}
-                            </span>
-                          ))}
+                        <div className="text-xs overflow-auto max-h-[600px]">
+                          <pre className="font-mono whitespace-pre-wrap" style={{ margin: 0 }}>
+                            {diffResult.map((part, index) => (
+                              <span 
+                                key={index} 
+                                className={
+                                  part.added 
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' 
+                                    : part.removed 
+                                      ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' 
+                                      : 'text-gray-800 dark:text-gray-300'
+                                }
+                              >
+                                {part.value}
+                              </span>
+                            ))}
+                          </pre>
                         </div>
                       </div>
                     </div>
