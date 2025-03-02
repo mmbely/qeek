@@ -409,22 +409,33 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
     const existingStr = JSON.stringify(existing, null, 2);
     const generatedStr = JSON.stringify(generated, null, 2);
     
-    // Create maps to track line numbers for each path
-    const existingPathMap = createPathLineMap(existing);
-    const generatedPathMap = createPathLineMap(generated);
-    
     // Split into lines
     const existingLines = existingStr.split('\n');
     const generatedLines = generatedStr.split('\n');
+    
+    // Create a more precise path-to-line mapping
+    const existingLineInfo = analyzeJsonLines(existingLines);
+    const generatedLineInfo = analyzeJsonLines(generatedLines);
     
     // Create highlighted versions
     const highlightedExisting = (
       <div>
         {existingLines.map((line, index) => {
-          // Check if this line is part of a difference
+          // Get the path for this line
+          const lineInfo = existingLineInfo[index];
+          if (!lineInfo) return <div key={index}>{line}</div>;
+          
+          // Check if this line contains a property that has a difference
           const isDiffLine = diffs.some(diff => {
-            const lineRange = existingPathMap[diff.path];
-            return lineRange && index >= lineRange.start && index <= lineRange.end;
+            // For property lines, check if the property path matches exactly
+            if (lineInfo.type === 'property') {
+              return lineInfo.path === diff.path;
+            }
+            // For value lines, check if the parent property path matches
+            else if (lineInfo.type === 'value' && lineInfo.parentPath) {
+              return lineInfo.parentPath === diff.path;
+            }
+            return false;
           });
           
           return (
@@ -443,10 +454,21 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
     const highlightedGenerated = (
       <div>
         {generatedLines.map((line, index) => {
-          // Check if this line is part of a difference
+          // Get the path for this line
+          const lineInfo = generatedLineInfo[index];
+          if (!lineInfo) return <div key={index}>{line}</div>;
+          
+          // Check if this line contains a property that has a difference
           const isDiffLine = diffs.some(diff => {
-            const lineRange = generatedPathMap[diff.path];
-            return lineRange && index >= lineRange.start && index <= lineRange.end;
+            // For property lines, check if the property path matches exactly
+            if (lineInfo.type === 'property') {
+              return lineInfo.path === diff.path;
+            }
+            // For value lines, check if the parent property path matches
+            else if (lineInfo.type === 'value' && lineInfo.parentPath) {
+              return lineInfo.parentPath === diff.path;
+            }
+            return false;
           });
           
           return (
@@ -468,55 +490,120 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
     });
   };
 
-  // Create a map of JSON paths to line numbers in the formatted JSON
-  const createPathLineMap = (obj: any) => {
-    const jsonStr = JSON.stringify(obj, null, 2);
-    const lines = jsonStr.split('\n');
-    const pathMap: Record<string, {start: number, end: number}> = {};
+  // Analyze JSON lines to get detailed path information for each line
+  const analyzeJsonLines = (lines: string[]) => {
+    const lineInfo: {
+      path: string;
+      parentPath: string | null;
+      type: 'property' | 'value' | 'object' | 'array' | 'other';
+    }[] = [];
     
-    // Stack to keep track of current path and indentation
-    const stack: {path: string, indent: number}[] = [];
-    let currentPath = '';
+    // Stack to keep track of current path and context
+    const stack: {path: string, isArray: boolean, arrayIndex?: number}[] = [];
     
     lines.forEach((line, index) => {
       // Calculate indentation level
-      const match = line.match(/^(\s*)/);
-      const indent = match ? match[1].length : 0;
+      const indent = line.match(/^(\s*)/)?.[1].length || 0;
       
-      // Pop stack items with greater indentation
-      while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
-        stack.pop();
+      // Pop stack items with greater or equal indentation when closing brackets are found
+      if (line.trim() === '}' || line.trim() === '},') {
+        while (stack.length > 0 && !stack[stack.length - 1].isArray) {
+          stack.pop();
+        }
+        lineInfo[index] = { 
+          path: stack.length > 0 ? stack[stack.length - 1].path : '', 
+          parentPath: stack.length > 1 ? stack[stack.length - 2].path : null,
+          type: 'object' 
+        };
+        return;
       }
       
-      // Update current path based on stack
-      currentPath = stack.length > 0 ? stack[stack.length - 1].path : '';
+      if (line.trim() === ']' || line.trim() === '],') {
+        while (stack.length > 0 && stack[stack.length - 1].isArray) {
+          stack.pop();
+        }
+        lineInfo[index] = { 
+          path: stack.length > 0 ? stack[stack.length - 1].path : '', 
+          parentPath: stack.length > 1 ? stack[stack.length - 2].path : null,
+          type: 'array' 
+        };
+        return;
+      }
       
       // Check if line contains a property name
       const propMatch = line.match(/^\s*"([^"]+)"\s*:/);
       if (propMatch) {
         const propName = propMatch[1];
-        const newPath = currentPath ? `${currentPath}.${propName}` : propName;
+        
+        // Adjust stack based on indentation
+        while (stack.length > 0 && stack[stack.length - 1].path.split('.').length * 2 >= indent) {
+          stack.pop();
+        }
+        
+        // Build the current path
+        const parentPath = stack.length > 0 ? stack[stack.length - 1].path : '';
+        const currentPath = parentPath ? `${parentPath}.${propName}` : propName;
         
         // Check if this is an object or array opening
-        if (line.includes('{') || line.includes('[')) {
-          stack.push({ path: newPath, indent });
-          pathMap[newPath] = { start: index, end: index };
+        if (line.includes('{')) {
+          stack.push({ path: currentPath, isArray: false });
+          lineInfo[index] = { 
+            path: currentPath, 
+            parentPath,
+            type: 'property' 
+          };
+        } else if (line.includes('[')) {
+          stack.push({ path: currentPath, isArray: true });
+          lineInfo[index] = { 
+            path: currentPath, 
+            parentPath,
+            type: 'property' 
+          };
         } else {
-          // This is a simple property
-          pathMap[newPath] = { start: index, end: index };
+          // This is a simple property with a value
+          lineInfo[index] = { 
+            path: currentPath, 
+            parentPath,
+            type: 'property' 
+          };
         }
-      } 
+      }
       // Check for array items
-      else if (line.match(/^\s*\{/) && currentPath) {
-        // This is an array item in an array
-        const arrayPath = currentPath;
-        if (pathMap[arrayPath]) {
-          pathMap[arrayPath].end = Math.max(pathMap[arrayPath].end, index);
-        }
+      else if (line.trim().startsWith('{') && stack.length > 0 && stack[stack.length - 1].isArray) {
+        const arrayPath = stack[stack.length - 1].path;
+        const arrayIndex = stack[stack.length - 1].arrayIndex || 0;
+        const itemPath = `${arrayPath}[${arrayIndex}]`;
+        
+        stack.push({ path: itemPath, isArray: false });
+        stack[stack.length - 2].arrayIndex = arrayIndex + 1;
+        
+        lineInfo[index] = { 
+          path: itemPath, 
+          parentPath: arrayPath,
+          type: 'object' 
+        };
+      }
+      // Check for value lines (lines that don't contain property names but have values)
+      else if (!propMatch && line.trim() && !line.trim().startsWith('{') && !line.trim().startsWith('[')) {
+        const currentPath = stack.length > 0 ? stack[stack.length - 1].path : '';
+        lineInfo[index] = { 
+          path: currentPath, 
+          parentPath: stack.length > 1 ? stack[stack.length - 2].path : null,
+          type: 'value' 
+        };
+      }
+      // Other lines (brackets, commas, etc.)
+      else {
+        const currentPath = stack.length > 0 ? stack[stack.length - 1].path : '';
+        lineInfo[index] = { 
+          path: currentPath, 
+          parentPath: stack.length > 1 ? stack[stack.length - 2].path : null,
+          type: 'other' 
+        };
       }
     });
     
-    return pathMap;
+    return lineInfo;
   };
 
   // Synchronized scrolling for compare panels
