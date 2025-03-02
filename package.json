@@ -78,6 +78,7 @@
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
     "@shadcn/ui": "^0.0.4",
     "@tailwindcss/typography": "^0.5.16",
+    "@types/diff": "^7.0.1",
     "@types/emoji-mart": "^3.0.14",
     "@types/react-syntax-highlighter": "^15.5.13",
     "autoprefixer": "^10.4.20",

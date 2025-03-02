@@ -12,6 +12,7 @@ import { Dialog } from '../../../components/ui/dialog';
 import { Button } from '../../../components/ui/button';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
+import { diffJson } from 'diff';
 
 // We'll use our own SimpleTabs implementation since ui/tabs is not available
 interface SimpleTabsProps {
@@ -26,8 +27,16 @@ interface TabProps {
 }
 
 // Simple tab implementation
-const SimpleTabs = ({ defaultValue, children }: SimpleTabsProps) => {
+const SimpleTabs = ({ defaultValue, children, onValueChange }: SimpleTabsProps & { onValueChange?: (value: string) => void }) => {
   const [activeTab, setActiveTab] = useState(defaultValue);
+  
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (onValueChange) {
+      onValueChange(value);
+    }
+  };
+  
   return (
     <div>
       <div className="flex gap-2 mb-4">
@@ -40,7 +49,7 @@ const SimpleTabs = ({ defaultValue, children }: SimpleTabsProps) => {
                     ? 'bg-blue-500 text-white'
                     : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200'
                 }`}
-                onClick={() => setActiveTab(child.props.value)}
+                onClick={() => handleTabChange(child.props.value)}
               >
                 {child.props.label}
               </button>
@@ -76,8 +85,10 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
   const { isDarkMode } = useTheme();
   const { currentAccount } = useAccount();
   const [activeTab, setActiveTab] = useState('existing');
-  const leftPanelRef = useRef<HTMLPreElement>(null);
-  const rightPanelRef = useRef<HTMLPreElement>(null);
+  const leftPanelRef = useRef<HTMLDivElement>(null);
+  const rightPanelRef = useRef<HTMLDivElement>(null);
+  const [hasDifferences, setHasDifferences] = useState(false);
+  const [isScrollingSynced, setIsScrollingSynced] = useState(true);
   const [differences, setDifferences] = useState<{path: string, existing: any, generated: any}[]>([]);
 
   // Check for existing components.json file
@@ -281,113 +292,140 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
     URL.revokeObjectURL(url);
   };
 
+  // Find differences between objects
+  const findObjectDifferences = (obj1: any, obj2: any, path = ''): {path: string, existing: any, generated: any}[] => {
+    const result: {path: string, existing: any, generated: any}[] = [];
+    
+    // Helper function to check if a value is an object
+    const isObject = (value: any) => 
+      value !== null && typeof value === 'object' && !Array.isArray(value);
+    
+    // Get all keys from both objects
+    const keys1 = Object.keys(obj1 || {});
+    const keys2 = Object.keys(obj2 || {});
+    const allKeys: string[] = [];
+    
+    // Add keys from obj1
+    keys1.forEach(key => {
+      if (!allKeys.includes(key)) {
+        allKeys.push(key);
+      }
+    });
+    
+    // Add keys from obj2
+    keys2.forEach(key => {
+      if (!allKeys.includes(key)) {
+        allKeys.push(key);
+      }
+    });
+    
+    for (const key of allKeys) {
+      const currentPath = path ? `${path}.${key}` : key;
+      
+      // Key exists in both objects
+      if (key in obj1 && key in obj2) {
+        const val1 = obj1[key];
+        const val2 = obj2[key];
+        
+        // Both values are objects - recurse
+        if (isObject(val1) && isObject(val2)) {
+          result.push(...findObjectDifferences(val1, val2, currentPath));
+        } 
+        // Both values are arrays - compare them
+        else if (Array.isArray(val1) && Array.isArray(val2)) {
+          if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+            result.push({
+              path: currentPath,
+              existing: val1,
+              generated: val2
+            });
+          }
+        }
+        // Values are different
+        else if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+          result.push({
+            path: currentPath,
+            existing: val1,
+            generated: val2
+          });
+        }
+      }
+      // Key only in obj1
+      else if (key in obj1) {
+        result.push({
+          path: currentPath,
+          existing: obj1[key],
+          generated: undefined
+        });
+      }
+      // Key only in obj2
+      else {
+        result.push({
+          path: currentPath,
+          existing: undefined,
+          generated: obj2[key]
+        });
+      }
+    }
+    
+    return result;
+  };
+
   // Generate diff when both metadata are available and compare tab is active
   useEffect(() => {
     if (existingMetadata && generatedMetadata && activeTab === 'compare') {
       console.log("Finding differences between existing and generated metadata");
       
-      // Custom function to find differences between two objects
-      const findDifferences = (obj1: any, obj2: any, path = '') => {
-        const result: {path: string, existing: any, generated: any}[] = [];
+      try {
+        // Find differences between objects
+        const diffs = findObjectDifferences(existingMetadata, generatedMetadata);
+        console.log("Differences found:", diffs.length);
         
-        // Helper function to check if a value is an object
-        const isObject = (value: any) => 
-          value !== null && typeof value === 'object' && !Array.isArray(value);
-        
-        // Get all keys from both objects (without using Set)
-        const keys1 = Object.keys(obj1);
-        const keys2 = Object.keys(obj2);
-        const allKeys: string[] = [];
-        
-        // Add keys from obj1
-        keys1.forEach(key => {
-          if (!allKeys.includes(key)) {
-            allKeys.push(key);
-          }
-        });
-        
-        // Add keys from obj2
-        keys2.forEach(key => {
-          if (!allKeys.includes(key)) {
-            allKeys.push(key);
-          }
-        });
-        
-        for (const key of allKeys) {
-          const currentPath = path ? `${path}.${key}` : key;
-          
-          // Key exists in both objects
-          if (key in obj1 && key in obj2) {
-            const val1 = obj1[key];
-            const val2 = obj2[key];
-            
-            // Both values are objects - recurse
-            if (isObject(val1) && isObject(val2)) {
-              result.push(...findDifferences(val1, val2, currentPath));
-            } 
-            // Both values are arrays - compare them
-            else if (Array.isArray(val1) && Array.isArray(val2)) {
-              if (JSON.stringify(val1) !== JSON.stringify(val2)) {
-                result.push({
-                  path: currentPath,
-                  existing: val1,
-                  generated: val2
-                });
-              }
-            }
-            // Values are different
-            else if (JSON.stringify(val1) !== JSON.stringify(val2)) {
-              result.push({
-                path: currentPath,
-                existing: val1,
-                generated: val2
-              });
-            }
-          }
-          // Key only in obj1
-          else if (key in obj1) {
-            result.push({
-              path: currentPath,
-              existing: obj1[key],
-              generated: undefined
-            });
-          }
-          // Key only in obj2
-          else {
-            result.push({
-              path: currentPath,
-              existing: undefined,
-              generated: obj2[key]
-            });
-          }
+        if (diffs.length > 0) {
+          console.log("First difference:", diffs[0]);
         }
         
-        return result;
-      };
-      
-      const diffs = findDifferences(existingMetadata, generatedMetadata);
-      setDifferences(diffs);
+        setDifferences(diffs);
+        setHasDifferences(diffs.length > 0);
+      } catch (error) {
+        console.error("Error finding differences:", error);
+        setHasDifferences(false);
+      }
     }
   }, [existingMetadata, generatedMetadata, activeTab]);
 
   // Synchronized scrolling for compare panels
   useEffect(() => {
-    if (activeTab !== 'compare' || !leftPanelRef.current || !rightPanelRef.current) {
+    if (activeTab !== 'compare' || !leftPanelRef.current || !rightPanelRef.current || !isScrollingSynced) {
       return;
     }
 
+    console.log("Setting up synchronized scrolling");
     const leftPanel = leftPanelRef.current;
     const rightPanel = rightPanelRef.current;
+    
+    // Flag to prevent infinite scroll loops
+    let isScrolling = false;
 
-    const handleLeftScroll = () => {
-      rightPanel.scrollTop = leftPanel.scrollTop;
-      rightPanel.scrollLeft = leftPanel.scrollLeft;
+    const syncScroll = (source: HTMLElement, target: HTMLElement) => {
+      if (isScrolling) return;
+      
+      isScrolling = true;
+      
+      // Calculate scroll percentage
+      const scrollPercentage = source.scrollTop / (source.scrollHeight - source.clientHeight || 1);
+      
+      // Apply the same percentage to the target
+      target.scrollTop = scrollPercentage * (target.scrollHeight - target.clientHeight || 1);
+      
+      // Reset the flag after a short delay
+      setTimeout(() => {
+        isScrolling = false;
+      }, 50);
     };
 
-    const handleRightScroll = () => {
-      leftPanel.scrollTop = rightPanel.scrollTop;
-      leftPanel.scrollLeft = rightPanel.scrollLeft;
-    };
+    const handleLeftScroll = () => syncScroll(leftPanel, rightPanel);
+    const handleRightScroll = () => syncScroll(rightPanel, leftPanel);
 
     leftPanel.addEventListener('scroll', handleLeftScroll);
     rightPanel.addEventListener('scroll', handleRightScroll);
@@ -396,7 +434,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
       leftPanel.removeEventListener('scroll', handleLeftScroll);
       rightPanel.removeEventListener('scroll', handleRightScroll);
     };
-  }, [activeTab]);
+  }, [activeTab, isScrollingSynced]);
 
   return (
     <div className="w-full">
@@ -531,7 +569,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
 
           {/* Metadata content */}
           {(existingMetadata || generatedMetadata) && (
-            <SimpleTabs defaultValue={activeTab}>
+            <SimpleTabs defaultValue={activeTab} onValueChange={setActiveTab}>
               {existingMetadata && (
                 <Tab value="existing" label="Existing Metadata">
                   <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
@@ -597,11 +635,39 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                       </h3>
                     </div>
                     <div className="p-4">
-                      {differences.length > 0 ? (
+                      <div className="flex justify-between items-center mb-4">
+                        <div>
+                          {hasDifferences ? (
+                            <span className="text-sm text-red-500 font-medium">
+                              {differences.length} difference{differences.length !== 1 ? 's' : ''} found
+                            </span>
+                          ) : (
+                            <span className="text-sm text-green-500 font-medium">
+                              No differences found
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <label className="inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isScrollingSynced}
+                              onChange={() => setIsScrollingSynced(!isScrollingSynced)}
+                              className="sr-only peer"
+                            />
+                            <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                            <span className="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">
+                              Sync scrolling
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                      
+                      {hasDifferences && (
                         <div className="grid grid-cols-1 gap-4 mb-4">
                           <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md">
                             <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                              Differences Found ({differences.length})
+                              Differences
                             </h4>
                             <div className="text-xs text-gray-600 dark:text-gray-400 overflow-auto max-h-[200px]">
                               <table className="w-full border-collapse">
@@ -641,32 +707,30 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                             </div>
                           </div>
                         </div>
-                      ) : (
-                        <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md mb-4">
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            No differences found between existing and generated metadata.
-                          </p>
-                        </div>
                       )}
                       
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Existing</h4>
-                          <pre 
+                          <div 
                             ref={leftPanelRef}
-                            className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded"
+                            className="text-xs text-gray-600 dark:text-gray-400 overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded"
                           >
-                            {JSON.stringify(existingMetadata, null, 2)}
-                          </pre>
+                            <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                              {JSON.stringify(existingMetadata, null, 2)}
+                            </pre>
+                          </div>
                         </div>
                         <div>
                           <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Generated</h4>
-                          <pre 
+                          <div 
                             ref={rightPanelRef}
-                            className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded"
+                            className="text-xs text-gray-600 dark:text-gray-400 overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded"
                           >
-                            {JSON.stringify(generatedMetadata, null, 2)}
-                          </pre>
+                            <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                              {JSON.stringify(generatedMetadata, null, 2)}
+                            </pre>
+                          </div>
                         </div>
                       </div>
                     </div>

@@ -32,7 +32,8 @@
       "@components/*": ["components/*"],
       "@config/*": ["config/*"],
       "@services/*": ["services/*"]
-    }
+    },
+    "typeRoots": ["./node_modules/@types", "./types"]
   },
   "include": ["src", "functions"]
 }
