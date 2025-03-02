@@ -61,7 +61,7 @@
     "components": [
       {
         "name": "CodebaseViewer",
-        "purpose": "displays a codebase viewer for a connected GitHub repository, allowing users to browse, search, filter, and sort files",
+        "purpose": "displays a codebase viewer for a connected GitHub repository, allowing users to browse, filter, sort, and sync files",
         "dependencies": [
           "react",
           "../../context/AuthContext",
@@ -115,7 +115,7 @@
       },
       {
         "name": "FileFilters",
-        "purpose": "Provides filtering UI elements for searching and filtering files by name, status, language, and component",
+        "purpose": "Provides filtering UI for codebase files by search term, status, language, and component",
         "dependencies": [
           "@mui/material",
           "lucide-react",
@@ -125,7 +125,7 @@
       },
       {
         "name": "FileTable",
-        "purpose": "displays a paginated, sortable table of repository files",
+        "purpose": "displays a paginated and sortable table of repository files",
         "dependencies": [
           "@mui/material",
           "../../types/repository",
@@ -229,7 +229,7 @@
       },
       {
         "name": "ComponentMetadataTool",
-        "purpose": "allows users to generate metadata for their components using the `generateComponentMetadata` utility function",
+        "purpose": "allows users to generate metadata for their UI components, compare it with existing metadata (if any), and push the generated metadata to a connect...",
         "dependencies": [
           "react",
           "lucide-react",
@@ -239,7 +239,10 @@
           "react-markdown",
           "react-syntax-highlighter",
           "react-syntax-highlighter/dist/esm/styles/prism",
-          "../../../types/repository"
+          "../../../types/repository",
+          "../../../services/github",
+          "../../../components/ui/dialog",
+          "../../../components/ui/button"
         ],
         "location": "src/components/Codebase/ToolSection/ComponentMetadataTool.tsx"
       },
