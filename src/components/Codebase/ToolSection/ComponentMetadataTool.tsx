@@ -10,9 +10,11 @@ import { RepositoryFile } from '../../../types/repository';
 import { getRepositoryFile } from '../../../services/github';
 import { Dialog } from '../../../components/ui/dialog';
 import { Button } from '../../../components/ui/button';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { diffJson } from 'diff';
+import { Octokit } from '@octokit/rest';
+import type { OctokitResponse } from '@octokit/types';
 
 // We'll use our own SimpleTabs implementation since ui/tabs is not available
 interface SimpleTabsProps {
@@ -82,6 +84,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
   const [showPushDialog, setShowPushDialog] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
   const [pushSuccess, setPushSuccess] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
   const { isDarkMode } = useTheme();
   const { currentAccount } = useAccount();
   const [activeTab, setActiveTab] = useState('existing');
@@ -238,32 +241,99 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
     }
   };
 
-  // Since updateRepositoryFile doesn't exist, we'll implement a simple version
+  // Function to get GitHub token for an account
+  const getGithubToken = async (accountId: string): Promise<string | null> => {
+    try {
+      const tokenDoc = await getDoc(doc(db, 'secure_tokens', accountId));
+      return tokenDoc.exists() ? tokenDoc.data()?.githubToken : null;
+    } catch (error) {
+      console.error('Error retrieving GitHub token:', error);
+      return null;
+    }
+  };
+
   const handlePushToGitHub = async () => {
-    if (!generatedMetadata || !currentAccount?.settings?.githubRepository) {
+    if (!generatedMetadata || !currentAccount?.settings?.githubRepository || !currentAccount?.id) {
+      setPushError('Missing repository information or account ID');
       return;
     }
 
     setPushLoading(true);
+    setPushError(null);
+    setPushSuccess(false);
+    
     try {
-      // We need to implement this function or use an alternative approach
-      // For now, we'll just simulate success after a delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const [owner, repo] = currentAccount.settings.githubRepository.split('/');
+      const filePath = '.cursor/components.json';
+      const content = JSON.stringify(generatedMetadata, null, 2);
+      const commitMessage = 'Update components.json via Qeek';
       
-      // In a real implementation, you would call your GitHub API to update the file
-      // await updateRepositoryFile(
-      //   currentAccount.settings.githubRepository,
-      //   '.cursor/components.json',
-      //   JSON.stringify(generatedMetadata, null, 2),
-      //   'Update components.json via Qeek'
-      // );
+      // Get GitHub token from secure_tokens collection
+      const githubToken = await getGithubToken(currentAccount.id);
       
-      setPushSuccess(true);
-      setExistingMetadata(generatedMetadata);
-      setShowPushDialog(false);
+      if (!githubToken) {
+        throw new Error('GitHub token not found. Please reconnect your GitHub account in Settings.');
+      }
+      
+      // Initialize Octokit with the token
+      const octokit = new Octokit({ auth: githubToken });
+      
+      console.log(`Pushing to GitHub: ${owner}/${repo}, path: ${filePath}`);
+      
+      // First, try to get the file to check if it exists and get its SHA
+      let fileSha: string | undefined;
+      try {
+        const { data: fileData } = await octokit.repos.getContent({
+          owner,
+          repo,
+          path: filePath,
+        });
+        
+        // Check if fileData is a file (not a directory) and has a sha
+        if (!Array.isArray(fileData) && 'sha' in fileData) {
+          fileSha = fileData.sha;
+          console.log(`Existing file found with SHA: ${fileSha}`);
+        }
+      } catch (error) {
+        console.log('File does not exist yet, will create it');
+      }
+      
+      // Create or update the file
+      try {
+        const response = await octokit.repos.createOrUpdateFileContents({
+          owner,
+          repo,
+          path: filePath,
+          message: commitMessage,
+          content: Buffer.from(content).toString('base64'),
+          sha: fileSha, // Include SHA if updating, omit if creating
+        });
+        
+        console.log('GitHub API response:', response);
+        
+        // Also update in Firestore for immediate local access
+        const repoId = currentAccount.settings.githubRepository.replace('/', '_');
+        const fileRef = doc(db, 'repositories', repoId, 'files', '.cursor_components.json');
+        
+        await setDoc(fileRef, {
+          path: filePath,
+          content: content,
+          metadata: {
+            sha: response.data.content?.sha || 'unknown',
+            lastUpdated: new Date().toISOString()
+          }
+        });
+        
+        setPushSuccess(true);
+        setExistingMetadata(generatedMetadata);
+        setShowPushDialog(false);
+      } catch (apiError: any) {
+        console.error('GitHub API error:', apiError);
+        throw new Error(apiError.message || `Failed to push to GitHub: ${apiError.status || 'Unknown error'}`);
+      }
     } catch (error) {
       console.error('Failed to push to GitHub:', error);
-      setError(error instanceof Error ? error.message : 'Failed to push to GitHub');
+      setPushError(error instanceof Error ? error.message : 'Failed to push to GitHub');
     } finally {
       setPushLoading(false);
     }
@@ -425,6 +495,24 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
             <div className="ml-3">
               <p className="text-sm font-medium text-green-800 dark:text-green-400">
                 Successfully pushed to GitHub!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error message */}
+      {pushError && (
+        <div className="bg-white dark:bg-[#1e2132] rounded-lg shadow-sm p-6 mb-6 border-l-4 border-red-500">
+          <div className="flex items-center py-2">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-5a1 1 0 112 0v-5a1 1 0 11-2 0v5zm1-9a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-red-800 dark:text-red-400">
+                {pushError}
               </p>
             </div>
           </div>
