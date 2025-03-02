@@ -300,12 +300,15 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
       
       // Create or update the file
       try {
+        // Use browser's btoa function instead of Buffer for base64 encoding
+        const base64Content = btoa(unescape(encodeURIComponent(content)));
+        
         const response = await octokit.repos.createOrUpdateFileContents({
           owner,
           repo,
           path: filePath,
           message: commitMessage,
-          content: Buffer.from(content).toString('base64'),
+          content: base64Content,
           sha: fileSha, // Include SHA if updating, omit if creating
         });
         
@@ -329,7 +332,7 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
         setShowPushDialog(false);
       } catch (apiError: any) {
         console.error('GitHub API error:', apiError);
-        throw new Error(apiError.message || `Failed to push to GitHub: ${apiError.status || 'Unknown error'}`);
+        throw new Error(apiError.message || 'Failed to push to GitHub');
       }
     } catch (error) {
       console.error('Failed to push to GitHub:', error);
