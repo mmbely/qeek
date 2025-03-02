@@ -90,6 +90,10 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
   const [hasDifferences, setHasDifferences] = useState(false);
   const [isScrollingSynced, setIsScrollingSynced] = useState(true);
   const [differences, setDifferences] = useState<{path: string, existing: any, generated: any}[]>([]);
+  const [highlightedCode, setHighlightedCode] = useState<{existing: React.ReactNode, generated: React.ReactNode}>({
+    existing: null,
+    generated: null
+  });
 
   // Check for existing components.json file
   useEffect(() => {
@@ -387,12 +391,133 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
         
         setDifferences(diffs);
         setHasDifferences(diffs.length > 0);
+        
+        // Generate highlighted code
+        if (diffs.length > 0) {
+          generateHighlightedCode(existingMetadata, generatedMetadata, diffs);
+        }
       } catch (error) {
         console.error("Error finding differences:", error);
         setHasDifferences(false);
       }
     }
   }, [existingMetadata, generatedMetadata, activeTab]);
+
+  // Generate highlighted code with differences
+  const generateHighlightedCode = (existing: any, generated: any, diffs: {path: string, existing: any, generated: any}[]) => {
+    // Convert objects to pretty JSON strings
+    const existingStr = JSON.stringify(existing, null, 2);
+    const generatedStr = JSON.stringify(generated, null, 2);
+    
+    // Create maps to track line numbers for each path
+    const existingPathMap = createPathLineMap(existing);
+    const generatedPathMap = createPathLineMap(generated);
+    
+    // Split into lines
+    const existingLines = existingStr.split('\n');
+    const generatedLines = generatedStr.split('\n');
+    
+    // Create highlighted versions
+    const highlightedExisting = (
+      <div>
+        {existingLines.map((line, index) => {
+          // Check if this line is part of a difference
+          const isDiffLine = diffs.some(diff => {
+            const lineRange = existingPathMap[diff.path];
+            return lineRange && index >= lineRange.start && index <= lineRange.end;
+          });
+          
+          return (
+            <div 
+              key={index} 
+              className={isDiffLine ? 'bg-red-100 dark:bg-red-900/30' : ''}
+              style={{ padding: '1px 0' }}
+            >
+              {line}
+            </div>
+          );
+        })}
+      </div>
+    );
+    
+    const highlightedGenerated = (
+      <div>
+        {generatedLines.map((line, index) => {
+          // Check if this line is part of a difference
+          const isDiffLine = diffs.some(diff => {
+            const lineRange = generatedPathMap[diff.path];
+            return lineRange && index >= lineRange.start && index <= lineRange.end;
+          });
+          
+          return (
+            <div 
+              key={index} 
+              className={isDiffLine ? 'bg-green-100 dark:bg-green-900/30' : ''}
+              style={{ padding: '1px 0' }}
+            >
+              {line}
+            </div>
+          );
+        })}
+      </div>
+    );
+    
+    setHighlightedCode({
+      existing: highlightedExisting,
+      generated: highlightedGenerated
+    });
+  };
+
+  // Create a map of JSON paths to line numbers in the formatted JSON
+  const createPathLineMap = (obj: any) => {
+    const jsonStr = JSON.stringify(obj, null, 2);
+    const lines = jsonStr.split('\n');
+    const pathMap: Record<string, {start: number, end: number}> = {};
+    
+    // Stack to keep track of current path and indentation
+    const stack: {path: string, indent: number}[] = [];
+    let currentPath = '';
+    
+    lines.forEach((line, index) => {
+      // Calculate indentation level
+      const match = line.match(/^(\s*)/);
+      const indent = match ? match[1].length : 0;
+      
+      // Pop stack items with greater indentation
+      while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
+        stack.pop();
+      }
+      
+      // Update current path based on stack
+      currentPath = stack.length > 0 ? stack[stack.length - 1].path : '';
+      
+      // Check if line contains a property name
+      const propMatch = line.match(/^\s*"([^"]+)"\s*:/);
+      if (propMatch) {
+        const propName = propMatch[1];
+        const newPath = currentPath ? `${currentPath}.${propName}` : propName;
+        
+        // Check if this is an object or array opening
+        if (line.includes('{') || line.includes('[')) {
+          stack.push({ path: newPath, indent });
+          pathMap[newPath] = { start: index, end: index };
+        } else {
+          // This is a simple property
+          pathMap[newPath] = { start: index, end: index };
+        }
+      } 
+      // Check for array items
+      else if (line.match(/^\s*\{/) && currentPath) {
+        // This is an array item in an array
+        const arrayPath = currentPath;
+        if (pathMap[arrayPath]) {
+          pathMap[arrayPath].end = Math.max(pathMap[arrayPath].end, index);
+        }
+      }
+    });
+    
+    return pathMap;
+  };
 
   // Synchronized scrolling for compare panels
   useEffect(() => {
@@ -663,73 +788,35 @@ const ComponentMetadataTool = ({ files }: ComponentMetadataToolProps) => {
                         </div>
                       </div>
                       
-                      {hasDifferences && (
-                        <div className="grid grid-cols-1 gap-4 mb-4">
-                          <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md">
-                            <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                              Differences
-                            </h4>
-                            <div className="text-xs text-gray-600 dark:text-gray-400 overflow-auto max-h-[200px]">
-                              <table className="w-full border-collapse">
-                                <thead>
-                                  <tr className="border-b dark:border-gray-700">
-                                    <th className="text-left p-2">Path</th>
-                                    <th className="text-left p-2">Existing</th>
-                                    <th className="text-left p-2">Generated</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {differences.map((diff, index) => (
-                                    <tr key={index} className="border-b dark:border-gray-700">
-                                      <td className="p-2 font-mono">{diff.path}</td>
-                                      <td className="p-2 bg-red-50 dark:bg-red-900/20">
-                                        {diff.existing !== undefined ? (
-                                          typeof diff.existing === 'object' ? 
-                                            JSON.stringify(diff.existing).substring(0, 50) + (JSON.stringify(diff.existing).length > 50 ? '...' : '') : 
-                                            String(diff.existing)
-                                        ) : (
-                                          <span className="text-red-500">missing</span>
-                                        )}
-                                      </td>
-                                      <td className="p-2 bg-green-50 dark:bg-green-900/20">
-                                        {diff.generated !== undefined ? (
-                                          typeof diff.generated === 'object' ? 
-                                            JSON.stringify(diff.generated).substring(0, 50) + (JSON.stringify(diff.generated).length > 50 ? '...' : '') : 
-                                            String(diff.generated)
-                                        ) : (
-                                          <span className="text-red-500">missing</span>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Existing</h4>
+                          <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                            Existing <span className="text-red-500">(differences highlighted)</span>
+                          </h4>
                           <div 
                             ref={leftPanelRef}
                             className="text-xs text-gray-600 dark:text-gray-400 overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded"
                           >
-                            <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-                              {JSON.stringify(existingMetadata, null, 2)}
-                            </pre>
+                            {highlightedCode.existing || (
+                              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                                {JSON.stringify(existingMetadata, null, 2)}
+                              </pre>
+                            )}
                           </div>
                         </div>
                         <div>
-                          <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Generated</h4>
+                          <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                            Generated <span className="text-green-500">(differences highlighted)</span>
+                          </h4>
                           <div 
                             ref={rightPanelRef}
                             className="text-xs text-gray-600 dark:text-gray-400 overflow-auto max-h-[500px] font-mono p-2 bg-gray-50 dark:bg-gray-900 rounded"
                           >
-                            <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-                              {JSON.stringify(generatedMetadata, null, 2)}
-                            </pre>
+                            {highlightedCode.generated || (
+                              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                                {JSON.stringify(generatedMetadata, null, 2)}
+                              </pre>
+                            )}
                           </div>
                         </div>
                       </div>
