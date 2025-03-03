@@ -14,6 +14,7 @@ import { materialDark, materialLight } from 'react-syntax-highlighter/dist/esm/s
 import { Octokit } from '@octokit/rest';
 import { diffLines } from 'diff';
 import { Dialog } from '../../ui/dialog';
+// import type { CodeProps } from 'react-markdown/lib/ast-to-react';
 
 interface ArchitectureMdToolProps {
   files: RepositoryFile[];
@@ -196,9 +197,13 @@ const ArchitectureMdTool = ({ files }: ArchitectureMdToolProps) => {
 
       console.log('Fetched repository files:', repoFiles);
 
-      // Filter out files with empty ai_analysis
+      // Filter out files with empty ai_analysis and deleted files
       const validFiles = repoFiles.filter((file): file is RepositoryFile & { ai_analysis: object } => {
-        return !!file.ai_analysis && Object.keys(file.ai_analysis).length > 0;
+        return (
+          !!file.ai_analysis && 
+          Object.keys(file.ai_analysis).length > 0 &&
+          file.status !== "deleted"  // Exclude deleted files
+        );
       });
 
       console.log('Valid files with ai_analysis:', validFiles);
@@ -483,47 +488,75 @@ const ArchitectureMdTool = ({ files }: ArchitectureMdToolProps) => {
             <SimpleTabs defaultValue={activeTab} onValueChange={setActiveTab}>
               {existingArchitecture && (
                 <Tab value="existing" label="Existing architecture.md">
-                  <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-end mb-2">
-                      <button
-                        onClick={() => copyToClipboard(existingArchitecture)}
-                        className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 
-                                 dark:hover:bg-gray-600 rounded-md flex items-center gap-2 
-                                 text-gray-700 dark:text-gray-300 transition-colors"
-                      >
-                        <Copy className="h-4 w-4" />
-                        Copy
-                      </button>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div className="border-b border-gray-200 dark:border-gray-700">
+                      <div className="flex justify-between items-center p-2">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 px-2">
+                          Existing architecture.md
+                        </h3>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => copyToClipboard(existingArchitecture)}
+                            className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 
+                                     dark:hover:bg-gray-600 rounded-md flex items-center gap-2 
+                                     text-gray-700 dark:text-gray-300 transition-colors"
+                          >
+                            <Copy className="h-4 w-4" />
+                            Copy
+                          </button>
+                          <button
+                            onClick={() => downloadMarkdown(existingArchitecture, 'architecture.md')}
+                            className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 
+                                     dark:hover:bg-gray-600 rounded-md flex items-center gap-2 
+                                     text-gray-700 dark:text-gray-300 transition-colors"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px]">
-                      <ReactMarkdown
-                        className="w-full break-words"
-                        components={{
-                          code({ className, children }) {
-                            const match = /language-(\w+)/.exec(className || '');
-                            return match ? (
-                              <SyntaxHighlighter
-                                style={isDarkMode ? materialDark : materialLight}
-                                language={match[1]}
-                                customStyle={{
-                                  margin: 0,
-                                  padding: '1rem',
-                                  background: isDarkMode ? 'rgba(17, 24, 39, 0.5)' : '#f3f4f6',
-                                  borderRadius: '0.375rem',
-                                }}
-                              >
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
-                            ) : (
-                              <code className={className}>
+                    <div className="p-4 overflow-auto max-h-[600px]">
+                      <div className="prose dark:prose-invert prose-sm max-w-none text-gray-800 dark:text-gray-200">
+                        <ReactMarkdown
+                          components={{
+                            code({ className, children, ...props }) {
+                              const match = /language-(\w+)/.exec(className || '');
+                              return match ? (
+                                <SyntaxHighlighter
+                                  // @ts-ignore - Known issue with type definitions
+                                  style={isDarkMode ? materialDark : materialLight}
+                                  language={match[1]}
+                                  PreTag="div"
+                                >
+                                  {String(children).replace(/\n$/, '')}
+                                </SyntaxHighlighter>
+                              ) : (
+                                <code className={className} {...props}>
+                                  {children}
+                                </code>
+                              );
+                            },
+                            h1: ({ children }) => <h1 className="text-gray-900 dark:text-gray-100">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-gray-900 dark:text-gray-100">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-gray-900 dark:text-gray-100">{children}</h3>,
+                            h4: ({ children }) => <h4 className="text-gray-900 dark:text-gray-100">{children}</h4>,
+                            h5: ({ children }) => <h5 className="text-gray-900 dark:text-gray-100">{children}</h5>,
+                            h6: ({ children }) => <h6 className="text-gray-900 dark:text-gray-100">{children}</h6>,
+                            p: ({ children }) => <p className="text-gray-800 dark:text-gray-200">{children}</p>,
+                            ul: ({ children }) => <ul className="text-gray-800 dark:text-gray-200">{children}</ul>,
+                            ol: ({ children }) => <ol className="text-gray-800 dark:text-gray-200">{children}</ol>,
+                            li: ({ children }) => <li className="text-gray-800 dark:text-gray-200">{children}</li>,
+                            a: ({ href, children }) => (
+                              <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline">
                                 {children}
-                              </code>
-                            );
-                          },
-                        }}
-                      >
-                        {existingArchitecture}
-                      </ReactMarkdown>
+                              </a>
+                            ),
+                          }}
+                        >
+                          {existingArchitecture}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   </div>
                 </Tab>
@@ -531,47 +564,75 @@ const ArchitectureMdTool = ({ files }: ArchitectureMdToolProps) => {
               
               {generatedArchitecture && (
                 <Tab value="generated" label="Generated architecture.md">
-                  <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-end mb-2">
-                      <button
-                        onClick={() => copyToClipboard(generatedArchitecture)}
-                        className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 
-                                 dark:hover:bg-gray-600 rounded-md flex items-center gap-2 
-                                 text-gray-700 dark:text-gray-300 transition-colors"
-                      >
-                        <Copy className="h-4 w-4" />
-                        Copy
-                      </button>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div className="border-b border-gray-200 dark:border-gray-700">
+                      <div className="flex justify-between items-center p-2">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 px-2">
+                          Generated architecture.md
+                        </h3>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => copyToClipboard(generatedArchitecture)}
+                            className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 
+                                     dark:hover:bg-gray-600 rounded-md flex items-center gap-2 
+                                     text-gray-700 dark:text-gray-300 transition-colors"
+                          >
+                            <Copy className="h-4 w-4" />
+                            Copy
+                          </button>
+                          <button
+                            onClick={() => downloadMarkdown(generatedArchitecture, 'architecture.md')}
+                            className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 
+                                     dark:hover:bg-gray-600 rounded-md flex items-center gap-2 
+                                     text-gray-700 dark:text-gray-300 transition-colors"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-[500px]">
-                      <ReactMarkdown
-                        className="w-full break-words"
-                        components={{
-                          code({ className, children }) {
-                            const match = /language-(\w+)/.exec(className || '');
-                            return match ? (
-                              <SyntaxHighlighter
-                                style={isDarkMode ? materialDark : materialLight}
-                                language={match[1]}
-                                customStyle={{
-                                  margin: 0,
-                                  padding: '1rem',
-                                  background: isDarkMode ? 'rgba(17, 24, 39, 0.5)' : '#f3f4f6',
-                                  borderRadius: '0.375rem',
-                                }}
-                              >
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
-                            ) : (
-                              <code className={className}>
+                    <div className="p-4 overflow-auto max-h-[600px]">
+                      <div className="prose dark:prose-invert prose-sm max-w-none text-gray-800 dark:text-gray-200">
+                        <ReactMarkdown
+                          components={{
+                            code({ className, children, ...props }) {
+                              const match = /language-(\w+)/.exec(className || '');
+                              return match ? (
+                                <SyntaxHighlighter
+                                  // @ts-ignore - Known issue with type definitions
+                                  style={isDarkMode ? materialDark : materialLight}
+                                  language={match[1]}
+                                  PreTag="div"
+                                >
+                                  {String(children).replace(/\n$/, '')}
+                                </SyntaxHighlighter>
+                              ) : (
+                                <code className={className} {...props}>
+                                  {children}
+                                </code>
+                              );
+                            },
+                            h1: ({ children }) => <h1 className="text-gray-900 dark:text-gray-100">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-gray-900 dark:text-gray-100">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-gray-900 dark:text-gray-100">{children}</h3>,
+                            h4: ({ children }) => <h4 className="text-gray-900 dark:text-gray-100">{children}</h4>,
+                            h5: ({ children }) => <h5 className="text-gray-900 dark:text-gray-100">{children}</h5>,
+                            h6: ({ children }) => <h6 className="text-gray-900 dark:text-gray-100">{children}</h6>,
+                            p: ({ children }) => <p className="text-gray-800 dark:text-gray-200">{children}</p>,
+                            ul: ({ children }) => <ul className="text-gray-800 dark:text-gray-200">{children}</ul>,
+                            ol: ({ children }) => <ol className="text-gray-800 dark:text-gray-200">{children}</ol>,
+                            li: ({ children }) => <li className="text-gray-800 dark:text-gray-200">{children}</li>,
+                            a: ({ href, children }) => (
+                              <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline">
                                 {children}
-                              </code>
-                            );
-                          },
-                        }}
-                      >
-                        {generatedArchitecture}
-                      </ReactMarkdown>
+                              </a>
+                            ),
+                          }}
+                        >
+                          {generatedArchitecture}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   </div>
                 </Tab>
@@ -579,35 +640,49 @@ const ArchitectureMdTool = ({ files }: ArchitectureMdToolProps) => {
               
               {existingArchitecture && generatedArchitecture && (
                 <Tab value="compare" label="Compare Changes">
-                  <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-                    <div className="mb-4">
-                      {hasDifferences ? (
-                        <div className="text-amber-600 dark:text-amber-400 flex items-center gap-2">
-                          <AlertTriangle className="h-5 w-5" />
-                          <span>Changes detected between existing and generated architecture.md</span>
-                        </div>
-                      ) : (
-                        <div className="text-green-600 dark:text-green-400">
-                          No differences detected
-                        </div>
-                      )}
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div className="border-b border-gray-200 dark:border-gray-700">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 p-4">
+                        Compare Changes
+                      </h3>
                     </div>
-                    
-                    <div className="text-sm font-mono whitespace-pre-wrap overflow-auto max-h-[500px] border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                      {diffResult.map((part, index) => (
-                        <div
-                          key={index}
-                          className={`${
-                            part.added
-                              ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300'
-                              : part.removed
-                              ? 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-300'
-                              : 'text-gray-700 dark:text-gray-300'
-                          }`}
-                        >
-                          {part.value}
+                    <div className="p-4">
+                      <div className="mb-4">
+                        {hasDifferences ? (
+                          <span className="text-sm text-red-500 dark:text-red-400 font-medium">
+                            Differences found between files
+                          </span>
+                        ) : (
+                          <span className="text-sm text-green-500 dark:text-green-400 font-medium">
+                            No differences found between files
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Diff visualization */}
+                      <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-4">
+                        <h4 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                          {hasDifferences ? 'Differences' : 'Content'}
+                        </h4>
+                        <div className="text-xs overflow-auto max-h-[600px]">
+                          <pre className="font-mono whitespace-pre-wrap" style={{ margin: 0 }}>
+                            {diffResult.map((part, index) => (
+                              <span 
+                                key={index} 
+                                className={
+                                  part.added 
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' 
+                                    : part.removed 
+                                      ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' 
+                                      : 'text-gray-800 dark:text-gray-300'
+                                }
+                              >
+                                {part.value}
+                              </span>
+                            ))}
+                          </pre>
                         </div>
-                      ))}
+                      </div>
                     </div>
                   </div>
                 </Tab>
