@@ -7,7 +7,6 @@
       "framework": "React",
       "styling": "Tailwind CSS",
       "keyLibraries": [
-        "express",
         "cors",
         "dotenv",
         "firebase-admin",
@@ -15,19 +14,23 @@
         "child_process",
         "path",
         "argparse",
-        "asyncio",
-        "firebase_admin"
+        "pathlib",
+        "main",
+        "config"
       ]
     },
     "backend": {
       "mainLanguage": "Node.js",
       "services": [
-        "Firebase"
+        "Firebase",
+        "Express"
       ],
       "keyFeatures": [
         "Authentication",
         "Database",
-        "Storage"
+        "Storage",
+        "API Endpoints",
+        "Data Processing"
       ]
     }
   },
@@ -38,8 +41,8 @@
     "Team collaboration"
   ],
   "directoryStructure": {
-    "backend": "Contains backend related code and resources",
-    "functions": "Contains functions related code and resources",
-    "src": "Contains src related code and resources"
+    "backend": "Contains backend services and API endpoints",
+    "functions": "Contains serverless functions",
+    "src": "Contains frontend application code"
   }
 }
