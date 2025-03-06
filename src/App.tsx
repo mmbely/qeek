@@ -112,6 +112,7 @@ function AppContent() {
           <Route path="cursor-extractor" element={<ToolSection files={[]} />} />
           <Route path="cursor-extractor/summary" element={<ToolSection files={[]} />} />
           <Route path="cursor-extractor/metadata" element={<ToolSection files={[]} />} />
+          <Route path="cursor-extractor/codebase-summary" element={<ToolSection files={[]} />} />
           <Route path="cursor-extractor/rules" element={<ToolSection files={[]} />} />
           <Route path="cursor-extractor/settings" element={<ToolSection files={[]} />} />
         </Route>

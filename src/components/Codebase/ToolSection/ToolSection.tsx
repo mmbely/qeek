@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Code2, FileCode, Component, ScrollText, Settings } from 'lucide-react';
+import { Code2, FileCode, Component, ScrollText, Settings, FileJson } from 'lucide-react';
 import ArchitectureMdTool from './ArchitectureMdTool';
 import ComponentsJsonTool from './ComponentsJsonTool';
+import CodebaseSummaryTool from './CodebaseSummaryTool';
 import RulesGenerationTool from './RulesGenerationTool';
 import SettingsGenerationTool from './SettingsGenerationTool';
 import { useTheme } from '../../../context/ThemeContext';
@@ -22,12 +23,13 @@ const ToolSection = ({ files }: ToolSectionProps) => {
     const path = location.pathname;
     if (path.includes('/summary')) return 'summary';
     if (path.includes('/metadata')) return 'metadata';
+    if (path.includes('/codebase-summary')) return 'codebase-summary';
     if (path.includes('/rules')) return 'rules';
     if (path.includes('/settings')) return 'settings';
     return 'summary'; // Default
   };
   
-  const [activeTool, setActiveTool] = useState<'summary' | 'metadata' | 'rules' | 'settings'>(getToolFromPath());
+  const [activeTool, setActiveTool] = useState<'summary' | 'metadata' | 'codebase-summary' | 'rules' | 'settings'>(getToolFromPath());
   
   // Update URL when active tool changes
   useEffect(() => {
@@ -35,6 +37,7 @@ const ToolSection = ({ files }: ToolSectionProps) => {
     const toolPaths = {
       summary: `${basePath}/summary`,
       metadata: `${basePath}/metadata`,
+      'codebase-summary': `${basePath}/codebase-summary`,
       rules: `${basePath}/rules`,
       settings: `${basePath}/settings`,
     };
@@ -50,6 +53,7 @@ const ToolSection = ({ files }: ToolSectionProps) => {
   const tools = [
     { id: 'summary', label: 'Architecture MD', icon: FileCode },
     { id: 'metadata', label: 'Components JSON', icon: Component },
+    { id: 'codebase-summary', label: 'Codebase Summary', icon: FileJson },
     { id: 'rules', label: 'Rules Generation', icon: ScrollText },
     { id: 'settings', label: 'Settings Generation', icon: Settings },
   ];
@@ -92,6 +96,7 @@ const ToolSection = ({ files }: ToolSectionProps) => {
       <div className="flex-1 bg-gray-50 dark:bg-[#171923] p-6">
         {activeTool === 'summary' && <ArchitectureMdTool files={files} />}
         {activeTool === 'metadata' && <ComponentsJsonTool files={files} />}
+        {activeTool === 'codebase-summary' && <CodebaseSummaryTool files={files} />}
         {activeTool === 'rules' && <RulesGenerationTool files={files} />}
         {activeTool === 'settings' && <SettingsGenerationTool files={files} />}
       </div>

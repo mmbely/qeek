@@ -344,7 +344,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
       <button
         onClick={handleCopy}
         onMouseDown={(e) => e.preventDefault()} // Prevent modal close on mousedown
-        className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-200"
         title="Copy code"
       >
         {copied ? (
@@ -375,7 +375,7 @@ export default function TicketModal({ ticket, isOpen, onClose, onSave }: TicketM
               <div className="relative group" onClick={(e) => e.stopPropagation()}>
                 <div className="absolute right-2 top-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   {language && (
-                    <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded px-2 py-1">
+                    <span className="text-xs text-gray-500 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded px-2 py-1">
                       {language}
                     </span>
                   )}
@@ -475,9 +475,9 @@ You can also use \`inline code\` with single backticks.`;
     >
       <div className="space-y-4">
         <h3 className={typography.h3}>Delete Ticket</h3>
-        <p className="text-gray-600 dark:text-gray-400">
-          Are you sure you want to delete ticket {ticket?.ticket_id}? This action cannot be undone.
-        </p>
+              <p className="text-gray-600 dark:text-gray-300">
+                Are you sure you want to delete ticket {ticket?.ticket_id}? This action cannot be undone.
+              </p>
         <div className="flex justify-end gap-3 pt-4">
           <button
             onClick={() => setIsDeleteConfirmOpen(false)}
@@ -533,10 +533,10 @@ You can also use \`inline code\` with single backticks.`;
       <div className="p-6">
         <div className="flex justify-between items-start mb-6">
           <div className="flex-1">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-200">
               {ticket?.ticket_id || 'New Ticket'}
             </h2>
-            <p className="text-lg text-gray-700 dark:text-gray-300 mt-1">
+            <p className="text-lg text-gray-700 dark:text-gray-400 mt-1">
               {ticket?.title || ''}
             </p>
           </div>
@@ -544,7 +544,7 @@ You can also use \`inline code\` with single backticks.`;
             onClick={onClose}
             className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
           >
-            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            <X className="w-5 h-5 text-gray-500 dark:text-gray-300" />
           </button>
         </div>
 
@@ -593,11 +593,11 @@ You can also use \`inline code\` with single backticks.`;
                     onClick={handlePreviewClick}
                     className={`
                       p-4 min-h-[300px] cursor-text
-                      ${description ? '' : 'text-gray-400 dark:text-gray-500'}
+                      ${description ? 'text-gray-900 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500'}
                     `}
                   >
                     {description ? (
-                      <div className="prose dark:prose-invert max-w-none">
+                      <div className="prose dark:prose-invert max-w-none text-gray-900 dark:text-gray-200">
                         <DescriptionPreview text={description} />
                       </div>
                     ) : (
@@ -754,4 +754,3 @@ You can also use \`inline code\` with single backticks.`;
     </Modal>
   );
 }
-
