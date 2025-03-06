@@ -1,12 +1,45 @@
 import { onCall } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { Octokit } from '@octokit/rest';
-import * as functions from 'firebase-functions';
-import { spawn } from 'child_process';
-// or try this alternative import if the above still fails
-// import { Octokit } from '@octokit/rest/dist-types/index';
+import * as nodemailer from 'nodemailer';
 
-// Add type definitions if needed
+// Initialize nodemailer transporter
+const createTransporter = async () => {
+  try {
+    // Get secrets from Firebase Functions
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = parseInt(process.env.SMTP_PORT || '587');
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      throw new Error('Missing required email configuration');
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      },
+      tls: {
+        rejectUnauthorized: false // For development only, remove in production
+      }
+    });
+
+    // Verify configuration
+    await transporter.verify();
+    console.log('Email service is ready');
+    return transporter;
+  } catch (error) {
+    console.error('Email service configuration error:', error);
+    throw error;
+  }
+};
+
+// Type definitions
 interface GitHubFile {
   path: string;
   type: 'file' | 'dir';
@@ -15,55 +48,27 @@ interface GitHubFile {
   indexed_at?: admin.firestore.Timestamp;
 }
 
+type InvitationRole = 'admin' | 'member';
+type InvitationStatus = 'pending' | 'accepted' | 'expired';
+
+interface InvitationData {
+  email: string;
+  accountId: string;
+  role: InvitationRole;
+  inviterId: string;
+  status: InvitationStatus;
+  createdAt: string;
+  expiresAt: string;
+  token: string;
+  lastUpdated?: string;
+}
+
 // Initialize Firebase Admin
 try {
   admin.initializeApp();
 } catch (error) {
   console.error('Firebase Admin initialization error:', error);
 }
-
-// TODO: Implement user invitation functionality later
-// interface InvitationData {
-//   email: string;
-//   accountName: string;
-//   role: 'admin' | 'member';
-//   invitationId: string;
-// }
-
-interface GithubTokenData {
-  token: string;
-  accountId: string;
-}
-
-// TODO: Implement these user management functions later
-// export const addUser = ...
-// export const getUsers = ...
-// export const getAllUsers = ...
-// export const api = ...
-
-export const sendInvitation = onCall(
-  { 
-    cors: true
-  }, 
-  async (request) => {
-    console.log('Function triggered');
-    
-    try {
-      const { email, accountName, role, invitationId } = request.data;
-      console.log('Received data:', { email, accountName, role, invitationId });
-
-      // Just return success without doing anything
-      return { 
-        success: true,
-        message: 'Function called successfully',
-        receivedData: { email, accountName, role, invitationId }
-      };
-    } catch (error) {
-      console.error('Function error:', error);
-      throw new Error('Function error: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    }
-  }
-);
 
 // Store GitHub token securely
 export const storeGithubToken = onCall(
@@ -88,7 +93,7 @@ export const storeGithubToken = onCall(
         .doc(accountId)
         .set({
           githubToken: token,
-          updatedAt: new Date().toISOString()  // Use ISO string instead of serverTimestamp
+          updatedAt: new Date().toISOString()
         });
 
       return { success: true };
@@ -117,116 +122,357 @@ export const syncGithubRepository = onCall(
     }
 
     try {
-      // Get absolute path to Python script
-      const scriptPath = require('path').resolve(__dirname, '../repository-indexer/src/main.py');
-      console.log('Python script path:', scriptPath);
-      console.log('Current working directory:', process.cwd());
-      
-      const userId = request.auth.uid;
-      console.log('Starting sync for:', { repositoryName, userId, accountId });
-      
-      return new Promise((resolve, reject) => {
-        console.log('Spawning Python process...');
-        const process = spawn('python3', [
-          scriptPath,
-          repositoryName,
-          userId,
-          accountId
-        ]);
+      // Get GitHub token
+      const tokenDoc = await admin.firestore()
+        .collection('secure_tokens')
+        .doc(accountId)
+        .get();
 
-        let dataString = '';
-        let errorString = '';
+      const githubToken = tokenDoc.data()?.githubToken;
+      if (!githubToken) {
+        throw new Error('GitHub token not found');
+      }
 
-        process.stdout.on('data', (data) => {
-          const output = data.toString();
-          console.log(`Python stdout: ${output}`);
-          dataString += output;
-        });
+      // Initialize Octokit
+      const octokit = new Octokit({ auth: githubToken });
+      const [owner, repo] = repositoryName.split('/');
 
-        process.stderr.on('data', (data) => {
-          const error = data.toString();
-          console.error(`Python stderr: ${error}`);
-          errorString += error;
-        });
+      console.log('Starting repository sync:', { owner, repo });
 
-        process.on('error', (error: Error) => {
-          console.error('Failed to start Python process:', error);
-          reject(new Error(`Failed to start Python process: ${error.message}`));
-        });
+      // Get repository contents
+      const files: GitHubFile[] = [];
+      await processRepositoryContents(files, octokit, owner, repo);
 
-        process.on('close', (code) => {
-          console.log(`Python process exited with code ${code}`);
-          
-          if (code === 0) {
-            try {
-              console.log('Python output:', dataString);
-              const result = JSON.parse(dataString);
-              resolve(result);
-            } catch (e) {
-              console.error('Failed to parse Python output:', e);
-              const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-              reject(new Error(`Failed to parse Python output: ${errorMessage}`));
-            }
-          } else {
-            console.error('Python script failed:', errorString);
-            reject(new Error(`Python script failed with code ${code}: ${errorString}`));
-          }
-        });
+      // Store files in Firestore
+      const repoRef = admin.firestore()
+        .collection('repositories')
+        .doc(repositoryName.replace('/', '_'));
+
+      const batch = admin.firestore().batch();
+      const filesCollection = repoRef.collection('files');
+
+      // Delete existing files
+      const existingFiles = await filesCollection.get();
+      existingFiles.docs.forEach(doc => {
+        batch.delete(doc.ref);
       });
+
+      // Add new files
+      for (const file of files) {
+        if (file.type === 'file') {
+          const docRef = filesCollection.doc(file.path.replace(/\//g, '_'));
+          batch.set(docRef, {
+            ...file,
+            indexed_at: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+      }
+
+      await batch.commit();
+
+      console.log('Repository sync completed:', {
+        filesProcessed: files.length,
+        repository: repositoryName
+      });
+
+      return { 
+        success: true, 
+        filesProcessed: files.length 
+      };
     } catch (error) {
       console.error('Error in sync function:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Failed to run repository sync: ${errorMessage}`);
+      throw new Error(`Failed to sync repository: ${errorMessage}`);
     }
   }
 );
 
-// Helper function to process files recursively with proper typing
-async function processFiles(
-  files: any[],
+// Helper function to process repository contents recursively
+async function processRepositoryContents(
+  files: GitHubFile[],
   octokit: Octokit,
   owner: string,
   repo: string,
   path: string = ''
-): Promise<GitHubFile[]> {
-  const processedFiles: GitHubFile[] = [];
+): Promise<void> {
+  try {
+    const { data } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path
+    });
 
-  for (const file of files) {
-    if (file.type === 'file') {
-      const { data: content } = await octokit.repos.getContent({
-        owner,
-        repo,
-        path: file.path,
-        mediaType: {
-          format: 'raw'
+    const contents = Array.isArray(data) ? data : [data];
+
+    for (const item of contents) {
+      if (item.type === 'file') {
+        // Get file content
+        const { data: content } = await octokit.repos.getContent({
+          owner,
+          repo,
+          path: item.path,
+          mediaType: {
+            format: 'raw'
+          }
+        });
+
+        files.push({
+          path: item.path,
+          type: 'file',
+          size: item.size,
+          content: typeof content === 'string' ? content : null
+        });
+      } else if (item.type === 'dir') {
+        files.push({
+          path: item.path,
+          type: 'dir',
+          size: 0
+        });
+        // Process subdirectory
+        await processRepositoryContents(files, octokit, owner, repo, item.path);
+      }
+    }
+  } catch (error) {
+    console.error(`Error processing path ${path}:`, error);
+    throw error;
+  }
+}
+
+// Generate a secure invitation token
+function generateInvitationToken(): string {
+  return require('crypto').randomBytes(32).toString('hex');
+}
+
+// Send invitation email
+export const sendInvitation = onCall(
+  { 
+    cors: true
+  }, 
+  async (request) => {
+    if (!request.auth) {
+      throw new Error('Must be authenticated to send invitations');
+    }
+
+    const { email, accountId, role, resend = false } = request.data;
+    if (!email || !accountId || !role) {
+      throw new Error('Missing required fields');
+    }
+
+    try {
+      // Check if invitation already exists
+      const invitationsRef = admin.firestore().collection('invitations');
+      const existingInvites = await invitationsRef
+        .where('email', '==', email.toLowerCase())
+        .where('accountId', '==', accountId)
+        .where('status', '==', 'pending')
+        .get();
+
+      // Generate new token and timestamps
+      const token = generateInvitationToken();
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      if (!existingInvites.empty) {
+        if (!resend) {
+          throw new Error('Invitation already sent to this email');
+        }
+        // Update existing invitation with new expiration and token
+        const existingInvite = existingInvites.docs[0];
+        await existingInvite.ref.update({
+          token,
+          expiresAt: expiresAt.toISOString(),
+          lastUpdated: now.toISOString()
+        });
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        throw new Error('Invalid email format');
+      }
+
+      // Check if user is already a member
+      const targetAccountDoc = await admin.firestore()
+        .collection('accounts')
+        .doc(accountId)
+        .get();
+
+      if (!targetAccountDoc.exists) {
+        throw new Error('Account not found');
+      }
+
+      const members = targetAccountDoc.data()?.members || {};
+      const existingMember = Object.values(members).find(
+        (member: any) => member.email?.toLowerCase() === email.toLowerCase()
+      );
+
+      if (existingMember) {
+        throw new Error('User is already a member of this account');
+      }
+
+      if (existingInvites.empty) {
+        // Create new invitation
+        const invitation: InvitationData = {
+          email: email.toLowerCase(),
+          accountId,
+          role,
+          inviterId: request.auth.uid,
+          status: 'pending' as InvitationStatus,
+          createdAt: now.toISOString(),
+          expiresAt: expiresAt.toISOString(),
+          lastUpdated: now.toISOString(),
+          token
+        };
+
+        await invitationsRef.add(invitation);
+      }
+
+      // Get account details for email
+      const accountDoc = await admin.firestore()
+        .collection('accounts')
+        .doc(accountId)
+        .get();
+      
+      const accountData = accountDoc.data();
+      if (!accountData) {
+        throw new Error('Account not found');
+      }
+
+      // Get inviter details for the email
+      const inviterDoc = await admin.firestore()
+        .collection('users')
+        .doc(request.auth.uid)
+        .get();
+
+      const inviterData = inviterDoc.data();
+      if (!inviterData) {
+        throw new Error('Inviter data not found');
+      }
+
+      // Prepare email content
+      const emailSubject = `Invitation to join ${accountData.name} on Qeek`;
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>You've Been Invited to Join Qeek</h2>
+          <p>Hello,</p>
+          <p><strong>${inviterData.displayName || inviterData.email}</strong> has invited you to join <strong>${accountData.name}</strong> as a ${role}.</p>
+          <p>Click the button below to accept the invitation:</p>
+          <p style="text-align: center; margin: 30px 0;">
+            <a href="${process.env.NEXT_PUBLIC_APP_URL}/accept-invite?token=${token}" 
+               style="background-color: #0066cc; color: white; padding: 12px 24px; 
+                      text-decoration: none; border-radius: 4px; display: inline-block;">
+              Accept Invitation
+            </a>
+          </p>
+          <p><strong>Note:</strong> This invitation will expire in 7 days.</p>
+          <p style="color: #666; font-size: 0.9em;">If you did not expect this invitation, please ignore this email.</p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #666; font-size: 0.8em; text-align: center;">
+            Best regards,<br>The Qeek Team
+          </p>
+        </div>
+      `;
+
+      // Send email using nodemailer
+      try {
+        const emailTransporter = await createTransporter();
+        await emailTransporter.sendMail({
+          from: process.env.SMTP_FROM || `Qeek <${process.env.SMTP_USER}>`,
+          to: email,
+          subject: emailSubject,
+          html: emailHtml
+        });
+
+        console.log('Invitation email sent successfully to:', {
+          to: email,
+          inviter: inviterData.email,
+          accountName: accountData.name,
+          role: role
+        });
+      } catch (emailError) {
+        console.error('Failed to send invitation email:', emailError);
+        throw new Error('Failed to send invitation email. Please try again.');
+      }
+
+      return { 
+        success: true,
+        message: 'Invitation sent successfully'
+      };
+    } catch (error) {
+      console.error('Error sending invitation:', error);
+      throw new Error(error instanceof Error ? error.message : 'Failed to send invitation');
+    }
+  }
+);
+
+// Accept invitation
+export const acceptInvitation = onCall(
+  { 
+    cors: true
+  }, 
+  async (request) => {
+    if (!request.auth) {
+      throw new Error('Must be authenticated to accept invitation');
+    }
+
+    const { token } = request.data;
+    if (!token) {
+      throw new Error('Invalid invitation token');
+    }
+
+    try {
+      // Find invitation
+      const invitationsRef = admin.firestore().collection('invitations');
+      const inviteSnapshot = await invitationsRef
+        .where('token', '==', token)
+        .where('status', '==', 'pending')
+        .get();
+
+      if (inviteSnapshot.empty) {
+        throw new Error('Invalid or expired invitation');
+      }
+
+      const invitation = inviteSnapshot.docs[0].data() as InvitationData;
+      
+      // Check if invitation has expired
+      if (new Date(invitation.expiresAt) < new Date()) {
+        await invitationsRef.doc(inviteSnapshot.docs[0].id).update({
+          status: 'expired' as InvitationStatus,
+          lastUpdated: new Date().toISOString()
+        });
+        throw new Error('Invitation has expired');
+      }
+
+      // Check if user email matches invitation
+      if (request.auth.token.email?.toLowerCase() !== invitation.email) {
+        throw new Error('Email mismatch');
+      }
+
+      // Add user to account
+      const accountRef = admin.firestore()
+        .collection('accounts')
+        .doc(invitation.accountId);
+
+      await accountRef.update({
+        [`members.${request.auth.uid}`]: {
+          role: invitation.role,
+          joinedAt: admin.firestore.FieldValue.serverTimestamp()
         }
       });
 
-      processedFiles.push({
-        path: file.path,
-        type: 'file',
-        size: file.size,
-        content: typeof content === 'string' ? content : null,
-        indexed_at: admin.firestore.Timestamp.now()
-      });
-    } else if (file.type === 'dir') {
-      const { data: dirContents } = await octokit.repos.getContent({
-        owner,
-        repo,
-        path: file.path
+      // Update invitation status
+      await invitationsRef.doc(inviteSnapshot.docs[0].id).update({
+        status: 'accepted' as InvitationStatus,
+        lastUpdated: new Date().toISOString()
       });
 
-      const subFiles = await processFiles(
-        Array.isArray(dirContents) ? dirContents : [dirContents],
-        octokit,
-        owner,
-        repo,
-        file.path
-      );
-
-      processedFiles.push(...subFiles);
+      return { 
+        success: true,
+        accountId: invitation.accountId
+      };
+    } catch (error) {
+      console.error('Error accepting invitation:', error);
+      throw new Error(error instanceof Error ? error.message : 'Failed to accept invitation');
     }
   }
-
-  return processedFiles;
-}
+);

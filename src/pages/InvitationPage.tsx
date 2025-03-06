@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 
 export default function InvitationPage() {
@@ -17,7 +18,7 @@ export default function InvitationPage() {
     setError(null);
 
     try {
-      const functions = getFunctions();
+
       const acceptInvitation = httpsCallable(functions, 'handleInvitationAcceptance');
       await acceptInvitation({ invitationId });
       

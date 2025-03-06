@@ -1,5 +1,5 @@
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { functions } from '../config/firebase';  // Import from your config
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../config/firebase';
 
 interface InvitationEmailData {
   email: string;

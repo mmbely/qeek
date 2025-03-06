@@ -21,6 +21,16 @@ service cloud.firestore {
          request.auth.uid == accountId);
     }
     
+    function isAccountAdmin(accountId) {
+      let account = getAccount(accountId);
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/accounts/$(accountId)) &&
+        ((account.data.members[request.auth.uid] != null && 
+          (account.data.members[request.auth.uid].role == 'admin' || 
+           account.data.members[request.auth.uid].role == 'owner')) || 
+         request.auth.uid == accountId);
+    }
+    
     function isTicketInAccount(ticketData) {
       return isAccountMember(ticketData.accountId);
     }
@@ -133,6 +143,19 @@ service cloud.firestore {
     match /profiles/{userId} {
       allow read: if isSignedIn();
       allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /invitations/{invitationId} {
+      allow read: if isSignedIn() && isAccountMember(resource.data.accountId);
+      allow create: if isSignedIn() && isAccountAdmin(request.resource.data.accountId);
+      allow update: if isSignedIn() && (
+        // Allow admins to update invitation status
+        isAccountAdmin(resource.data.accountId) ||
+        // Allow invited user to accept invitation
+        (resource.data.email == request.auth.token.email &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedAt']))
+      );
+      allow delete: if isSignedIn() && isAccountAdmin(resource.data.accountId);
     }
   }
 }
