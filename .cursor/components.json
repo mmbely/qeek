@@ -39,7 +39,7 @@
       },
       {
         "name": "MessageList",
-        "purpose": "displays a list of chat messages, grouped by date and sender",
+        "purpose": "displays a list of chat messages, grouped by date and sender\nDependencies:\n- react: For managing component state, refs, and side effects.\n- ../../types/message: Type definition for message objects.\n- ../../types/user: Type definition for user objects.\n- ../../styles: Styling and layout definitions.\n- lucide-react: Icons for loading, user avatar, actions, etc.\n- date-fns: Date formatting utilities.\n- ../../utils/dateUtils: Custom date utility functions.\n- ../../services/chat: Function to delete messages.\n- firebase/firestore: Firebase Firestore functions for database interactions.\n- ../../config/firebase: Firebase database instance.\nIntegrations:\n- Firebase Firestore: Used for storing and retrieving messages and reactions.\n- Library lucide-react: Provides icons for UI elements.\n- Library date-fns: Used for date formatting and manipulation.",
         "dependencies": [
           "react",
           "../../types/message",
@@ -61,7 +61,7 @@
     "components": [
       {
         "name": "CodebaseViewer",
-        "purpose": "displays a codebase viewer for a connected GitHub repository, allowing users to browse, filter, sort, and sync files",
+        "purpose": "displays a codebase viewer for a connected GitHub repository, allowing users to browse, filter, sort, and sync files\nDependencies:\n- react: For using React hooks for state management, side effects, and memoized values.\n- ../../context/AuthContext: For accessing user authentication data.\n- ../../context/AccountContext: For accessing current account information.\n- react-router-dom: For navigation, accessing URL parameters, and managing query parameters.\n- ../../types/repository: For type definitions related to repository data.\n- ./FileTable: For displaying the file table component.\n- ./FileFilters: For displaying the file filtering component.\n- ././SyncStatus: For displaying the sync status component.\n- ././ErrorState: For displaying the error state component.\n- ./NotConnectedState: For displaying the not connected state component.\n- ././FileViewerModal: For displaying the file viewer modal component.\n- ./LoadingState: For displaying the loading state component.\n- ../../services/github: For interacting with GitHub services.\n- firebase/firestore: For interacting with Firestore database.\n- ../../config/firebase: For accessing the Firestore database instance.\n- lucide-react: For using the Cog icon.\n- ./ToolSection/ToolSection: For displaying a ToolSection.\nIntegrations:\n- Context AuthContext: Used for user authentication.\n- Context AccountContext: Used for retrieving the currently active account and its settings.\n- API Firebase Firestore: Used to store and retrieve repository data, files, and metadata.\n- API GitHub API (via internal service): Used to sync the repository data with GitHub.\n- Library react-router-dom: Used for routing and navigation, including handling URL parameters and search parameters.\n- Component FileTable: Displays the file table with sorting, pagination, and file selection capabilities.\n- Component FileFilters: Provides filtering options for the file table.\n- Component FileViewerModal: Displays the selected file content in a modal.",
         "dependencies": [
           "react",
           "../../context/AuthContext",
@@ -85,7 +85,7 @@
       },
       {
         "name": "CursorExtractionTool",
-        "purpose": "provides a tool for generating Cursor AI configuration and codebase summaries using Gemini",
+        "purpose": "provides a tool for generating Cursor AI configuration and codebase summaries using Gemini\nDependencies:\n- react: For using React Hooks for state management and side effects.\n- lucide-react: For using icons from Lucide React library.\n- react-markdown: For rendering markdown content.\n- ../../services/github: For fetching files from the GitHub repository.\n- ../../services/geminiFrontend: For interacting with the Gemini AI API.\n- ../../styles/theme: For styling and theming using a custom theme.\n- ../../context/AccountContext: For accessing user account information via React Context.\n- firebase/firestore: For interacting with the Firestore database.\n- ../../config/firebase: Import Firestore Database\nIntegrations:\n- API GitHub API: Used to fetch repository files.\n- API Gemini API: Used to generate AI summaries and configurations.\n- Database Firestore: Used to store repository and user data.\n- Context AccountContext: Provides access to user account information.",
         "dependencies": [
           "react",
           "lucide-react",
@@ -101,7 +101,7 @@
       },
       {
         "name": "ErrorState",
-        "purpose": "displays an error message with a retry button",
+        "purpose": "displays an error message with a retry button\nDependencies:\n- lucide-react: To display an X icon for visual feedback.\nIntegrations:\n- Component ErrorState: Provides a visual representation of an error state and allows the user to retry the failed operation.",
         "dependencies": [
           "lucide-react"
         ],
@@ -115,7 +115,7 @@
       },
       {
         "name": "FileFilters",
-        "purpose": "Provides filtering UI for codebase files by search term, status, language, and component",
+        "purpose": "Provides filtering UI for codebase files by search term, status, language, and component\nDependencies:\n- @mui/material: MUI components for building the filtering UI\n- lucide-react: Icon for the search field\n- ../../types/repository: Type definition for file status\nIntegrations:\n- Component TextField: Input field for searching files\n- Component Select: Dropdown menus for filtering by status, language, and component",
         "dependencies": [
           "@mui/material",
           "lucide-react",
@@ -125,7 +125,7 @@
       },
       {
         "name": "FileTable",
-        "purpose": "displays a paginated and sortable table of repository files",
+        "purpose": "displays a paginated and sortable table of repository files\nDependencies:\n- @mui/material: Provides MUI components for rendering the table.\n- ../../types/repository: Defines types for repository file data and sorting.\n- ../../utils/format: Provides utility function for formatting file sizes.\n- ./components/FileIcon: Provides a component for displaying file icons based on language.\n- ./components/ExpandableCell: Provides a component for displaying expandable text content.\nIntegrations:\n- Component MUI Table: Used to render the table structure and handle pagination.\n- Component FileIcon: Used to display file icons.\n- Component ExpandableCell: Used to display expandable summary text.\n- Prop onFileSelect: Callback function triggered when a file row is clicked.\n- Prop onSort: Callback function triggered when a table header is clicked for sorting.\n- Prop onPageChange: Callback function triggered when the page number changes.\n- Prop onRowsPerPageChange: Callback function triggered when the rows per page value changes.",
         "dependencies": [
           "@mui/material",
           "../../types/repository",
@@ -137,7 +137,7 @@
       },
       {
         "name": "FileViewer",
-        "purpose": "A React component to view file details and AI-powered code analysis",
+        "purpose": "A React component to view file details and AI-powered code analysis\nDependencies:\n- react: For managing component state and side effects (data fetching).\n- lucide-react: For displaying icons.\n- ../../types/repository: To type the file prop.\n- ./utils: For utility functions related to file display (size formatting and icon retrieval).\n- ./components/ExpandableCell: For displaying expandable content.\nIntegrations:\n- API /api/file-content: Fetch file content based on provided path.\n- Component ExpandableCell: Used to display expandable content for code structures.",
         "dependencies": [
           "react",
           "lucide-react",
@@ -149,7 +149,7 @@
       },
       {
         "name": "FileViewerModal",
-        "purpose": "This React component displays a modal window for viewing file details and analysis",
+        "purpose": "This React component displays a modal window for viewing file details and analysis\nDependencies:\n- @mui/material: UI components for the modal and button\n- lucide-react: Icon for close button\n- react-syntax-highlighter: For syntax highlighting of file content (not used)\n- react-syntax-highlighter/dist/esm/styles/hljs: Styles for syntax highlighting (not used)\n- ../../context/ThemeContext: To access theme context (dark mode)\n- ../../types/repository: Type definition for file metadata\nIntegrations:\n- Context ThemeContext: Used for dark mode toggling\n- Component Modal (from @mui/material): Provides the modal structure\n- Component Button (from @mui/material): Close button for the modal\n- Component X (from lucide-react): Icon for the close button",
         "dependencies": [
           "@mui/material",
           "lucide-react",
@@ -162,7 +162,7 @@
       },
       {
         "name": "LoadingState",
-        "purpose": "displays a loading state with a spinning animation and text",
+        "purpose": "displays a loading state with a spinning animation and text\nDependencies:\n- lucide-react: Provides a pre-built loading spinner icon component.\nIntegrations:\n- Component LoadingState: Presents a visual loading indicator to the user during asynchronous operations or content loading.",
         "dependencies": [
           "lucide-react"
         ],
@@ -170,7 +170,7 @@
       },
       {
         "name": "NotConnectedState",
-        "purpose": "displays a call to action for the user to connect their GitHub account and select a repository for analysis",
+        "purpose": "displays a call to action for the user to connect their GitHub account and select a repository for analysis\nDependencies:\n- react-router-dom: Provides navigation functionality within the application.\n- lucide-react: Provides SVG icons for visual elements.\nIntegrations:\n- Navigation useNavigate: Used to navigate to the '/settings/github' route when the user clicks the 'Configure GitHub Settings' button.\n- Component Github: Used as a visual icon representing GitHub.\n- Component Settings: Used as a visual icon representing Settings.",
         "dependencies": [
           "react-router-dom",
           "lucide-react"
@@ -179,7 +179,7 @@
       },
       {
         "name": "SyncStatus",
-        "purpose": "A React component displaying the synchronization status and offering buttons to trigger synchronization or access settings",
+        "purpose": "A React component displaying the synchronization status and offering buttons to trigger synchronization or access settings\nDependencies:\n- @mui/material: To use the Material UI Button component.\n- lucide-react: To use Lucide React icons for visual representation of settings, loading, and error states (although AlertTriangle isn't actually used in the component).\nIntegrations:\n- Component Button (from @mui/material): Used for the 'Sync Now' and 'Settings' buttons, providing interactive elements.\n- Icon Loader2 (from lucide-react): Displays a loading spinner when the sync status is 'syncing'.\n- Icon Settings, AlertTriangle (from lucide-react): Imported but unused, potentially for future display of settings and error status.",
         "dependencies": [
           "@mui/material",
           "lucide-react"
@@ -188,7 +188,7 @@
       },
       {
         "name": "ToolView",
-        "purpose": "displays a list of files from a GitHub repository",
+        "purpose": "displays a list of files from a GitHub repository\nDependencies:\n- react: For state management, side effects, and memoized values.\n- firebase/firestore: Potentially unused imports from Firestore. Should be removed if not used in this file or other parts of the project.\n- ../../config/firebase: Firebase configuration.\n- ../../context/AccountContext: To access current account information, including the connected GitHub repository.\n- ./ToolSection/ToolSection: To render the section containing the list of files.\n- ../../types/repository: Type definition for repository files.\n- ./LoadingState: To display a loading state while fetching files.\n- ./ErrorState: To display an error state if fetching files fails.\n- ../../services/github: To fetch repository files from GitHub.\nIntegrations:\n- Context API useAccount: Used to access the current user account and its associated GitHub repository setting.\n- Service getRepositoryFiles: Fetches the file list from the specified GitHub repository.\n- Component ToolSection: Renders the section that displays the files from the fetched list.\n- Hardcoded value 'mmbely/qeek': Hardcoded repository name, possibly for testing purposes. Needs refactoring to use dynamically fetched repo name based on connected account details.",
         "dependencies": [
           "react",
           "firebase/firestore",
@@ -209,7 +209,7 @@
     "components": [
       {
         "name": "CodebaseSummaryTool",
-        "purpose": "generates a codebase summary using AI",
+        "purpose": "generates a codebase summary using AI\nDependencies:\n- react: For managing component state.\n- lucide-react: For displaying icons.\n- ../../../services/ai: To generate the code summary using an AI service.\n- ../../../services/github: Likely unused, but potentially for fetching repository files directly from GitHub.\n- ../../../utils/analyzeCodebase: To analyze the codebase and extract metadata for the prompt.\n- ../../../constants/prompts: To provide the template for the AI prompt.\n- ../../../context/ThemeContext: To access the dark mode state.\n- ../../../types/repository: To type the repository file data.\n- firebase/firestore: For interacting with Firestore database.\n- ../../../config/firebase: To access the Firestore instance.\n- ../../../context/AccountContext: To access the current user account.\n- react-markdown: To render the formatted summary as Markdown.\n- react-syntax-highlighter: For syntax highlighting in the formatted summary.\nIntegrations:\n- API generateAISummary: Used to generate the codebase summary from the AI service.\n- Database Firestore (db): Used to fetch repository data.\n- Context ThemeContext: Provides the dark mode state.\n- Context AccountContext: Provides the current user account information.\n- Component ReactMarkdown: Renders the formatted summary as Markdown.\n- Component SyntaxHighlighter: Provides syntax highlighting within the Markdown content.",
         "dependencies": [
           "react",
           "lucide-react",
@@ -229,7 +229,7 @@
       },
       {
         "name": "ComponentMetadataTool",
-        "purpose": "allows users to generate metadata for their UI components, compare it with existing metadata (if any), and push the generated metadata to a connect...",
+        "purpose": "allows users to generate metadata for their UI components, compare it with existing metadata (if any), and push the generated metadata to a connect...\nDependencies:\n- react: For managing component state and side effects.\n- lucide-react: For using icons.\n- ../../../utils/generateComponentMetadata: For generating component metadata.\n- ../../../context/ThemeContext: For accessing theme context (dark mode).\n- ../../../context/AccountContext: For accessing user account information, including GitHub repository settings.\n- react-markdown: Not used in the current code, potentially for future Markdown rendering.\n- react-syntax-highlighter: Not used in the current code, potentially for future code highlighting.\n- react-syntax-highlighter/dist/esm/styles/prism: Not used in the current code, associated with the unused react-syntax-highlighter import.\n- ../../../types/repository: Type definition for repository files.\n- ../../../services/github: For fetching files from the GitHub repository.\n- ../../../components/ui/dialog: For displaying the confirmation dialog before pushing to GitHub.\n- ../../../components/ui/button: For displaying buttons. Currently not used but likely intended for UI consistency.\nIntegrations:\n- Context useTheme: Used to determine whether dark mode is enabled for styling purposes.\n- Context useAccount: Used to access the current user's account information, specifically the connected GitHub repository.\n- API getRepositoryFile: Used to fetch the existing 'components.json' file from the GitHub repository.\n- Utility Function generateComponentMetadata: Used to generate component metadata from the provided files and repository information.\n- Component Dialog: Used to display a confirmation dialog before pushing the generated metadata to GitHub.",
         "dependencies": [
           "react",
           "lucide-react",
@@ -248,7 +248,7 @@
       },
       {
         "name": "RulesGenerationTool",
-        "purpose": "allows users to generate coding rules and best practices for their connected GitHub repository using an AI",
+        "purpose": "allows users to generate coding rules and best practices for their connected GitHub repository using an AI\nDependencies:\n- react: Import useState hook for managing component state.\n- lucide-react: Import icons for UI elements.\n- ../../../utils/generateRules: Import the function for generating rules.\n- ../../../context/ThemeContext: Import the useTheme hook to access dark mode preference.\n- ../../../context/AccountContext: Import the useAccount hook to access current user account information, including the connected GitHub repository.\n- react-markdown: Import ReactMarkdown to render markdown content.\n- react-syntax-highlighter: Import SyntaxHighlighter for code highlighting.\n- react-syntax-highlighter/dist/esm/styles/prism: Import syntax highlighting themes for light and dark modes.\n- ../../../types/repository: Import the RepositoryFile type definition.\nIntegrations:\n- Context ThemeContext: Used to determine the current theme (dark mode or light mode) for styling purposes, particularly syntax highlighting.\n- Context AccountContext: Used to retrieve the connected GitHub repository information for the current user. This is crucial for generating the coding rules relevant to the user's project.\n- API generateRules: This external API call triggers the generation of coding rules based on the provided repository information. The results are then processed and displayed in the component.",
         "dependencies": [
           "react",
           "lucide-react",
@@ -264,7 +264,7 @@
       },
       {
         "name": "SettingsGenerationTool",
-        "purpose": "provides a UI for generating settings based on the provided repository files",
+        "purpose": "provides a UI for generating settings based on the provided repository files\nDependencies:\n- react: To manage component state.\n- lucide-react: To use icons for visual feedback.\n- ../../../utils/generateSettings: To generate settings from the provided files.\n- ../../../context/ThemeContext: To access the dark mode state.\n- ../../../types/repository: To type the repository files prop.\nIntegrations:\n- Utility Function generateSettings: Called to generate settings from the provided files.\n- Context useTheme: Used to determine if dark mode is enabled for styling.\n- Component SettingsGenerationTool: Provides the main UI for settings generation.",
         "dependencies": [
           "react",
           "lucide-react",
@@ -276,7 +276,7 @@
       },
       {
         "name": "ToolSection",
-        "purpose": "renders a tool section with a left-side navigation and a main content area",
+        "purpose": "renders a tool section with a left-side navigation and a main content area\nDependencies:\n- react: Import useState hook for managing the active tool state.\n- lucide-react: Import icons from lucide-react for visual representation of tools.\n- ./CodebaseSummaryTool: Import the CodebaseSummaryTool component.\n- ./ComponentMetadataTool: Import the ComponentMetadataTool component.\n- ./RulesGenerationTool: Import the RulesGenerationTool component.\n- ./SettingsGenerationTool: Import the SettingsGenerationTool component.\n- ../../../context/ThemeContext: Import the useTheme hook for accessing theme information (dark mode).\n- ../../../types/repository: Import the RepositoryFile type for type safety.\nIntegrations:\n- Context ThemeContext: Used to determine if dark mode is enabled for styling purposes.\n- Component CodebaseSummaryTool: Renders the codebase summary tool.\n- Component ComponentMetadataTool: Renders the component metadata tool.\n- Component RulesGenerationTool: Renders the rules generation tool.\n- Component SettingsGenerationTool: Renders the settings generation tool.",
         "dependencies": [
           "react",
           "lucide-react",
@@ -296,7 +296,7 @@
     "components": [
       {
         "name": "ExpandableCell",
-        "purpose": "A React component that renders text content and provides an expandable view if the text exceeds a specified maximum length",
+        "purpose": "A React component that renders text content and provides an expandable view if the text exceeds a specified maximum length\nDependencies:\n- react: To use React's state management hook for managing the component's expanded state.\n- ../../../types/repository: Import types, likely used for type checking within the component.\nIntegrations:\n- Component ExpandableCell: Provides a reusable UI element for displaying expandable text content.",
         "dependencies": [
           "react",
           "../../../types/repository"
@@ -305,7 +305,7 @@
       },
       {
         "name": "FileIcon",
-        "purpose": "renders a file icon based on the provided `language` prop",
+        "purpose": "renders a file icon based on the provided `language` prop\nDependencies:\n- react: Required for JSX and component rendering\n- react-icons/si: Provides language-specific icons\n- lucide-react: Provides general file and folder icons (unused)\nIntegrations:\n- Library react-icons/si: Used to display file icons based on language.\n- Library lucide-react: Imported, but unused in the current implementation.",
         "dependencies": [
           "react",
           "react-icons/si",
@@ -326,7 +326,7 @@
     "components": [
       {
         "name": "index",
-        "purpose": "Provides utility functions for formatting data (file size, date, content preview) and rendering file icons based on file extensions",
+        "purpose": "Provides utility functions for formatting data (file size, date, content preview) and rendering file icons based on file extensions\nDependencies:\n- react: Required for JSX and component rendering.\n- ./formatters: Provides utility functions for formatting file size, dates, and generating content previews.\n- ../components/FileIcon: Provides a component for rendering file icons.\nIntegrations:\n- Component FileIcon: Used to render file icons based on file extensions.",
         "dependencies": [
           "react",
           "./formatters",
@@ -364,7 +364,7 @@
       },
       {
         "name": "GitHubSettings",
-        "purpose": "manages GitHub integration settings, allowing users to connect their GitHub account, select a repository, and synchronize its contents",
+        "purpose": "manages GitHub integration settings, allowing users to connect their GitHub account, select a repository, and synchronize its contents\nDependencies:\n- react: For managing component state, side effects, and memoized values.\n- lucide-react: For displaying icons.\n- ../../services/github: For interacting with the GitHub API and managing GitHub tokens.\n- ../../context/AuthContext: For accessing user authentication data.\n- ../../context/CodebaseContext: For managing the selected repository.\n- ../../context/AccountContext: For accessing and updating account settings.\n- firebase/firestore: For interacting with Firestore database.\n- ../../config/firebase: For accessing the Firestore instance.\nIntegrations:\n- Context AuthContext: Provides user authentication data.\n- Context CodebaseContext: Manages the selected repository.\n- Context AccountContext: Provides access to and updates account settings.\n- API GitHub API: Used to fetch user repositories and manage GitHub tokens.\n- Database Firestore: Used to store GitHub tokens, repository selection, and sync status.",
         "dependencies": [
           "react",
           "lucide-react",
@@ -391,7 +391,7 @@
       },
       {
         "name": "UserProfile",
-        "purpose": "allows users to view and update their profile information, including display name, bio, location, company, and avatar",
+        "purpose": "allows users to view and update their profile information, including display name, bio, location, company, and avatar\nDependencies:\n- react: For managing component state and side effects.\n- ../../context/AuthContext: To access the current user's authentication status and information.\n- firebase/firestore: For interacting with Firestore to fetch and update user profile data.\n- ../../config/firebase: To access the configured Firebase instance.\n- lucide-react: For displaying icons in the component.\n- firebase/storage: For interacting with Firebase Storage to upload and retrieve avatar images.\nIntegrations:\n- Context AuthContext: Used to access user authentication data.\n- Database Firestore: Used to store and retrieve user profile data.\n- Storage Firebase Storage: Used to store and retrieve user avatar images.",
         "dependencies": [
           "react",
           "../../context/AuthContext",
@@ -415,7 +415,7 @@
       },
       {
         "name": "TicketEdit",
-        "purpose": "allows users to edit existing tickets",
+        "purpose": "allows users to edit existing tickets\nDependencies:\n- react: For managing component state and side effects.\n- react-router-dom: For accessing URL parameters and navigating between routes.\n- ../../services/ticketService: Provides functions for interacting with ticket data (getTicket, updateTicket).\n- ../../types/ticket: Defines the Ticket type.\n- ../../config/firebase: Provides access to the Firebase database instance.\nIntegrations:\n- React Router useParams: Retrieves the ticket ID from the URL.\n- React Router useNavigate: Navigates to the ticket list page after successful submission.\n- Service ticketService: Interacts with the backend to fetch and update ticket data.\n- Firebase db: Provides the Firebase database instance (although not directly used in this component, it's a dependency of ticketService).",
         "dependencies": [
           "react",
           "react-router-dom",
@@ -427,7 +427,7 @@
       },
       {
         "name": "TicketForm",
-        "purpose": "provides a form for creating new tickets",
+        "purpose": "provides a form for creating new tickets\nDependencies:\n- react: To manage component state.\n- react-router-dom: For navigation after ticket creation.\n- firebase/firestore: To interact with Firestore database.\n- ../../config/firebase: Provides the Firestore database instance.\n- ../../context/AuthContext: Provides user authentication information.\n- ../../types/ticket: Provides the Ticket type definition.\n- ../../context/AccountContext: Provides the current account information.\nIntegrations:\n- API Firebase Firestore: Used to store and retrieve ticket data.\n- Context AuthContext: Used to access user authentication data.\n- Context AccountContext: Used to access the current account data.\n- Hook useNavigate: Used to navigate to the /tickets page after successful ticket creation.",
         "dependencies": [
           "react",
           "react-router-dom",
@@ -447,7 +447,7 @@
       },
       {
         "name": "TicketModal",
-        "purpose": "A modal component for creating and editing tickets",
+        "purpose": "A modal component for creating and editing tickets\nDependencies:\n- react: For core React functionalities like state and effect hooks.\n- firebase/firestore: For interacting with Firestore database.\n- ../../config/firebase: Provides the Firestore database instance.\n- ../../types/ticket: Defines the types for ticket data.\n- ../../types/user: Defines the type for user data.\n- ../../context/AuthContext: Provides access to the authentication context.\n- ../../styles: Provides styling components and utilities.\n- lucide-react: Provides icons for the UI.\n- react-responsive-modal: Provides the modal component.\n- react-markdown: For rendering markdown content.\n- react-syntax-highlighter: For syntax highlighting code blocks.\n- react-syntax-highlighter/dist/esm/styles/prism: Provides a theme for the syntax highlighter.\n- react-markdown: For customizing ReactMarkdown components.\n- ../../context/AccountContext: Provides access to the account context.\n- ../../hooks/useTickets: Provides functions for interacting with ticket data.\n- ../../types/board: Provides types related to the board and ticket statuses.\nIntegrations:\n- Context AuthContext: Used for user authentication and authorization.\n- Context AccountContext: Used for managing current account information.\n- Hook useTickets: Provides functions for creating, updating, and deleting tickets.\n- Component Modal (react-responsive-modal): Used to display the ticket modal.\n- Library Firebase/Firestore: Used for database interactions (creating, reading, updating, deleting tickets).\n- Library ReactMarkdown: Used for rendering the ticket description with markdown support.\n- Library react-syntax-highlighter: Used for syntax highlighting code blocks within the description.",
         "dependencies": [
           "react",
           "firebase/firestore",
