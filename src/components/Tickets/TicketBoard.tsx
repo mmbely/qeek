@@ -340,13 +340,13 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
       flex flex-col h-full
       bg-white dark:bg-[${theme.colors.dark.background.primary}]
     `}>
-      <header className={`${commonStyles.header.wrapper} flex-shrink-0`}>
-        <div className={commonStyles.header.container}>
-          <div className={commonStyles.header.titleWrapper}>
-            <h2 className={commonStyles.header.title}>{title}</h2>
-            <p className={commonStyles.header.subtitle}>{subtitle}</p>
+      <header className="px-6 pt-6 pb-4 flex-shrink-0 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className={`${typography.h1} text-gray-900 dark:text-[${theme.colors.dark.text.primary}] text-2xl`}>{title}</h2>
+            <p className={`mt-1 text-gray-600 dark:text-[${theme.colors.dark.text.secondary}]`}>{subtitle}</p>
           </div>
-          <div className={commonStyles.header.actions}>
+          <div>
             <button
               onClick={() => setIsCreateModalOpen(true)}
               className={`
@@ -367,9 +367,10 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
           grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4
           flex-1
           overflow-x-auto
-          gap-2 md:gap-3 lg:gap-4
+          gap-6
           bg-white dark:bg-[${theme.colors.dark.background.primary}]
           w-full
+          px-6
         `}>
           {Object.entries(columns).map(([status, column]) => (
             <Droppable droppableId={status} key={`column-${status}`}>
@@ -378,17 +379,17 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
                   ref={provided.innerRef}
                   {...provided.droppableProps}
                   className={`
-                    h-full
+                    h-full min-h-[24rem]
                     rounded-lg
                     ${snapshot.isDraggingOver ? `ring-2 ring-blue-500/20 dark:bg-[${theme.colors.dark.background.hover}]` : ''}
                     bg-white dark:bg-[${theme.colors.dark.primary}]
                     border border-gray-200 dark:border-gray-700
-                    p-3
+                    p-5
                     ${animations.transition.normal}
                   `}
                 >
                   {/* Column Header */}
-                  <div className={`${layout.flex.between} mb-4`}>
+                  <div className={`${layout.flex.between} mb-5`}>
                     <h2 className={typography.h4}>{column.title}</h2>
                     <div className="flex items-center gap-2">
                       {/* Add Move to Board button for Next for Development column */}
@@ -416,7 +417,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
                   </div>
 
                   {/* Tickets */}
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {column.tickets.map((ticket, index) => (
                       <Draggable
                         key={`${ticket.id}-${status}`}
