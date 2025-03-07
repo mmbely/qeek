@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Route, Routes, Navigate, useLocation, createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, useLocation, createBrowserRouter, RouterProvider, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ChatInterface from './components/Chat/ChatInterface';
 import TicketList from './components/Tickets/TicketList';
 import { TicketBoard } from './components/Tickets/TicketBoard';
-import Layout from './components/Layout';
+import { Layout } from './components/layout/Layout';
 import { TicketForm } from './components/Tickets';
 import GitHubSettings from './components/Settings/GitHubSettings';
 import CodebaseViewer from './components/Codebase/CodebaseViewer';
@@ -92,7 +92,9 @@ function AppContent() {
       <Route
         element={
           <ProtectedRoute>
-            <Layout />
+            <Layout>
+              <Outlet />
+            </Layout>
           </ProtectedRoute>
         }
       >

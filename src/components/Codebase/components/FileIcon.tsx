@@ -1,55 +1,61 @@
 import React from 'react';
+import type { IconType } from 'react-icons';
+import type { IconBaseProps } from 'react-icons';
 import { 
   SiPython, 
   SiJavascript, 
   SiTypescript, 
-  SiReact, 
-  SiVuedotjs,
   SiHtml5,
   SiCss3,
-  SiJavascript as SiJava,
-  SiPhp,
-  SiRuby,
-  SiSwift,
-  SiKotlin,
-  SiGo,
-  SiRust,
   SiMarkdown,
-  SiDocker,
-  SiGit
 } from 'react-icons/si';
-import { FolderIcon, FileIcon as LucideFileIcon, FileCodeIcon, FileJsonIcon } from 'lucide-react';
 
 interface FileIconProps {
   language: string | null | undefined;
   className?: string;
 }
 
-export default function FileIcon({ language, className }: FileIconProps) {
-  const iconProps = { className: `w-4 h-4 mr-2 ${className}` };
+type FileExtension =
+  | 'typescript'
+  | 'ts'
+  | 'tsx'
+  | 'javascript'
+  | 'js'
+  | 'jsx'
+  | 'python'
+  | 'py'
+  | 'css'
+  | 'html'
+  | 'markdown'
+  | 'md';
 
+const iconMap = new Map<FileExtension, IconType>([
+  ['typescript', SiTypescript],
+  ['ts', SiTypescript],
+  ['tsx', SiTypescript],
+  ['javascript', SiJavascript],
+  ['js', SiJavascript],
+  ['jsx', SiJavascript],
+  ['python', SiPython],
+  ['py', SiPython],
+  ['css', SiCss3],
+  ['html', SiHtml5],
+  ['markdown', SiMarkdown],
+  ['md', SiMarkdown],
+]);
+
+export default function FileIcon({ language, className }: FileIconProps) {
   if (!language) return null;
 
-  switch (language.toLowerCase()) {
-    case 'typescript':
-    case 'ts':
-    case 'tsx':
-      return <SiTypescript {...iconProps} />;
-    case 'javascript':
-    case 'js':
-    case 'jsx':
-      return <SiJavascript {...iconProps} />;
-    case 'python':
-    case 'py':
-      return <SiPython {...iconProps} />;
-    case 'css':
-      return <SiCss3 {...iconProps} />;
-    case 'html':
-      return <SiHtml5 {...iconProps} />;
-    case 'markdown':
-    case 'md':
-      return <SiMarkdown {...iconProps} />;
-    default:
-      return null;
-  }
+  const lang = language.toLowerCase() as FileExtension;
+  const Icon = iconMap.get(lang);
+  if (!Icon) return null;
+
+  const props: IconBaseProps = {
+    size: 16,
+    className: `mr-2 text-gray-600 dark:text-gray-300 ${className || ''}`,
+    'aria-hidden': true,
+  };
+
+  return React.createElement(Icon as React.ComponentType<IconBaseProps>, props);
 }

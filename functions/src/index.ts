@@ -2,6 +2,8 @@ import { onCall } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { Octokit } from '@octokit/rest';
 import * as nodemailer from 'nodemailer';
+import * as functions from 'firebase-functions';
+import { spawn } from 'child_process';
 
 // Initialize nodemailer transporter
 const createTransporter = async () => {
@@ -70,6 +72,58 @@ try {
   console.error('Firebase Admin initialization error:', error);
 }
 
+// Function to create initial account for new users
+export const createInitialAccount = onCall(
+  { cors: true },
+  async (request) => {
+    if (!request.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated to create account');
+    }
+
+    const { displayName, email } = request.auth.token;
+    const uid = request.auth.uid;
+
+    try {
+      // Create account document
+      const accountRef = admin.firestore().collection('accounts').doc();
+      await accountRef.set({
+        name: `${displayName}'s Account`,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        members: {
+          [uid]: {
+            role: 'owner',
+            joinedAt: admin.firestore.FieldValue.serverTimestamp()
+          }
+        },
+        settings: {
+          githubRepository: null,
+          theme: 'light'
+        }
+      });
+
+      // Update user document with account reference
+      await admin.firestore().collection('users').doc(uid).set({
+        accountId: accountRef.id,
+        email: email,
+        displayName: displayName,
+        role: 'owner'
+      }, { merge: true });
+
+      return { 
+        success: true, 
+        accountId: accountRef.id 
+      };
+    } catch (error) {
+      console.error('Error creating initial account:', error);
+      throw new functions.https.HttpsError(
+        'internal',
+        'Failed to create initial account'
+      );
+    }
+  }
+);
+
 // Store GitHub token securely
 export const storeGithubToken = onCall(
   { 
@@ -107,18 +161,19 @@ export const storeGithubToken = onCall(
 // Function to sync repository
 export const syncGithubRepository = onCall(
   {
+    cors: true,
     timeoutSeconds: 540,
     memory: '1GiB',
     region: 'us-central1'
   }, 
   async (request) => {
     if (!request.auth) {
-      throw new Error('Must be authenticated to sync repository');
+      throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated to sync repository');
     }
 
     const { repositoryName, accountId } = request.data;
     if (!repositoryName || !accountId) {
-      throw new Error('Repository name and account ID are required');
+      throw new functions.https.HttpsError('invalid-argument', 'Repository name and account ID are required');
     }
 
     try {
@@ -130,7 +185,7 @@ export const syncGithubRepository = onCall(
 
       const githubToken = tokenDoc.data()?.githubToken;
       if (!githubToken) {
-        throw new Error('GitHub token not found');
+        throw new functions.https.HttpsError('failed-precondition', 'GitHub token not found');
       }
 
       // Initialize Octokit
@@ -473,6 +528,66 @@ export const acceptInvitation = onCall(
     } catch (error) {
       console.error('Error accepting invitation:', error);
       throw new Error(error instanceof Error ? error.message : 'Failed to accept invitation');
+    }
+  }
+);
+
+export const triggerRepositorySync = onCall(
+  { 
+    cors: true,
+    timeoutSeconds: 540,
+    memory: '1GiB',
+    region: 'us-central1'
+  }, 
+  async (request) => {
+    if (!request.auth) {
+      throw new Error('Must be authenticated to sync repository');
+    }
+
+    const { repositoryName, accountId } = request.data;
+    if (!repositoryName || !accountId) {
+      throw new Error('Repository name and account ID are required');
+    }
+
+    try {
+      console.log('Starting repository sync:', { repositoryName, accountId });
+      
+      // Execute the Python script
+      const process = spawn('python', [
+        'repository-indexer/src/cli.py',
+        repositoryName,
+        '--account-id', accountId,
+        '--skip-types', 'jpg,png,gif,json'
+      ]);
+
+      return new Promise((resolve, reject) => {
+        let output = '';
+        
+        process.stdout.on('data', (data) => {
+          console.log(`stdout: ${data}`);
+          output += data;
+        });
+
+        process.stderr.on('data', (data) => {
+          console.error(`stderr: ${data}`);
+        });
+
+        process.on('close', (code) => {
+          console.log(`Process exited with code ${code}`);
+          if (code === 0) {
+            resolve({ 
+              success: true, 
+              output,
+              message: 'Repository sync completed successfully'
+            });
+          } else {
+            reject(new Error(`Process exited with code ${code}`));
+          }
+        });
+      });
+    } catch (error) {
+      console.error('Sync error:', error);
+      throw error instanceof Error ? error : new Error('Failed to sync repository');
     }
   }
 );

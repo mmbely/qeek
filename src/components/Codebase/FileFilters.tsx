@@ -1,5 +1,6 @@
-import { TextField, InputAdornment, FormControl, Select, MenuItem, ListSubheader } from '@mui/material';
 import { Search } from 'lucide-react';
+import { Input } from '../ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { FileStatus } from '../../types/repository';
 
 interface FileFiltersProps {
@@ -9,7 +10,7 @@ interface FileFiltersProps {
   filterComponent: string;
   components: { component: string; count: number }[];
   onSearchChange: (value: string) => void;
-  onFilterChange: (key: string, value: string) => void;
+  onFilterChange: (key: 'status' | 'language' | 'component', value: string) => void;
 }
 
 const statusOptions = [
@@ -35,159 +36,56 @@ export default function FileFilters({
     <div className="p-6">
       <div className="mb-6 flex gap-4 items-center">
         <div className="flex-1">
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Search files..."
-            value={searchTerm}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="dark:bg-gray-800"
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                '& fieldset': {
-                  borderColor: 'rgba(255, 255, 255, 0.1)',
-                },
-                '&:hover fieldset': {
-                  borderColor: 'rgba(255, 255, 255, 0.2)',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: 'rgba(255, 255, 255, 0.3)',
-                },
-              },
-              '& .MuiInputBase-input': {
-                color: 'inherit',
-              },
-            }}
-            InputProps={{
-              className: 'dark:text-white',
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-                </InputAdornment>
-              ),
-            }}
-          />
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 dark:text-gray-400" />
+            <Input
+              type="text"
+              placeholder="Search files..."
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="pl-10 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 border-gray-200 dark:border-gray-700 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+            />
+          </div>
         </div>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <Select
-            value={filterStatus}
-            onChange={(e) => onFilterChange('status', e.target.value)}
-            className="dark:bg-gray-800 dark:text-white"
-            MenuProps={{
-              PaperProps: {
-                className: 'dark:bg-gray-800',
-                sx: {
-                  '& .MuiMenuItem-root': {
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    },
-                  },
-                  '& .MuiListSubheader-root': {
-                    lineHeight: '32px',
-                  },
-                },
-              },
-            }}
-            sx={{
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(255, 255, 255, 0.1)',
-              },
-              '&:hover .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(255, 255, 255, 0.2)',
-              },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(255, 255, 255, 0.3)',
-              },
-            }}
-          >
+        <Select value={filterStatus} onValueChange={(value: string) => onFilterChange('status', value)}>
+          <SelectTrigger className="w-[200px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 border-gray-200 dark:border-gray-700">
+            <SelectValue placeholder="Select status" />
+          </SelectTrigger>
+          <SelectContent>
             {statusOptions.map(({ value, label }) => (
-              <MenuItem key={value} value={value} className="dark:text-gray-200">
+              <SelectItem key={value} value={value}>
                 {label}
-              </MenuItem>
+              </SelectItem>
             ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <Select
-            value={filterLanguage}
-            onChange={(e) => onFilterChange('language', e.target.value)}
-            className="dark:bg-gray-800 dark:text-white"
-            MenuProps={{
-              PaperProps: {
-                className: 'dark:bg-gray-800',
-                sx: {
-                  '& .MuiMenuItem-root': {
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    },
-                  },
-                  '& .MuiListSubheader-root': {
-                    lineHeight: '32px',
-                  },
-                },
-              },
-            }}
-            sx={{
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(255, 255, 255, 0.1)',
-              },
-              '&:hover .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(255, 255, 255, 0.2)',
-              },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(255, 255, 255, 0.3)',
-              },
-            }}
-          >
-            <MenuItem value="all" className="dark:text-gray-200">All Languages</MenuItem>
-            <MenuItem value="tsx" className="dark:text-gray-200">TypeScript (TSX)</MenuItem>
-            <MenuItem value="jsx" className="dark:text-gray-200">JavaScript (JSX)</MenuItem>
-            <MenuItem value="py" className="dark:text-gray-200">Python</MenuItem>
-            <MenuItem value="css" className="dark:text-gray-200">CSS</MenuItem>
-            <MenuItem value="html" className="dark:text-gray-200">HTML</MenuItem>
-            <MenuItem value="md" className="dark:text-gray-200">Markdown</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <Select
-            value={filterComponent}
-            onChange={(e) => onFilterChange('component', e.target.value)}
-            className="dark:bg-gray-800 dark:text-white"
-            MenuProps={{
-              PaperProps: {
-                className: 'dark:bg-gray-800',
-                sx: {
-                  '& .MuiMenuItem-root': {
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    },
-                  },
-                  '& .MuiListSubheader-root': {
-                    lineHeight: '32px',
-                  },
-                },
-              },
-            }}
-            sx={{
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(255, 255, 255, 0.1)',
-              },
-              '&:hover .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(255, 255, 255, 0.2)',
-              },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(255, 255, 255, 0.3)',
-              },
-            }}
-          >
-            <MenuItem value="all" className="dark:text-gray-200">All Components</MenuItem>
+          </SelectContent>
+        </Select>
+        <Select value={filterLanguage} onValueChange={(value: string) => onFilterChange('language', value)}>
+          <SelectTrigger className="w-[200px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 border-gray-200 dark:border-gray-700">
+            <SelectValue placeholder="Select language" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Languages</SelectItem>
+            <SelectItem value="tsx">TypeScript (TSX)</SelectItem>
+            <SelectItem value="jsx">JavaScript (JSX)</SelectItem>
+            <SelectItem value="py">Python</SelectItem>
+            <SelectItem value="css">CSS</SelectItem>
+            <SelectItem value="html">HTML</SelectItem>
+            <SelectItem value="md">Markdown</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filterComponent} onValueChange={(value: string) => onFilterChange('component', value)}>
+          <SelectTrigger className="w-[200px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 border-gray-200 dark:border-gray-700">
+            <SelectValue placeholder="Select component" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Components</SelectItem>
             {components.map(({ component, count }) => (
-              <MenuItem key={component} value={component} className="dark:text-gray-200">
-                {component} <span className="text-gray-400 ml-2">({count})</span>
-              </MenuItem>
+              <SelectItem key={component} value={component}>
+                {component} <span className="text-gray-500 dark:text-gray-400 ml-2">({count})</span>
+              </SelectItem>
             ))}
-          </Select>
-        </FormControl>
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

@@ -24,7 +24,9 @@
       "react",
       "react-dom",
       "firebase",
-      "recharts"
+      "recharts",
+      "@radix-ui/react-select",
+      "tailwind-merge"
     ],
     "baseUrl": "src",
     "paths": {

@@ -6,6 +6,16 @@ module.exports = {
   ],
   theme: {
     extend: {
+      keyframes: {
+        'indeterminate-progress': {
+          '0%': { transform: 'translateX(-100%)' },
+          '50%': { transform: 'translateX(0%)' },
+          '100%': { transform: 'translateX(100%)' }
+        },
+      },
+      animation: {
+        'indeterminate-progress': 'indeterminate-progress 1.5s infinite ease-in-out',
+      },
       colors: {
         'gray-750': '#2D3748',
       },

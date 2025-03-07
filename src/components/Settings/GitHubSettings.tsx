@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Github, CheckCircle, XCircle, Loader2, ChevronDown, Search, AlertTriangle } from "lucide-react";
+import { Github, CheckCircle, XCircle, Loader2, ChevronDown, Search, AlertTriangle, RefreshCw } from "lucide-react";
 import { 
   storeGithubToken, 
   getToken, 
@@ -12,12 +12,17 @@ import { useAuth } from '../../context/AuthContext';
 import { useCodebase } from '../../context/CodebaseContext';
 import { useAccount } from '../../context/AccountContext';
 import { syncRepository } from '../../services/github';
-import { onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { onSnapshot, doc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { Button } from '../ui/button';
+import { Progress } from '../ui/progress';
+import { Alert, AlertDescription } from '../ui/alert';
+import { Account } from '../../types/account';
 
 export default function GitHubSettings() {
   const { user } = useAuth();
   const { selectedRepository, setSelectedRepository } = useCodebase();
+  const { currentAccount } = useAccount();
   const [token, setToken] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,12 +32,18 @@ export default function GitHubSettings() {
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const { currentAccount, updateAccountSettings } = useAccount();
   const [showSavedMessage, setShowSavedMessage] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{
-    status: 'idle' | 'syncing' | 'completed' | 'failed';
+    status: 'idle' | 'pending' | 'syncing' | 'completed' | 'failed';
+    progress?: {
+      filesProcessed: number;
+      totalFiles: number;
+      newFiles: number;
+      updatedFiles: number;
+      unchangedFiles: number;
+      deletedFiles: number;
+    };
     error?: string;
-    progress?: number;
   }>({ status: 'idle' });
 
   // Filter repositories based on search query
@@ -186,7 +197,7 @@ export default function GitHubSettings() {
       console.log('Selecting repository:', repo.full_name);
       setSelectedRepo(repo);
       setSelectedRepository(repo.full_name);
-      setSyncStatus({ status: 'syncing' });
+      setSyncStatus({ status: 'pending' });
       
       // Start repository sync
       await syncRepository(repo.full_name, currentAccount.id);
@@ -204,64 +215,123 @@ export default function GitHubSettings() {
     } catch (error: unknown) {
       console.error('Failed to select repository:', error);
       setError('Failed to select repository. Please try again.');
+      setSyncStatus({ status: 'failed', error: error instanceof Error ? error.message : 'Unknown error occurred' });
+    }
+  };
+
+  // Listen for sync status updates
+  useEffect(() => {
+    if (!currentAccount?.settings?.githubRepository) return;
+
+    const repoId = currentAccount.settings.githubRepository.replace('/', '_');
+    const repoRef = doc(db, 'repositories', repoId);
+
+    const unsubscribe = onSnapshot(repoRef, (doc) => {
+      const data = doc.data();
+      if (!data?.metadata) return;
+
+      setSyncStatus({
+        status: data.metadata.sync_status,
+        progress: {
+          filesProcessed: data.metadata.files_processed || 0,
+          totalFiles: data.metadata.total_files || 0,
+          newFiles: data.metadata.new_files || 0,
+          updatedFiles: data.metadata.updated_files || 0,
+          unchangedFiles: data.metadata.unchanged_files || 0,
+          deletedFiles: data.metadata.deleted_files || 0,
+        },
+        error: data.metadata.error
+      });
+    });
+
+    return () => unsubscribe();
+  }, [currentAccount?.settings?.githubRepository]);
+
+  const handleRetrieveRepository = async (repo: { full_name: string }) => {
+    if (!currentAccount?.id) {
+      setSyncStatus({ status: 'failed', error: 'No account selected' });
+      return;
+    }
+
+    try {
+      setSyncStatus({ status: 'pending' });
+
+      // Update account settings first
+      await updateAccountSettings({
+        githubRepository: repo.full_name
+      });
+
+      // Then trigger the sync
+      await syncRepository(repo.full_name, currentAccount.id);
+      
+    } catch (err) {
+      console.error('Failed to retrieve repository:', err);
       setSyncStatus({ 
         status: 'failed', 
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: err instanceof Error ? err.message : 'Unknown error occurred' 
       });
     }
   };
 
-  // Monitor sync status
-  useEffect(() => {
-    if (!selectedRepo || !user?.uid) return;
-
-    const repoId = selectedRepo.full_name.replace('/', '_');
-    const unsubscribe = onSnapshot(
-      doc(db, 'repositories', repoId),
-      (doc) => {
-        if (doc.exists()) {
-          const data = doc.data();
-          setSyncStatus({
-            status: data.metadata.sync_status,
-            progress: data.metadata.files_processed / data.metadata.total_files,
-            error: data.metadata.error
-          });
-        }
-      }
-    );
-
-    return () => unsubscribe();
-  }, [selectedRepo, user]);
-
-  const handleRetrieveRepository = async () => {
-    if (!currentAccount || !selectedRepo) return;
-    
-    try {
-      setIsLoading(true);
-      setSyncStatus({ status: 'syncing' });
-      
-      // Updated to use only repositoryName and accountId
-      await syncRepository(
-        selectedRepo.full_name,
-        currentAccount.id
-      );
-      
-      // Update account settings if not already set
-      if (currentAccount?.settings?.githubRepository !== selectedRepo.full_name) {
-        await updateAccountSettings({
-          githubRepository: selectedRepo.full_name
-        });
-      }
-    } catch (error) {
-      console.error('Failed to retrieve repository:', error);
-      setError('Failed to retrieve repository. Please try again.');
-      setSyncStatus({ 
-        status: 'failed', 
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    } finally {
-      setIsLoading(false);
+  const updateAccountSettings = async (settings: { githubRepository?: string }) => {
+    if (!currentAccount?.id) {
+      throw new Error('No account selected');
     }
+
+    const accountRef = doc(db, 'accounts', currentAccount.id);
+    
+    // Only update the githubRepository setting
+    await updateDoc(accountRef, {
+      'settings.githubRepository': settings.githubRepository
+    });
+  };
+
+  // Render sync status
+  const renderSyncStatus = () => {
+    if (syncStatus.status === 'idle') return null;
+
+    return (
+      <div className="mt-4 space-y-2">
+        {syncStatus.status === 'pending' && (
+          <Alert>
+            <AlertDescription>Initializing repository sync...</AlertDescription>
+          </Alert>
+        )}
+        
+        {syncStatus.status === 'syncing' && syncStatus.progress && (
+          <div className="space-y-2">
+            <Alert>
+              <AlertDescription>
+                Syncing repository... 
+                {syncStatus.progress.filesProcessed} / {syncStatus.progress.totalFiles} files
+              </AlertDescription>
+            </Alert>
+            <Progress 
+              value={(syncStatus.progress.filesProcessed / syncStatus.progress.totalFiles) * 100} 
+              max={100}
+            />
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              New: {syncStatus.progress.newFiles} | 
+              Updated: {syncStatus.progress.updatedFiles} | 
+              Unchanged: {syncStatus.progress.unchangedFiles} | 
+              Deleted: {syncStatus.progress.deletedFiles}
+            </div>
+          </div>
+        )}
+        
+        {syncStatus.status === 'completed' && (
+          <Alert variant="success">
+            <AlertDescription>Repository sync completed successfully!</AlertDescription>
+          </Alert>
+        )}
+        
+        {syncStatus.status === 'failed' && (
+          <Alert variant="error">
+            <AlertDescription>{syncStatus.error || 'Failed to sync repository'}</AlertDescription>
+          </Alert>
+        )}
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -372,6 +442,8 @@ export default function GitHubSettings() {
               </div>
             )}
           </div>
+
+          {/* Repository dropdown */}
           <div className="space-y-4">
             <div className="relative">
               <button
@@ -436,99 +508,34 @@ export default function GitHubSettings() {
               )}
             </div>
 
-            {/* Sync Status Section */}
+            {/* Add Sync Button */}
             {selectedRepo && (
-              <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-gray-900 dark:text-gray-200">
-                      Repository Sync Status
-                    </h4>
-                    {syncStatus.status === 'completed' && (
-                      <span className="text-xs text-green-500 dark:text-green-400 flex items-center gap-1">
-                        <CheckCircle className="h-3 w-3" />
-                        Sync Complete
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Repository Details */}
-                  <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-                    <div className="flex justify-between">
-                      <span>Repository:</span>
-                      <span className="font-medium text-gray-700 dark:text-gray-300">
-                        {selectedRepo.full_name}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Default Branch:</span>
-                      <span className="font-medium text-gray-700 dark:text-gray-300">
-                        {selectedRepo.default_branch}
-                      </span>
-                    </div>
-                    {selectedRepo.description && (
-                      <div className="pt-2 text-xs text-gray-500 dark:text-gray-400">
-                        {selectedRepo.description}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Add sync failure message if present */}
-                  {syncStatus.status === 'failed' && (
-                    <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-lg">
-                      <div className="flex items-start gap-2 text-red-600 dark:text-red-400">
-                        <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-medium">Sync Failed</p>
-                          <p className="text-sm mt-1">
-                            {syncStatus.error || 'Failed to sync repository. Please try again.'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Sync Action Button */}
-                  {syncStatus.status !== 'syncing' && (
-                    <button
-                      onClick={handleRetrieveRepository}
-                      disabled={isLoading}
-                      className={`
-                        w-full flex items-center justify-center gap-2 px-4 py-2
-                        bg-[#2b2f44] hover:bg-[#363b52] disabled:opacity-50
-                        text-gray-200
-                        rounded-lg transition-colors duration-200
-                      `}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        <Github className="h-5 w-5" />
-                      )}
-                      {isLoading ? 'Starting Sync...' : 'Retrieve Repository'}
-                    </button>
-                  )}
-
-                  {/* Progress Bar */}
-                  {syncStatus.status === 'syncing' && (
-                    <div className="space-y-2">
-                      <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-blue-500 transition-all duration-500"
-                          style={{ 
-                            width: `${(syncStatus.progress || 0) * 100}%` 
-                          }}
-                        />
-                      </div>
-                      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                        <span>Syncing repository...</span>
-                        <span>{Math.round((syncStatus.progress || 0) * 100)}%</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <button
+                onClick={() => handleRetrieveRepository(selectedRepo)}
+                disabled={syncStatus.status === 'syncing' || syncStatus.status === 'pending'}
+                className={`
+                  w-full flex items-center justify-center gap-2 px-4 py-2
+                  bg-[#2b2f44] hover:bg-[#363b52] disabled:opacity-50
+                  text-gray-200
+                  rounded-lg transition-colors duration-200
+                `}
+              >
+                {syncStatus.status === 'syncing' || syncStatus.status === 'pending' ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Syncing Repository...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-5 w-5" />
+                    Sync Repository
+                  </>
+                )}
+              </button>
             )}
+
+            {/* Sync Status Section */}
+            {selectedRepo && renderSyncStatus()}
           </div>
         </div>
       )}

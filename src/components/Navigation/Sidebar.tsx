@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Hash, Plus, Sun, Moon, ListTodo, Kanban, MessageSquare, LayoutGrid, LogOut, User, Github, Settings, FolderOpen, Code2 } from "lucide-react"
+import { AccountSwitcher } from '../ui/AccountSwitcher'
 import { ScrollArea } from "../ui/scroll-area"
 import { Button } from "../ui/button"
 import { CustomUser } from '../../types/user'
@@ -137,6 +138,12 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 p-4 space-y-8">
+        {/* Account Section */}
+        <div>
+          <h2 className={typography.sidebarHeader}>Account</h2>
+          <AccountSwitcher />
+        </div>
+
         {/* Tickets Section */}
         <div>
           <h2 className={typography.sidebarHeader}>Tickets</h2>

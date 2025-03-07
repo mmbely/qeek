@@ -10,9 +10,10 @@ import {
   signOut,
   updateProfile
 } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { ref, set } from 'firebase/database';
-import { auth, db, database } from '../config/firebase';
+import { auth, db, database, functions } from '../config/firebase';
 import { registerUser, loginUser, logoutUser } from '../services/auth';
 import { CustomUser } from '../types/user';
 
@@ -66,35 +67,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  const saveUserToDatabase = async (user: User) => {
-    // Save to Firestore (for user profiles)
-    const userRef = doc(db, 'users', user.uid);
-    await setDoc(userRef, {
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-      companyId: 'default',
-    }, { merge: true });
+  interface UserData {
+    uid: string;
+    email: string | null;
+    displayName: string | undefined;
+    photoURL: string | null;
+    lastSeen: string;
+    createdAt?: string;
+  }
 
-    // Save to Realtime Database (if needed for real-time features)
-    const rtdbUserRef = ref(database, `users/${user.uid}`);
-    await set(rtdbUserRef, {
-      online: true,
-      lastSeen: new Date().toISOString(),
-      // ... other real-time data
-    });
+  const saveUserToDatabase = async (user: User, isNewUser: boolean = false) => {
+    try {
+      // Save basic user profile to Firestore
+      const userRef = doc(db, 'users', user.uid);
+      const userData: UserData = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || user.email?.split('@')[0],
+        photoURL: user.photoURL,
+        lastSeen: new Date().toISOString(),
+      };
+      
+      if (isNewUser) {
+        userData.createdAt = new Date().toISOString();
+      }
+
+      await setDoc(userRef, userData, { merge: true });
+
+      // Only create initial account for new users
+      let accountId: string | undefined;
+      if (isNewUser) {
+        const createAccount = httpsCallable(functions, 'createInitialAccount');
+        const result = await createAccount();
+        console.log('Initial account created:', result.data);
+        accountId = (result.data as { accountId: string }).accountId;
+      }
+
+      // Save presence data to Realtime Database
+      const rtdbUserRef = ref(database, `users/${user.uid}`);
+      await set(rtdbUserRef, {
+        online: true,
+        lastSeen: new Date().toISOString(),
+        ...(accountId && { accountId })
+      });
+    } catch (error) {
+      console.error('Error saving user to database:', error);
+      throw error;
+    }
   };
 
   const login = async (email: string, password: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    await saveUserToDatabase(userCredential.user);
+    await saveUserToDatabase(userCredential.user, false);
     return userCredential;
   };
 
   const register = async (email: string, password: string) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    await saveUserToDatabase(userCredential.user);
+    await saveUserToDatabase(userCredential.user, true);
     return userCredential;
   };
 
@@ -104,9 +134,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const googleSignIn = async () => {
     const provider = new GoogleAuthProvider();
-    const userCredential = await signInWithPopup(auth, provider);
-    await saveUserToDatabase(userCredential.user);
-    return userCredential;
+    try {
+      const result = await signInWithPopup(auth, provider);
+      
+      // Check if user document exists to determine if they're new
+      const userDoc = await getDoc(doc(db, 'users', result.user.uid));
+      const isNewUser = !userDoc.exists();
+      
+      await saveUserToDatabase(result.user, isNewUser);
+      return result;
+    } catch (error) {
+      console.error('Google sign in error:', error);
+      throw error;
+    }
   };
 
   const value = {

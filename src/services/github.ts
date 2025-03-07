@@ -11,7 +11,8 @@ import {
   QueryDocumentSnapshot, 
   DocumentData, 
   DocumentSnapshot,
-  Timestamp
+  Timestamp,
+  serverTimestamp
 } from 'firebase/firestore';
 import { db, functions } from '../config/firebase';
 import { Octokit } from '@octokit/rest';
@@ -22,6 +23,10 @@ import {
   InvitationRole, 
   InvitationStatus 
 } from '../types/user';
+import { getAuth } from 'firebase/auth';
+import { Account } from '../types/account';
+import { getFunctions } from 'firebase/functions';
+import { getApp as getFirebaseApp } from 'firebase/app';
 
 // Add type interfaces for Firestore documents
 interface AccountData extends DocumentData {
@@ -134,45 +139,18 @@ export const clearToken = async (accountId: string): Promise<void> => {
 };
 
 // Repository synchronization
-export const syncRepository = async (repositoryName: string, accountId: string): Promise<SyncResponse> => {
+export const syncRepository = async (repositoryName: string, accountId: string) => {
   try {
-    // Update sync status in Firestore
-    const statusRef = doc(db, `repositories/${repositoryName.replace('/', '_')}/status/sync`);
-    await setDoc(statusRef, {
-      status: 'syncing',
-      startedAt: new Date().toISOString()
-    });
-
-    // Call Firebase Function
-    const syncRepo = httpsCallable<
-      { repositoryName: string; accountId: string },
-      SyncResponse
-    >(functions, 'syncGithubRepository');
+    // Add debug logging
+    console.log('Functions instance:', functions);
+    console.log('Sync params:', { repositoryName, accountId });
     
-    const result = await syncRepo({ repositoryName, accountId });
-    
-    if (!result.data?.success) {
-      throw new Error(result.data?.error || 'Sync failed');
-    }
-
-    // Update success status
-    await setDoc(statusRef, {
-      status: 'completed',
-      completedAt: new Date().toISOString(),
-      filesProcessed: result.data.filesProcessed
-    });
+    const triggerSync = httpsCallable(functions, 'triggerRepositorySync');
+    const result = await triggerSync({ repositoryName, accountId });
     
     return result.data;
   } catch (error) {
-    // Update error status
-    const statusRef = doc(db, `repositories/${repositoryName.replace('/', '_')}/status/sync`);
-    await setDoc(statusRef, {
-      status: 'failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      failedAt: new Date().toISOString()
-    });
-
-    console.error('Error syncing repository:', error);
+    console.error('Error details:', error);
     throw error;
   }
 };

@@ -31,6 +31,22 @@
     {
       "name": "Firestore data handling",
       "description": "Be careful with Firestore data structures and maintain compatibility with existing database schemas."
+    },
+    {
+      "name": "Production Firebase setup",
+      "description": "Use production Firebase configuration. No local emulator setup - direct connection to Firebase services."
+    },
+    {
+      "name": "Repository sync process",
+      "description": "Repository sync is handled by Cloud Functions executing Python indexer code. UI only initiates the sync and monitors status."
+    },
+    {
+      "name": "Account context usage",
+      "description": "Use currentAccount from AccountContext for accessing current account data and settings."
+    },
+    {
+      "name": "GitHub integration",
+      "description": "Repository sync requires both repository name and account ID, sourced from account settings."
     }
   ]
 }

@@ -340,7 +340,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
       flex flex-col h-full
       bg-white dark:bg-[${theme.colors.dark.background.primary}]
     `}>
-      <header className={commonStyles.header.wrapper}>
+      <header className={`${commonStyles.header.wrapper} flex-shrink-0`}>
         <div className={commonStyles.header.container}>
           <div className={commonStyles.header.titleWrapper}>
             <h2 className={commonStyles.header.title}>{title}</h2>
@@ -364,12 +364,12 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
       {/* Board */}
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className={`
-          ${layout.grid.cols4}
-          min-h-[calc(100vh-12rem)]
+          grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4
+          flex-1
           overflow-x-auto
-          gap-4 lg:gap-6
-          p-6
+          gap-2 md:gap-3 lg:gap-4
           bg-white dark:bg-[${theme.colors.dark.background.primary}]
+          w-full
         `}>
           {Object.entries(columns).map(([status, column]) => (
             <Droppable droppableId={status} key={`column-${status}`}>
@@ -378,11 +378,12 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
                   ref={provided.innerRef}
                   {...provided.droppableProps}
                   className={`
+                    h-full
                     rounded-lg
                     ${snapshot.isDraggingOver ? `ring-2 ring-blue-500/20 dark:bg-[${theme.colors.dark.background.hover}]` : ''}
                     bg-white dark:bg-[${theme.colors.dark.primary}]
                     border border-gray-200 dark:border-gray-700
-                    p-4
+                    p-3
                     ${animations.transition.normal}
                   `}
                 >

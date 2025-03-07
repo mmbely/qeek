@@ -1,4 +1,5 @@
-import { Modal, Button } from '@mui/material';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Button } from '../ui/button';
 import { X } from 'lucide-react';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { github, dark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
@@ -17,18 +18,23 @@ export default function FileViewerModal({ file, isOpen, onClose }: FileViewerMod
   if (!file) return null;
 
   return (
-    <Modal open={isOpen} onClose={onClose}>
-      <div className="fixed inset-0 flex items-center justify-center p-6">
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-gray-900 w-full max-w-6xl max-h-[90vh] overflow-hidden">
+        <DialogHeader className="border-b border-gray-700 p-4">
+          <div className="flex justify-between items-center">
+            <DialogTitle className="text-lg font-semibold text-gray-100">
               {file.path}
-            </h2>
-            <Button onClick={onClose} className="text-gray-500 dark:text-gray-400">
-              <X className="w-5 h-5" />
+            </DialogTitle>
+            <Button
+              onClick={onClose}
+              variant="ghost"
+              size="icon"
+              className="text-gray-400 hover:text-gray-200"
+            >
+              <X className="h-5 w-5" />
             </Button>
           </div>
+        </DialogHeader>
 
           {/* Content (Scrollable) */}
           <div className="p-4 overflow-y-auto flex-1">
@@ -111,8 +117,7 @@ export default function FileViewerModal({ file, isOpen, onClose }: FileViewerMod
               </ul>
             </div>
           </div>
-        </div>
-      </div>
-    </Modal>
+      </DialogContent>
+    </Dialog>
   );
 }

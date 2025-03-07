@@ -17,7 +17,7 @@ export default function ExpandableCell({ text, content, maxLength }: ExpandableC
   const displayText = text || content || '';
   
   if (!displayText || displayText.length <= maxLength) {
-    return <span>{displayText}</span>;
+    return <span className="text-gray-700 dark:text-gray-300">{displayText}</span>;
   }
   
   return (
@@ -27,9 +27,9 @@ export default function ExpandableCell({ text, content, maxLength }: ExpandableC
     }}>
       {expanded ? (
         <div className="relative">
-          <span>{displayText}</span>
+          <span className="text-gray-700 dark:text-gray-300">{displayText}</span>
           <button 
-            className="text-blue-600 dark:text-blue-400 hover:underline mt-1 text-xs font-medium"
+            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline mt-1 text-xs font-medium"
             onClick={(e) => {
               e.stopPropagation();
               setExpanded(false);
@@ -40,9 +40,9 @@ export default function ExpandableCell({ text, content, maxLength }: ExpandableC
         </div>
       ) : (
         <div className="relative">
-          <span>{displayText.substring(0, maxLength)}...</span>
+          <span className="text-gray-700 dark:text-gray-300">{displayText.substring(0, maxLength)}...</span>
           <button 
-            className="text-blue-600 dark:text-blue-400 hover:underline ml-1 text-xs font-medium"
+            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline ml-1 text-xs font-medium"
             onClick={(e) => {
               e.stopPropagation();
               setExpanded(true);

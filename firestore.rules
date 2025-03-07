@@ -14,11 +14,9 @@ service cloud.firestore {
     }
     
     function isAccountMember(accountId) {
-      let account = getAccount(accountId);
       return isSignedIn() && 
         exists(/databases/$(database)/documents/accounts/$(accountId)) &&
-        (account.data.members[request.auth.uid] != null || 
-         request.auth.uid == accountId);
+        get(/databases/$(database)/documents/accounts/$(accountId)).data.members[request.auth.uid] != null;
     }
     
     function isAccountAdmin(accountId) {
@@ -54,13 +52,12 @@ service cloud.firestore {
 
     match /accounts/{accountId} {
       allow read: if isSignedIn() && 
-        (resource.data.members[request.auth.uid] != null || 
-         request.auth.uid == accountId);
+        (resource == null || resource.data.members[request.auth.uid] != null);
       allow create: if isSignedIn() && 
-        accountId == request.auth.uid &&
-        request.resource.data.members[request.auth.uid] != null &&
-        request.resource.data.members[request.auth.uid].role == "owner" &&
-        request.resource.data.ownerId == request.auth.uid;
+        (!exists(/databases/$(database)/documents/accounts/$(accountId)) || request.auth.uid == accountId);
+      allow update: if isSignedIn() && 
+        (isAccountMember(accountId) ||
+         request.auth.uid == accountId);
     }
 
     match /messages/{messageId} {
@@ -133,11 +130,9 @@ service cloud.firestore {
     match /secure_tokens/{tokenId} {
       allow read: if isSignedIn() && (
         request.auth.uid == tokenId || 
-        isAccountMember(tokenId) ||
-        tokenId == request.auth.uid
+        isAccountMember(tokenId)
       );
-      // Only allow write through Cloud Functions
-      allow write: if false;
+      allow write: if isSignedIn() && request.auth.uid == tokenId;
     }
 
     match /profiles/{userId} {

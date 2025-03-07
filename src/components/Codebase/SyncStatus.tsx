@@ -1,4 +1,4 @@
-import { Button } from '@mui/material';
+import { Button } from '../ui/button';
 import { Settings, Loader2, AlertTriangle } from 'lucide-react';
 
 interface SyncStatusProps {
