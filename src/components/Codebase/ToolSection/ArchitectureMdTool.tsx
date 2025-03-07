@@ -484,6 +484,40 @@ const ArchitectureMdTool = ({ files }: ArchitectureMdToolProps) => {
             </div>
           )}
           
+          {/* Push success message */}
+          {pushSuccess && (
+            <div className="mb-6 bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-900">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-green-800 dark:text-green-300">
+                    Successfully pushed architecture.md to GitHub
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Push error message */}
+          {pushError && (
+            <div className="mb-6 bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-900">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-red-400" />
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-red-800 dark:text-red-300">
+                    {pushError}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {(existingArchitecture || generatedArchitecture) && !loading && (
             <SimpleTabs defaultValue={activeTab} onValueChange={setActiveTab}>
               {existingArchitecture && (
@@ -733,66 +767,49 @@ const ArchitectureMdTool = ({ files }: ArchitectureMdToolProps) => {
               </div>
             </div>
           )}
+
+
         </>
       )}
 
       {/* Push to GitHub Dialog */}
       {showPushDialog && (
-        <Dialog 
-          open={showPushDialog}
-          onOpenChange={setShowPushDialog}
-        >
-          <div className="p-4">
-            <p className="text-gray-700 dark:text-gray-300 mb-4">
-              This will {existingArchitecture ? 'update' : 'create'} the architecture.md file in the .cursor directory of your repository.
-            </p>
-            
-            {pushError && (
-              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900 rounded-lg">
-                <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                  <AlertTriangle className="h-5 w-5" />
-                  <span>{pushError}</span>
-                </div>
+        <Dialog open={showPushDialog} onOpenChange={setShowPushDialog}>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                Push to GitHub
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                This will {existingArchitecture ? 'update' : 'create'} the architecture.md file in your GitHub repository. Are you sure you want to continue?
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowPushDialog(false)}
+                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 
+                           rounded-md hover:bg-gray-300 dark:hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePushToGitHub}
+                  disabled={pushLoading}
+                  className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 
+                           disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {pushLoading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Pushing...
+                    </>
+                  ) : (
+                    <>
+                      <GitPullRequest className="h-4 w-4" />
+                      Push
+                    </>
+                  )}
+                </button>
               </div>
-            )}
-            
-            {pushSuccess && (
-              <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900 rounded-lg">
-                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                  <AlertTriangle className="h-5 w-5" />
-                  <span>Successfully pushed to GitHub!</span>
-                </div>
-              </div>
-            )}
-            
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                onClick={() => setShowPushDialog(false)}
-                disabled={pushLoading}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 
-                         rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              
-              <button
-                onClick={handlePushToGitHub}
-                disabled={pushLoading || pushSuccess}
-                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 
-                         disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {pushLoading ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Pushing...
-                  </>
-                ) : (
-                  <>
-                    <GitPullRequest className="h-4 w-4" />
-                    Push
-                  </>
-                )}
-              </button>
             </div>
           </div>
         </Dialog>

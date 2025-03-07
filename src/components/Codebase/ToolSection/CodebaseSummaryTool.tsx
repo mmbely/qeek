@@ -802,6 +802,40 @@ Return only valid JSON, no additional text.`;
         </div>
       </div>
 
+      {/* Push success message */}
+      {pushSuccess && (
+        <div className="mb-6 bg-[#f0fdf4] dark:bg-[#052e16]/30 rounded-lg p-4 border border-[#bbf7d0] dark:border-[#052e16]">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-[#15803d] dark:text-[#4ade80]" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-[#15803d] dark:text-[#4ade80]">
+                Successfully pushed codebase-summary.json to GitHub
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Push error message */}
+      {pushError && (
+        <div className="mb-6 bg-[#fef2f2] dark:bg-[#450a0a]/30 rounded-lg p-4 border border-[#fecaca] dark:border-[#450a0a]">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 text-[#dc2626] dark:text-[#f87171]" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-[#dc2626] dark:text-[#f87171]">
+                {pushError}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900 rounded-lg">
           <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
@@ -1001,77 +1035,43 @@ Return only valid JSON, no additional text.`;
 
       {/* Push to GitHub confirmation dialog */}
       {showPushDialog && (
-        <Dialog open={showPushDialog} onOpenChange={setShowPushDialog}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Push to GitHub</DialogTitle>
-            </DialogHeader>
-            
-            <div className="py-4">
-              {pushLoading ? (
-                <div className="flex flex-col items-center justify-center py-4">
-                  <RefreshCw className="h-8 w-8 animate-spin text-blue-500 mb-2" />
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Pushing to GitHub...
-                  </p>
-                </div>
-              ) : pushError ? (
-                <div className="flex flex-col items-center justify-center py-4">
-                  <AlertTriangle className="h-8 w-8 text-red-500 mb-2" />
-                  <p className="text-sm text-red-500 text-center mb-2">
-                    {pushError}
-                  </p>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => {
-                      setPushError(null);
-                      handlePushToGitHub();
-                    }}
-                  >
-                    Try Again
-                  </Button>
-                </div>
-              ) : pushSuccess ? (
-                <div className="flex flex-col items-center justify-center py-4">
-                  <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mb-2">
-                    <svg className="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 text-center mb-2">
-                    Successfully pushed to GitHub!
-                  </p>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowPushDialog(false)}
-                  >
-                    Close
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                    This will create or update the <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">.cursor/codebase-summary.json</code> file in your repository.
-                  </p>
-                  
-                  <div className="flex justify-end space-x-2">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setShowPushDialog(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button 
-                      onClick={handlePushToGitHub}
-                    >
-                      Push to GitHub
-                    </Button>
-                  </div>
-                </>
-              )}
+        <div className="fixed inset-0 bg-black/50 dark:bg-[#000000]/70 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-[#1e2132] rounded-lg p-6 max-w-md w-full border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+              Push to GitHub
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300 mb-6">
+              This will create or update the <code className="bg-gray-100 dark:bg-[#1e2132] px-1 py-0.5 rounded border border-gray-200 dark:border-gray-700">.cursor/codebase-summary.json</code> file in your repository.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowPushDialog(false)}
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300
+                           rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePushToGitHub}
+                disabled={pushLoading}
+                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 
+                         disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {pushLoading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Pushing...
+                  </>
+                ) : (
+                  <>
+                    <GitPullRequest className="h-4 w-4" />
+                    Push
+                  </>
+                )}
+              </button>
             </div>
-          </DialogContent>
-        </Dialog>
+          </div>
+        </div>
       )}
     </div>
   );
