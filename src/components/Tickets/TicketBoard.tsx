@@ -344,7 +344,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className={`${typography.h1} text-gray-900 dark:text-[${theme.colors.dark.text.primary}] text-2xl`}>{title}</h2>
-            <p className={`mt-1 text-gray-600 dark:text-[${theme.colors.dark.text.secondary}]`}>{subtitle}</p>
+            <p className={`mt-1 text-[${theme.colors.light.text.secondary}] dark:text-[${theme.colors.dark.text.secondary}]`}>{subtitle}</p>
           </div>
           <div>
             <button
@@ -367,10 +367,10 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
           grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4
           flex-1
           overflow-x-auto
-          gap-6
+          gap-4
           bg-white dark:bg-[${theme.colors.dark.background.primary}]
           w-full
-          px-6
+          px-6 pt-4
         `}>
           {Object.entries(columns).map(([status, column]) => (
             <Droppable droppableId={status} key={`column-${status}`}>
