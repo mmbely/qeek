@@ -208,13 +208,12 @@
     "location": "src/components/Codebase/ToolSection",
     "components": [
       {
-        "name": "CodebaseSummaryTool",
-        "purpose": "generates a codebase summary using AI\nDependencies:\n- react: For managing component state.\n- lucide-react: For displaying icons.\n- ../../../services/ai: To generate the code summary using an AI service.\n- ../../../services/github: Likely unused, but potentially for fetching repository files directly from GitHub.\n- ../../../utils/analyzeCodebase: To analyze the codebase and extract metadata for the prompt.\n- ../../../constants/prompts: To provide the template for the AI prompt.\n- ../../../context/ThemeContext: To access the dark mode state.\n- ../../../types/repository: To type the repository file data.\n- firebase/firestore: For interacting with Firestore database.\n- ../../../config/firebase: To access the Firestore instance.\n- ../../../context/AccountContext: To access the current user account.\n- react-markdown: To render the formatted summary as Markdown.\n- react-syntax-highlighter: For syntax highlighting in the formatted summary.\nIntegrations:\n- API generateAISummary: Used to generate the codebase summary from the AI service.\n- Database Firestore (db): Used to fetch repository data.\n- Context ThemeContext: Provides the dark mode state.\n- Context AccountContext: Provides the current user account information.\n- Component ReactMarkdown: Renders the formatted summary as Markdown.\n- Component SyntaxHighlighter: Provides syntax highlighting within the Markdown content.",
+        "name": "ArchitectureMdTool",
+        "purpose": "generates and manages an `architecture\nDependencies:\n- react: For managing component state, side effects, and refs.\n- lucide-react: For using icons.\n- ../../../services/ai: To interact with the AI service for generating architecture summaries.\n- ../../../utils/analyzeCodebase: Provides utility functions to analyze the codebase.\n- ../../../constants/prompts: Contains the AI prompt for the architecture summary.\n- ../../../context/ThemeContext: Provides access to theme information.\n- ../../../types/repository: Defines the type for repository files.\n- firebase/firestore: For interaction with Firestore database.\n- ../../../config/firebase: Provides access to the Firestore database instance.\n- ../../../context/AccountContext: Provides access to account information.\n- react-markdown: For rendering markdown content.\n- react-syntax-highlighter: For syntax highlighting code blocks.\n- @octokit/rest: For interaction with GitHub's REST API.\n- diff: For comparing text differences.\n- ../../ui/dialog: Provides a UI dialog component.\nIntegrations:\n- API generateAISummary: Used to generate the architecture summary from the AI service.\n- API GitHub REST API (via Octokit): Used to push the generated `architecture.md` file to GitHub.\n- Database Firestore: Used to store and retrieve the existing `architecture.md` file and GitHub tokens.\n- Context ThemeContext: Used to determine the current theme (dark or light mode).\n- Context AccountContext: Used to access the current user's account information, including connected GitHub repository.\n- Component SimpleTabs: Custom component for simple tab switching between the content views.\n- Component Dialog: Displays a dialog for confirmation before pushing to Github",
         "dependencies": [
           "react",
           "lucide-react",
           "../../../services/ai",
-          "../../../services/github",
           "../../../utils/analyzeCodebase",
           "../../../constants/prompts",
           "../../../context/ThemeContext",
@@ -223,7 +222,23 @@
           "../../../config/firebase",
           "../../../context/AccountContext",
           "react-markdown",
-          "react-syntax-highlighter"
+          "react-syntax-highlighter",
+          "@octokit/rest",
+          "diff",
+          "../../ui/dialog"
+        ],
+        "location": "src/components/Codebase/ToolSection/ArchitectureMdTool.tsx"
+      },
+      {
+        "name": "CodebaseSummaryTool",
+        "purpose": "generates a `codebase-summary\nDependencies:\n- react: For managing component state and side effects.\n- lucide-react: For displaying icons.\n- ../../../services/ai: For generating the codebase summary using AI.\n- firebase/firestore: For interacting with Firestore to manage repository data.\n- @octokit/rest: For interacting with the GitHub API.\n- diff: For comparing JSON objects and generating diffs.\nIntegrations:\n- API generateAISummary: Used to generate the codebase summary using the AI service.\n- API Firestore: Used to store and retrieve repository and file data.\n- API GitHub API: Used to push the generated summary to the GitHub repository.\n- Context useAccount: Provides access to the current user's account information.\n- Context useTheme: Provides access to the current theme (dark/light mode).",
+        "dependencies": [
+          "react",
+          "lucide-react",
+          "../../../services/ai",
+          "firebase/firestore",
+          "@octokit/rest",
+          "diff"
         ],
         "location": "src/components/Codebase/ToolSection/CodebaseSummaryTool.tsx"
       },
@@ -245,6 +260,30 @@
           "../../../components/ui/button"
         ],
         "location": "src/components/Codebase/ToolSection/ComponentMetadataTool.tsx"
+      },
+      {
+        "name": "ComponentsJsonTool",
+        "purpose": "manages the generation, comparison, and synchronization of a `components\nDependencies:\n- react: For managing component state, side effects, and DOM references.\n- lucide-react: For using icons in the component's UI.\n- ../../../utils/generateComponentMetadata: For generating the components.json metadata.\n- ../../../context/ThemeContext: For accessing the application's theme context (dark mode).\n- ../../../context/AccountContext: For accessing the current user's account information.\n- react-markdown: Not used in the current code, potentially for future markdown rendering.\n- react-syntax-highlighter: Not actively used, likely intended for code highlighting.\n- react-syntax-highlighter/dist/esm/styles/prism: For styling the syntax highlighter. Not actively used.\n- ../../../types/repository: For typing the repository files data.\n- ../../../services/github: Not used in the current code. Potentially meant for fetching files.\n- ../../ui/dialog: For displaying the confirmation dialog before pushing to GitHub.\n- ../../ui/button: Not used in the current code. Potentially meant for future UI elements.\n- firebase/firestore: For interacting with Firestore to store and retrieve data.\n- ../../../config/firebase: To access the Firebase configuration.\n- diff: For comparing JSON objects and generating diffs.\n- @octokit/rest: For interacting with the GitHub API.\n- @octokit/types: For typing the Octokit responses, not actively used since the responses are not typed.\nIntegrations:\n- Context API useTheme: Used for determining the current theme (dark mode).\n- Context API useAccount: Used for retrieving the connected GitHub repository and account ID.\n- API GitHub API (via Octokit): Used for interacting with GitHub to push the `components.json` file.\n- API Firestore: Used to check for existing components.json & secure GitHub tokens.",
+        "dependencies": [
+          "react",
+          "lucide-react",
+          "../../../utils/generateComponentMetadata",
+          "../../../context/ThemeContext",
+          "../../../context/AccountContext",
+          "react-markdown",
+          "react-syntax-highlighter",
+          "react-syntax-highlighter/dist/esm/styles/prism",
+          "../../../types/repository",
+          "../../../services/github",
+          "../../ui/dialog",
+          "../../ui/button",
+          "firebase/firestore",
+          "../../../config/firebase",
+          "diff",
+          "@octokit/rest",
+          "@octokit/types"
+        ],
+        "location": "src/components/Codebase/ToolSection/ComponentsJsonTool.tsx"
       },
       {
         "name": "RulesGenerationTool",
@@ -276,16 +315,18 @@
       },
       {
         "name": "ToolSection",
-        "purpose": "renders a tool section with a left-side navigation and a main content area\nDependencies:\n- react: Import useState hook for managing the active tool state.\n- lucide-react: Import icons from lucide-react for visual representation of tools.\n- ./CodebaseSummaryTool: Import the CodebaseSummaryTool component.\n- ./ComponentMetadataTool: Import the ComponentMetadataTool component.\n- ./RulesGenerationTool: Import the RulesGenerationTool component.\n- ./SettingsGenerationTool: Import the SettingsGenerationTool component.\n- ../../../context/ThemeContext: Import the useTheme hook for accessing theme information (dark mode).\n- ../../../types/repository: Import the RepositoryFile type for type safety.\nIntegrations:\n- Context ThemeContext: Used to determine if dark mode is enabled for styling purposes.\n- Component CodebaseSummaryTool: Renders the codebase summary tool.\n- Component ComponentMetadataTool: Renders the component metadata tool.\n- Component RulesGenerationTool: Renders the rules generation tool.\n- Component SettingsGenerationTool: Renders the settings generation tool.",
+        "purpose": "renders a tool section with a left-side navigation and a main content area\nDependencies:\n- react: For managing state and side effects.\n- lucide-react: For using icons within the navigation.\n- ./ArchitectureMdTool: Component to display architecture markdown.\n- ./ComponentsJsonTool: Component to interact with component JSON data.\n- ./CodebaseSummaryTool: Component to display the codebase summary.\n- ./RulesGenerationTool: Component to generate rules.\n- ./SettingsGenerationTool: Component for generating settings.\n- ../../../context/ThemeContext: For accessing the dark mode state from the theme context.\n- ../../../types/repository: For type-safety of the repository files prop.\n- react-router-dom: For navigation and URL management.\nIntegrations:\n- Context API useTheme: Used to determine the current theme (dark mode or light mode).\n- React Router useNavigate: Used to programmatically navigate to different tool routes.\n- React Router useLocation: Used to access the current URL path and determine the active tool.\n- Component ArchitectureMdTool: Displays the Architecture MD tool view.\n- Component ComponentsJsonTool: Displays the Components JSON tool view.\n- Component CodebaseSummaryTool: Displays the Codebase Summary tool view.\n- Component RulesGenerationTool: Displays the Rules Generation tool view.\n- Component SettingsGenerationTool: Displays the Settings Generation tool view.",
         "dependencies": [
           "react",
           "lucide-react",
+          "./ArchitectureMdTool",
+          "./ComponentsJsonTool",
           "./CodebaseSummaryTool",
-          "./ComponentMetadataTool",
           "./RulesGenerationTool",
           "./SettingsGenerationTool",
           "../../../context/ThemeContext",
-          "../../../types/repository"
+          "../../../types/repository",
+          "react-router-dom"
         ],
         "location": "src/components/Codebase/ToolSection/ToolSection.tsx"
       }
@@ -385,8 +426,16 @@
       },
       {
         "name": "UserManagement",
-        "purpose": "Unknown",
-        "dependencies": [],
+        "purpose": "manages user invitations and existing users for a given account\nDependencies:\n- react: For managing component state and side effects.\n- ../../context/AccountContext: To access the current account context.\n- lucide-react: For using icons in the UI.\n- firebase/firestore: For interacting with Firestore database.\n- ../../config/firebase: To access the Firebase configuration.\n- ../../types/user: For type definitions related to users and invitations.\n- ../../services/github: To use GitHub services for sending and retrieving invitations.\nIntegrations:\n- Context AccountContext: Provides access to the current account data.\n- API Firebase Firestore: Used for storing and retrieving user data, account details, and invitations.\n- Service GitHub Invitation Service: Used for sending and retrieving GitHub invitations.",
+        "dependencies": [
+          "react",
+          "../../context/AccountContext",
+          "lucide-react",
+          "firebase/firestore",
+          "../../config/firebase",
+          "../../types/user",
+          "../../services/github"
+        ],
         "location": "src/components/Settings/UserManagement.tsx"
       },
       {
@@ -447,24 +496,20 @@
       },
       {
         "name": "TicketModal",
-        "purpose": "A modal component for creating and editing tickets\nDependencies:\n- react: For core React functionalities like state and effect hooks.\n- firebase/firestore: For interacting with Firestore database.\n- ../../config/firebase: Provides the Firestore database instance.\n- ../../types/ticket: Defines the types for ticket data.\n- ../../types/user: Defines the type for user data.\n- ../../context/AuthContext: Provides access to the authentication context.\n- ../../styles: Provides styling components and utilities.\n- lucide-react: Provides icons for the UI.\n- react-responsive-modal: Provides the modal component.\n- react-markdown: For rendering markdown content.\n- react-syntax-highlighter: For syntax highlighting code blocks.\n- react-syntax-highlighter/dist/esm/styles/prism: Provides a theme for the syntax highlighter.\n- react-markdown: For customizing ReactMarkdown components.\n- ../../context/AccountContext: Provides access to the account context.\n- ../../hooks/useTickets: Provides functions for interacting with ticket data.\n- ../../types/board: Provides types related to the board and ticket statuses.\nIntegrations:\n- Context AuthContext: Used for user authentication and authorization.\n- Context AccountContext: Used for managing current account information.\n- Hook useTickets: Provides functions for creating, updating, and deleting tickets.\n- Component Modal (react-responsive-modal): Used to display the ticket modal.\n- Library Firebase/Firestore: Used for database interactions (creating, reading, updating, deleting tickets).\n- Library ReactMarkdown: Used for rendering the ticket description with markdown support.\n- Library react-syntax-highlighter: Used for syntax highlighting code blocks within the description.",
+        "purpose": "A modal component for creating and updating tickets\nDependencies:\n- react: For basic React component functionality and hooks.\n- firebase/firestore: For interacting with Firestore database.\n- ../../config/firebase: Provides the Firestore database instance.\n- ../../types/*: For type definitions and constants.\n- ../../context/AuthContext: Provides user authentication context.\n- ../../styles: For styling and layout.\n- lucide-react: For icons.\n- react-responsive-modal: For modal functionality.\n- react-markdown: For rendering markdown content.\n- react-syntax-highlighter: For syntax highlighting.\n- ../../context/AccountContext: Provides current account context\n- ../../hooks/useTickets: Custom hook for managing ticket CRUD operations.\nIntegrations:\n- Context AuthContext: Used for user authentication and authorization.\n- Context AccountContext: Used for accessing current account information.\n- Hook useTickets: Provides functions for managing tickets (create, update, delete).\n- API Firebase Firestore: Used for storing and retrieving ticket data.\n- Component react-responsive-modal: Provides the modal UI.\n- Component react-markdown: Renders the markdown description.\n- Component react-syntax-highlighter: Provides syntax highlighting for code blocks.",
         "dependencies": [
           "react",
           "firebase/firestore",
           "../../config/firebase",
-          "../../types/ticket",
-          "../../types/user",
+          "../../types/*",
           "../../context/AuthContext",
           "../../styles",
           "lucide-react",
           "react-responsive-modal",
           "react-markdown",
           "react-syntax-highlighter",
-          "react-syntax-highlighter/dist/esm/styles/prism",
-          "react-markdown",
           "../../context/AccountContext",
-          "../../hooks/useTickets",
-          "../../types/board"
+          "../../hooks/useTickets"
         ],
         "location": "src/components/Tickets/TicketModal.tsx"
       },
@@ -552,8 +597,14 @@
     "components": [
       {
         "name": "InvitationPage",
-        "purpose": "Unknown",
-        "dependencies": [],
+        "purpose": "allows users to accept an invitation, likely for joining a shared account or team\nDependencies:\n- react: For managing state and component lifecycle.\n- react-router-dom: For accessing route parameters and navigating.\n- firebase/functions: For calling Firebase cloud functions.\n- ../config/firebase: To access the initialized Firebase functions instance.\n- ../context/AuthContext: For accessing the currently authenticated user.\nIntegrations:\n- Firebase Cloud Function handleInvitationAcceptance: Processes the invitation acceptance on the backend.\n- React Router Hook useParams: Retrieves the invitationId from the URL.\n- React Router Hook useNavigate: Redirects the user to the dashboard after successful acceptance.\n- React Context AuthContext: Provides access to the authenticated user.",
+        "dependencies": [
+          "react",
+          "react-router-dom",
+          "firebase/functions",
+          "../config/firebase",
+          "../context/AuthContext"
+        ],
         "location": "src/pages/InvitationPage.tsx"
       },
       {
