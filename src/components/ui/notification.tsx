@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { FC } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { theme } from '../../styles/theme';
 
-interface NotificationProps {
-  type: 'success' | 'error';
+export type NotificationType = 'success' | 'error';
+
+export interface NotificationProps {
+  type: NotificationType;
   message: string;
 }
 
-export const Notification = ({ type, message }: NotificationProps) => {
+const Notification: FC<NotificationProps> = ({ type, message }) => {
   const isSuccess = type === 'success';
 
   const SuccessIcon = () => (
@@ -35,3 +37,5 @@ export const Notification = ({ type, message }: NotificationProps) => {
     </div>
   );
 };
+
+export default Notification;

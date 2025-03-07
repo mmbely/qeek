@@ -538,8 +538,12 @@
           "lucide-react",
           "../../styles/theme"
         ],
+        "exports": {
+          "component": "default as Notification",
+          "types": ["NotificationProps", "NotificationType"]
+        },
         "props": {
-          "type": "'success' | 'error'",
+          "type": "NotificationType ('success' | 'error')",
           "message": "string"
         },
         "styling": {
