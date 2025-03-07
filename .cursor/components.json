@@ -458,8 +458,23 @@
     "components": [
       {
         "name": "TicketBoard",
-        "purpose": "Unknown",
-        "dependencies": [],
+        "purpose": "Displays and manages tickets in a kanban-style board with dark mode support",
+        "dependencies": [
+          "react",
+          "@hello-pangea/dnd",
+          "../../styles/theme",
+          "../../context/AuthContext",
+          "../../context/AccountContext",
+          "../../types/ticket",
+          "../../types/board"
+        ],
+        "styling": {
+          "themeUsage": "Uses theme.colors.dark/light for all color values including text, borders, and backgrounds",
+          "darkMode": "Full dark mode support with semantic color values from theme. No raw Tailwind colors used.",
+          "typography": "Uses theme typography styles with semantic font weights for visual hierarchy",
+          "layout": "Consistent spacing with theme-based padding and margins",
+          "borders": "Theme-based border colors that adapt to dark mode"
+        },
         "location": "src/components/Tickets/TicketBoard.tsx"
       },
       {
