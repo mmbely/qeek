@@ -172,6 +172,40 @@ const SettingsGenerationTool = ({ files }: SettingsGenerationToolProps) => {
         <Settings className="h-8 w-8 text-gray-400" />
       </div>
 
+      {/* Push success message */}
+      {pushSuccess && (
+        <div className="mb-6 bg-[#f0fdf4] dark:bg-[#052e16]/30 rounded-lg p-4 border border-[#bbf7d0] dark:border-[#052e16]">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-[#15803d] dark:text-[#4ade80]" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-[#15803d] dark:text-[#4ade80]">
+                Successfully pushed settings.json to GitHub
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Push error message */}
+      {pushError && (
+        <div className="mb-6 bg-[#fef2f2] dark:bg-[#450a0a]/30 rounded-lg p-4 border border-[#fecaca] dark:border-[#450a0a]">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 text-[#dc2626] dark:text-[#f87171]" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-[#dc2626] dark:text-[#f87171]">
+                {pushError}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white dark:bg-[#1e2132] rounded-lg shadow-sm">
         <div className="p-6">
           <button

@@ -488,15 +488,15 @@ const ComponentsJsonTool = ({ files }: ComponentMetadataToolProps) => {
 
       {/* Push success message */}
       {pushSuccess && (
-        <div className="mb-6 bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-900">
+        <div className="mb-6 bg-[#f0fdf4] dark:bg-[#052e16]/30 rounded-lg p-4 border border-[#bbf7d0] dark:border-[#052e16]">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+              <svg className="h-5 w-5 text-[#15803d] dark:text-[#4ade80]" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
             </div>
             <div className="ml-3">
-              <p className="text-sm font-medium text-green-800 dark:text-green-300">
+              <p className="text-sm font-medium text-[#15803d] dark:text-[#4ade80]">
                 Successfully pushed components.json to GitHub
               </p>
             </div>
@@ -506,13 +506,13 @@ const ComponentsJsonTool = ({ files }: ComponentMetadataToolProps) => {
 
       {/* Push error message */}
       {pushError && (
-        <div className="mb-6 bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-900">
+        <div className="mb-6 bg-[#fef2f2] dark:bg-[#450a0a]/30 rounded-lg p-4 border border-[#fecaca] dark:border-[#450a0a]">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <AlertTriangle className="h-5 w-5 text-red-400" />
+              <AlertTriangle className="h-5 w-5 text-[#dc2626] dark:text-[#f87171]" />
             </div>
             <div className="ml-3">
-              <p className="text-sm font-medium text-red-800 dark:text-red-300">
+              <p className="text-sm font-medium text-[#dc2626] dark:text-[#f87171]">
                 {pushError}
               </p>
             </div>
