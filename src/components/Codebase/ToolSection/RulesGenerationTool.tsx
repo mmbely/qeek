@@ -12,7 +12,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { Octokit } from '@octokit/rest';
 import { theme } from '../../../styles/theme';
-import { Notification } from '../../ui/notification';
+import { Notification } from '../../../components/ui';
 
 interface RulesGenerationToolProps {
   files: RepositoryFile[];
