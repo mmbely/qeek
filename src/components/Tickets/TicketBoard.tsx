@@ -338,13 +338,13 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
   return (
     <div className={`
       flex flex-col h-full
-      bg-white dark:bg-[${theme.colors.dark.background.primary}]
+      bg-[${theme.colors.light.background.primary}] dark:bg-[${theme.colors.dark.background.primary}]
     `}>
-      <header className="px-6 pt-6 pb-4 flex-shrink-0 border-b border-gray-200 dark:border-gray-700">
+      <header className={`px-6 pt-6 pb-4 flex-shrink-0 border-b border-[${theme.colors.light.border}] dark:border-[${theme.colors.dark.border}]`}>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className={`${typography.h1} text-gray-900 dark:text-[${theme.colors.dark.text.primary}] text-2xl`}>{title}</h2>
-            <p className={`mt-1 text-[${theme.colors.light.text.secondary}] dark:text-[${theme.colors.dark.text.secondary}]`}>{subtitle}</p>
+            <h2 className={`${typography.h1} text-[${theme.colors.light.text.primary}] dark:text-[${theme.colors.dark.text.primary}] text-2xl`}>{title}</h2>
+            <p className={`mt-1 text-[${theme.colors.light.text.secondary}] dark:text-[${theme.colors.dark.text.secondary}] text-sm font-light`}>{subtitle}</p>
           </div>
           <div>
             <button
@@ -368,7 +368,7 @@ export function TicketBoard({ mode = 'development' }: TicketBoardProps) {
           flex-1
           overflow-x-auto
           gap-4
-          bg-white dark:bg-[${theme.colors.dark.background.primary}]
+          bg-[${theme.colors.light.background.primary}] dark:bg-[${theme.colors.dark.background.primary}]
           w-full
           px-6 pt-4
         `}>

@@ -9,7 +9,7 @@ export const theme = {
       text: {
         primary: '#f3f4f6', // Light text on dark background
         secondary: '#9ca3af', // Dimmed text
-        muted: '#6b7280', // Even more dimmed text
+        muted: '#9ca3af', // Dimmed text, same as secondary for consistency
       },
       background: {
         primary: '#262b3d', // Main background
@@ -22,7 +22,7 @@ export const theme = {
           rowHover: '#2b2f44', // Table row hover
         }
       },
-      border: '#374151',
+      border: '#374151',  // Gray-700 for dark mode dividers
     },
     // Light mode colors
     light: {
@@ -30,8 +30,8 @@ export const theme = {
       secondary: '#f3f4f6',
       text: {
         primary: '#111827',    // Almost black for primary text
-        secondary: '#374151',  // Dark gray for secondary text
-        muted: '#6B7280',     // Medium gray for muted text
+        secondary: '#9CA3AF',  // Light gray for secondary text
+        muted: '#CBD5E1',     // Very light gray for muted text
       },
       background: {
         primary: '#ffffff',
@@ -44,7 +44,7 @@ export const theme = {
           rowHover: '#f3f4f6', // Table row hover
         }
       },
-      border: '#e5e7eb',
+      border: '#e5e7eb',  // Gray-200 for light mode dividers
     },
     // Shared colors (same in both modes)
     shared: {
@@ -137,6 +137,8 @@ export const commonStyles = {
       p-6
     `,
   },
+
+  divider: `border-[${theme.colors.light.border}] dark:border-[${theme.colors.dark.border}]`,
 
   button: {
     base: `
@@ -319,5 +321,5 @@ export const typography = {
   h4: 'text-sm font-semibold text-gray-900 dark:text-gray-200',
   body: 'text-gray-700 dark:text-gray-300',
   small: 'text-sm text-gray-600 dark:text-gray-400',
-  subtitle: 'text-gray-600 dark:text-gray-400 text-sm',
+  subtitle: `text-[${theme.colors.light.text.muted}] dark:text-[${theme.colors.dark.text.muted}] text-sm font-normal`,
 };
