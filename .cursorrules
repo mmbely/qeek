@@ -1,6 +1,10 @@
 {
   "rules": [
     {
+      "name": "Notification component usage",
+      "description": "Use the shared Notification component from ui/notification.tsx for all success and error notifications. This ensures consistent styling and theme compliance across the application."
+    },
+    {
       "name": "Preserve existing styling",
       "description": "When modifying components, maintain the existing styling patterns and don't change unrelated styling attributes."
     },

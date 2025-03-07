@@ -57,6 +57,36 @@ export const theme = {
         warning: '#d97706',
         error: '#dc2626',
       },
+      notification: {
+        success: {
+          background: {
+            light: '#f0fdf4',
+            dark: 'rgba(5, 46, 22, 0.3)'
+          },
+          border: {
+            light: '#bbf7d0',
+            dark: '#052e16'
+          },
+          text: {
+            light: '#15803d',
+            dark: '#4ade80'
+          }
+        },
+        error: {
+          background: {
+            light: '#fef2f2',
+            dark: 'rgba(69, 10, 10, 0.3)'
+          },
+          border: {
+            light: '#fecaca',
+            dark: '#450a0a'
+          },
+          text: {
+            light: '#dc2626',
+            dark: '#f87171'
+          }
+        }
+      },
       priority: {
         high: {
           text: '#dc2626',

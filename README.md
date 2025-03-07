@@ -113,6 +113,52 @@ If you encounter issues:
 
 For detailed logs, run the command with the `--verbose` flag.
 
+## Component System
+
+### Documentation
+
+All reusable components are documented in `.cursor/components.json`. This file contains:
+- Component metadata and descriptions
+- Props documentation
+- Styling information including theme usage
+- Usage examples and current implementations
+
+### Shared Components
+
+#### Notification Component
+A standardized notification component for displaying success and error messages:
+
+```tsx
+import { Notification } from '../components/ui/notification';
+
+// Success example
+<Notification
+  type="success"
+  message="Operation completed successfully"
+/>
+
+// Error example
+<Notification
+  type="error"
+  message="An error occurred"
+/>
+```
+
+Features:
+- Consistent styling using theme colors
+- Dark mode support
+- Type-safe props
+- Appropriate icons for each type
+
+### Development Standards
+
+When developing components:
+1. Follow TypeScript type safety guidelines
+2. Ensure dark mode compatibility
+3. Use theme colors from `theme.ts`
+4. Document new components in `components.json`
+5. Follow existing component structure
+
 ## Learn More
 
 You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).

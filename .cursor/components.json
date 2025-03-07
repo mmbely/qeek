@@ -531,6 +531,32 @@
     "location": "src/components/ui",
     "components": [
       {
+        "name": "Notification",
+        "purpose": "A standardized notification component for displaying success and error messages with consistent styling and theme support",
+        "dependencies": [
+          "react",
+          "lucide-react",
+          "../../styles/theme"
+        ],
+        "props": {
+          "type": "'success' | 'error'",
+          "message": "string"
+        },
+        "styling": {
+          "theme": {
+            "background": "theme.colors.shared.notification.[type].background",
+            "border": "theme.colors.shared.notification.[type].border",
+            "text": "theme.colors.shared.notification.[type].text"
+          },
+          "darkMode": true
+        },
+        "location": "src/components/ui/notification.tsx",
+        "currentUsage": [
+          "RulesGenerationTool",
+          "SettingsGenerationTool"
+        ]
+      },
+      {
         "name": "avatar",
         "purpose": "Unknown",
         "dependencies": [],
