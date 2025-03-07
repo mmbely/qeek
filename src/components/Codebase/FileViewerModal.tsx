@@ -1,8 +1,8 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Dialog, DialogContent } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { X } from 'lucide-react';
 import SyntaxHighlighter from 'react-syntax-highlighter';
-import { github, dark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTheme } from '../../context/ThemeContext';
 import { RepositoryFile } from '../../types/repository';
 
@@ -19,104 +19,143 @@ export default function FileViewerModal({ file, isOpen, onClose }: FileViewerMod
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-gray-900 w-full max-w-6xl max-h-[90vh] overflow-hidden">
-        <DialogHeader className="border-b border-gray-700 p-4">
-          <div className="flex justify-between items-center">
-            <DialogTitle className="text-lg font-semibold text-gray-100">
+      <DialogContent className="w-[90vw] max-w-[90%] min-w-[800px] max-h-[90vh] p-0 flex flex-col">
+        {/* Fixed Header */}
+        <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-200">
+              File Details
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               {file.path}
-            </DialogTitle>
-            <Button
-              onClick={onClose}
-              variant="ghost"
-              size="icon"
-              className="text-gray-400 hover:text-gray-200"
-            >
-              <X className="h-5 w-5" />
-            </Button>
+            </p>
           </div>
-        </DialogHeader>
+          <Button
+            onClick={onClose}
+            variant="ghost"
+            size="icon"
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
 
-          {/* Content (Scrollable) */}
-          <div className="p-4 overflow-y-auto flex-1">
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="space-y-6">
             {/* File Metadata Section */}
-            <div className="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">File Metadata</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700 dark:text-gray-300">
-                <div>
-                  <span className="font-medium">Path:</span> {file.path}
+            <div className="bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm rounded-lg p-4 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-3">
+                File Metadata
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <p className="text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Path: </span>
+                    <span className="text-gray-900 dark:text-gray-200">{file.path}</span>
+                  </p>
+                  <p className="text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Language: </span>
+                    <span className="text-gray-900 dark:text-gray-200">{file.language}</span>
+                  </p>
+                  <p className="text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Size: </span>
+                    <span className="text-gray-900 dark:text-gray-200">{file.size} bytes</span>
+                  </p>
                 </div>
-                <div>
-                  <span className="font-medium">Language:</span> {file.language}
-                </div>
-                <div>
-                  <span className="font-medium">Size:</span> {file.size} bytes
-                </div>
-                <div>
-                  <span className="font-medium">Last Updated:</span> {new Date(file.last_updated).toLocaleString()}
-                </div>
-                <div>
-                  <span className="font-medium">Last Commit Message:</span> {file.last_commit_message || 'N/A'}
-                </div>
-                <div>
-                  <span className="font-medium">SHA:</span> {file.metadata?.sha || 'N/A'}
+                <div className="space-y-2">
+                  <p className="text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Last Updated: </span>
+                    <span className="text-gray-900 dark:text-gray-200">
+                      {new Date(file.last_updated).toLocaleString()}
+                    </span>
+                  </p>
+                  <p className="text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Last Commit: </span>
+                    <span className="text-gray-900 dark:text-gray-200">
+                      {file.last_commit_message || 'N/A'}
+                    </span>
+                  </p>
+                  <p className="text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">SHA: </span>
+                    <span className="text-gray-900 dark:text-gray-200">
+                      {file.metadata?.sha || 'N/A'}
+                    </span>
+                  </p>
                 </div>
               </div>
             </div>
 
             {/* File Summary Section */}
-            <div className="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">File Summary</h3>
-              <p className="text-gray-700 dark:text-gray-300">
+            <div className="bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm rounded-lg p-4 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-3">
+                File Summary
+              </h3>
+              <p className="text-sm text-gray-700 dark:text-gray-300">
                 {file.ai_analysis?.summary || 'No summary available'}
               </p>
             </div>
 
             {/* Primary Features Section */}
-            <div className="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Primary Features</h3>
-              <ul className="list-disc list-inside text-gray-700 dark:text-gray-300">
+            <div className="bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm rounded-lg p-4 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-3">
+                Primary Features
+              </h3>
+              <ul className="list-disc list-inside space-y-1">
                 {file.ai_analysis?.primary_features?.map((feature: string, index: number) => (
-                  <li key={index}>{feature}</li>
-                )) || 'No features available'}
+                  <li key={index} className="text-sm text-gray-700 dark:text-gray-300">
+                    {feature}
+                  </li>
+                )) || <li className="text-sm text-gray-500">No features available</li>}
               </ul>
             </div>
 
             {/* Functions Section */}
-            <div className="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Functions</h3>
-              <ul className="list-disc list-inside text-gray-700 dark:text-gray-300">
+            <div className="bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm rounded-lg p-4 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-3">
+                Functions
+              </h3>
+              <ul className="space-y-2">
                 {file.ai_analysis?.functions?.map((func: { name: string; purpose: string }, index: number) => (
-                  <li key={index}>
-                    <span className="font-medium">{func.name}:</span> {func.purpose}
+                  <li key={index} className="text-sm">
+                    <span className="font-medium text-gray-900 dark:text-gray-200">{func.name}: </span>
+                    <span className="text-gray-700 dark:text-gray-300">{func.purpose}</span>
                   </li>
-                )) || 'No functions available'}
+                )) || <li className="text-sm text-gray-500">No functions available</li>}
               </ul>
             </div>
 
             {/* Imports Section */}
-            <div className="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Imports</h3>
-              <ul className="list-disc list-inside text-gray-700 dark:text-gray-300">
+            <div className="bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm rounded-lg p-4 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-3">
+                Imports
+              </h3>
+              <ul className="space-y-2">
                 {file.ai_analysis?.imports?.map((imp: { path: string; purpose: string }, index: number) => (
-                  <li key={index}>
-                    <span className="font-medium">{imp.path}:</span> {imp.purpose}
+                  <li key={index} className="text-sm">
+                    <span className="font-medium text-gray-900 dark:text-gray-200">{imp.path}: </span>
+                    <span className="text-gray-700 dark:text-gray-300">{imp.purpose}</span>
                   </li>
-                )) || 'No imports available'}
+                )) || <li className="text-sm text-gray-500">No imports available</li>}
               </ul>
             </div>
 
             {/* Integration Points Section */}
-            <div className="mb-6 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Integration Points</h3>
-              <ul className="list-disc list-inside text-gray-700 dark:text-gray-300">
+            <div className="bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm rounded-lg p-4 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-3">
+                Integration Points
+              </h3>
+              <ul className="space-y-2">
                 {file.ai_analysis?.integrationPoints?.map((point: { name: string; purpose: string; type: string }, index: number) => (
-                  <li key={index}>
-                    <span className="font-medium">{point.name}:</span> {point.purpose}
+                  <li key={index} className="text-sm">
+                    <span className="font-medium text-gray-900 dark:text-gray-200">{point.name}: </span>
+                    <span className="text-gray-700 dark:text-gray-300">{point.purpose}</span>
                   </li>
-                )) || 'No integration points available'}
+                )) || <li className="text-sm text-gray-500">No integration points available</li>}
               </ul>
             </div>
           </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

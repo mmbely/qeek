@@ -60,6 +60,88 @@
     "location": "src/components/Codebase",
     "components": [
       {
+        "name": "FileViewer",
+        "purpose": "A comprehensive modal component for displaying file content, metadata, and AI analysis with full dark mode support",
+        "dependencies": [
+          "react",
+          "../ui/dialog",
+          "../ui/button",
+          "lucide-react",
+          "react-syntax-highlighter",
+          "../../context/AuthContext",
+          "../../types/repository",
+          "../../styles/theme",
+          "./components/ExpandableCell"
+        ],
+        "props": {
+          "file": "FileInfo - File metadata and content information",
+          "onClose": "() => void - Handler for closing the modal",
+          "isOpen": "boolean - Controls modal visibility"
+        },
+        "styling": {
+          "theme": {
+            "colors": {
+              "light": {
+                "background": {
+                  "primary": "Modal and content background using theme.colors.light.background.primary",
+                  "secondary": "Section backgrounds using theme.colors.light.background.secondary"
+                },
+                "text": {
+                  "primary": "Headers and labels using theme.colors.light.text.primary",
+                  "secondary": "Content text using theme.colors.light.text.secondary"
+                },
+                "border": "Section borders using theme.colors.light.border"
+              },
+              "dark": {
+                "background": {
+                  "primary": "Modal and content background using theme.colors.dark.background.primary",
+                  "secondary": "Section backgrounds using theme.colors.dark.background.secondary"
+                },
+                "text": {
+                  "primary": "Headers and labels using theme.colors.dark.text.primary",
+                  "secondary": "Content text using theme.colors.dark.text.secondary"
+                },
+                "border": "Section borders using theme.colors.dark.border"
+              },
+              "shared": {
+                "blue": "Accent color for tabs and function blocks",
+                "status": "Colors for status indicators"
+              }
+            }
+          },
+          "darkMode": {
+            "implementation": "Full support using theme semantic colors and commonStyles",
+            "detection": "Uses AuthContext's isDarkMode for theme state",
+            "classes": "Applies dark: variant for all theme-sensitive classes"
+          },
+          "layout": {
+            "width": "95vw on mobile, 85vw on desktop",
+            "maxHeight": "90vh with overflow scrolling",
+            "tabs": "Info and AI Analysis tabs for organized content display",
+            "commonStyles": "Uses commonStyles from theme.ts for consistent layouts"
+          }
+        },
+        "features": {
+          "tabs": [
+            "File Information: Basic metadata, size, language, and status",
+            "AI Analysis: Code structure, functions, and classes"
+          ],
+          "gitIntegration": "Displays SHA, commit messages, and other Git metadata",
+          "codeStructure": "Visualizes functions and classes with purpose descriptions"
+        },
+        "integrations": {
+          "contexts": [
+            "AuthContext: For theme state and dark mode detection"
+          ],
+          "components": [
+            "Dialog (shadcn/ui): For modal behavior",
+            "Button (shadcn/ui): For actions and navigation",
+            "ExpandableCell: For collapsible code sections"
+          ]
+        },
+        "location": "src/components/Codebase/FileViewer.tsx"
+      },
+      {
         "name": "CodebaseViewer",
         "purpose": "displays a codebase viewer for a connected GitHub repository, allowing users to browse, filter, sort, and sync files\nDependencies:\n- react: For using React hooks for state management, side effects, and memoized values.\n- ../../context/AuthContext: For accessing user authentication data.\n- ../../context/AccountContext: For accessing current account information.\n- react-router-dom: For navigation, accessing URL parameters, and managing query parameters.\n- ../../types/repository: For type definitions related to repository data.\n- ./FileTable: For displaying the file table component.\n- ./FileFilters: For displaying the file filtering component.\n- ././SyncStatus: For displaying the sync status component.\n- ././ErrorState: For displaying the error state component.\n- ./NotConnectedState: For displaying the not connected state component.\n- ././FileViewerModal: For displaying the file viewer modal component.\n- ./LoadingState: For displaying the loading state component.\n- ../../services/github: For interacting with GitHub services.\n- firebase/firestore: For interacting with Firestore database.\n- ../../config/firebase: For accessing the Firestore database instance.\n- lucide-react: For using the Cog icon.\n- ./ToolSection/ToolSection: For displaying a ToolSection.\nIntegrations:\n- Context AuthContext: Used for user authentication.\n- Context AccountContext: Used for retrieving the currently active account and its settings.\n- API Firebase Firestore: Used to store and retrieve repository data, files, and metadata.\n- API GitHub API (via internal service): Used to sync the repository data with GitHub.\n- Library react-router-dom: Used for routing and navigation, including handling URL parameters and search parameters.\n- Component FileTable: Displays the file table with sorting, pagination, and file selection capabilities.\n- Component FileFilters: Provides filtering options for the file table.\n- Component FileViewerModal: Displays the selected file content in a modal.",
         "dependencies": [
