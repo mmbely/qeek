@@ -8,6 +8,16 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
+# Configuration for Gemini API
+GEMINI_CONFIG = {
+    'MODEL': 'gemini-2.0-flash-lite',  # Most cost-effective model ($0.0001/1K chars)
+    'TEMPERATURE': 0.3,  # Lower temperature for more focused responses
+    'TOP_K': 40,        # Limit token selection for consistency
+    'TOP_P': 0.8,       # Maintain good balance of creativity and accuracy
+    'MAX_RETRIES': 3,   # Maximum number of retries for API calls
+    'RETRY_DELAY': 1    # Delay between retries in seconds
+}
+
 class StateInteractions(TypedDict):
     reads: List[str]
     writes: List[str]
@@ -65,22 +75,28 @@ class GeminiService:
         if not api_key:
             raise ValueError("Gemini API key is required")
             
-        print(f"\nDebug: Initializing GeminiService")
-        print(f"Debug: API key length: {len(api_key)}")
-        print(f"Debug: API key first/last 4 chars: {api_key[:4]}...{api_key[-4:]}")
+        logger.info("Initializing GeminiService with %s (cost: $0.0001/1K chars)", GEMINI_CONFIG['MODEL'])
+        logger.debug("API key length: %d", len(api_key))
         
         try:
             genai.configure(api_key=api_key)
             # Test the configuration with a simple generation
-            model = genai.GenerativeModel('gemini-1.5-pro')
+            model = genai.GenerativeModel(GEMINI_CONFIG['MODEL'])
             response = model.generate_content("Test connection")
-            print("Debug: Successfully tested Gemini API connection")
+            logger.info("Successfully tested Gemini API connection")
         except Exception as e:
-            print(f"Debug: Error configuring Gemini: {str(e)}")
+            logger.error("Error configuring Gemini: %s", str(e))
             raise
             
-        self.model = genai.GenerativeModel('gemini-1.5-pro')
-        
+        self.model = genai.GenerativeModel(
+            GEMINI_CONFIG['MODEL'],
+            generation_config={
+                'temperature': GEMINI_CONFIG['TEMPERATURE'],
+                'top_k': GEMINI_CONFIG['TOP_K'],
+                'top_p': GEMINI_CONFIG['TOP_P'],
+            }
+        )
+
     def create_analysis_prompt(self, file_path: str, content: str) -> str:
         """
         Creates a prompt for code analysis that matches the UI prompt structure.
@@ -159,45 +175,60 @@ Return only valid JSON matching the structure exactly.'''
 
     async def generate_file_summary(self, content: str, file_path: str) -> Dict:
         """Generate structured summary for a file using Gemini"""
-        try:
-            print(f"\nDebug: Generating summary for {file_path}")
-            prompt = self.create_analysis_prompt(file_path, content)
-            print("Debug: Created prompt")
-            
-            # Make the generate_content call properly awaitable
-            response = await asyncio.to_thread(self.model.generate_content, prompt)
-            print("Debug: Received response from Gemini")
-            
-            # Parse the response as JSON
-            analysis = response.text
-            if isinstance(analysis, str):
-                # Try to clean the response before parsing
-                analysis = analysis.strip()
-                if analysis.startswith('```json'):
-                    analysis = analysis.split('```json')[1]
-                if analysis.endswith('```'):
-                    analysis = analysis.rsplit('```', 1)[0]
-                analysis = analysis.strip()
+        for attempt in range(GEMINI_CONFIG['MAX_RETRIES']):
+            try:
+                logger.info("Generating summary for %s (attempt %d)", file_path, attempt + 1)
+                prompt = self.create_analysis_prompt(file_path, content)
                 
-                print("Debug: Cleaned response:")
-                print(analysis)
+                # Make the generate_content call properly awaitable
+                response = await asyncio.to_thread(
+                    self.model.generate_content,
+                    prompt,
+                    generation_config={
+                        'temperature': GEMINI_CONFIG['TEMPERATURE'],
+                        'top_k': GEMINI_CONFIG['TOP_K'],
+                        'top_p': GEMINI_CONFIG['TOP_P'],
+                    }
+                )
+                logger.debug("Received response from Gemini")
                 
-                analysis = json.loads(analysis)
-                print("Debug: Successfully parsed JSON response")
+                # Parse the response as JSON
+                analysis = response.text
+                if isinstance(analysis, str):
+                    # Try to clean the response before parsing
+                    analysis = analysis.strip()
+                    if analysis.startswith('```json'):
+                        analysis = analysis.split('```json')[1]
+                    if analysis.endswith('```'):
+                        analysis = analysis.rsplit('```', 1)[0]
+                    analysis = analysis.strip()
+                    
+                    try:
+                        analysis = json.loads(analysis)
+                        logger.debug("Successfully parsed JSON response")
+                        return {
+                            'analysis': analysis,
+                            'generated_at': datetime.now(UTC).isoformat(),
+                            'model_version': GEMINI_CONFIG['MODEL'],
+                            'cost_per_1k_chars': 0.0001
+                        }
+                    except json.JSONDecodeError as e:
+                        logger.warning("JSON parsing error: %s", str(e))
+                        if attempt < GEMINI_CONFIG['MAX_RETRIES'] - 1:
+                            await asyncio.sleep(GEMINI_CONFIG['RETRY_DELAY'])
+                            continue
+                        raise
             
-            return {
-                'analysis': analysis,
-                'generated_at': datetime.now(UTC).isoformat(),
-                'model_version': 'gemini-1.5-pro'
-            }
-            
-        except Exception as e:
-            print(f"Debug: Error in generate_file_summary: {str(e)}")
-            if 'response' in locals():
-                print(f"Debug: Response type: {type(response.text)}")
-                print(f"Debug: Response content:")
-                print(response.text)
-            return {
-                'error': str(e),
-                'generated_at': datetime.now(UTC).isoformat()
-            }
+            except Exception as e:
+                logger.error("Error in generate_file_summary (attempt %d): %s", attempt + 1, str(e))
+                if attempt < GEMINI_CONFIG['MAX_RETRIES'] - 1:
+                    await asyncio.sleep(GEMINI_CONFIG['RETRY_DELAY'])
+                    continue
+                if 'response' in locals():
+                    logger.error("Response content: %s", response.text)
+                return {
+                    'error': str(e),
+                    'generated_at': datetime.now(UTC).isoformat(),
+                    'model_version': GEMINI_CONFIG['MODEL'],
+                    'cost_per_1k_chars': 0.0001
+                }

@@ -11,10 +11,26 @@ export interface GeminiResponse {
   }>;
 }
 
+// Configuration for different Gemini models
+const GEMINI_MODELS = {
+  FLASH_LITE: 'gemini-2.0-flash-lite', // $0.0001/1K chars
+  FLASH: 'gemini-2.0-flash',           // $0.0005/1K chars
+  PRO: 'gemini-1.5-pro'                // $0.0025/1K chars
+} as const;
+
+// Default configuration for optimal performance
+const DEFAULT_CONFIG = {
+  temperature: 0.3,
+  topK: 40,
+  topP: 0.8,
+  model: GEMINI_MODELS.FLASH_LITE
+};
+
 export async function generateAISummary(
     content: string,
     filePath: string,
-    customPrompt?: string
+    customPrompt?: string,
+    config: Partial<typeof DEFAULT_CONFIG> = {}
 ): Promise<GeminiResponse> {
     const defaultPrompt = `Analyze this code file and provide a structured summary:
       File: ${filePath}
@@ -24,9 +40,12 @@ export async function generateAISummary(
       1. A brief description of the file's purpose
       2. Key functions/classes and their roles
       3. Important dependencies
-      4. Any notable patterns or concerns`;
+      4. Any notable patterns or concerns
+      5. TypeScript-specific patterns and type safety considerations`;
   
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent', {
+    const finalConfig = { ...DEFAULT_CONFIG, ...config };
+    
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${finalConfig.model}:generateContent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -37,9 +56,21 @@ export async function generateAISummary(
           parts: [{
             text: customPrompt || defaultPrompt
           }]
-        }]
+        }],
+        generationConfig: {
+          temperature: finalConfig.temperature,
+          topK: finalConfig.topK,
+          topP: finalConfig.topP
+        }
       })
     });
+  
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        error: `API Error: ${errorData.error?.message || response.statusText}`
+      };
+    }
   
     return response.json();
 }

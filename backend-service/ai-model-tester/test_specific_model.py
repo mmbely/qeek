@@ -14,8 +14,8 @@ genai.configure(api_key=api_key)
 
 # Test with a specific model
 try:
-    # Try with gemini-1.5-flash which should be available
-    model_name = "gemini-1.5-flash"
+    # Try with gemini-2.0-flash-lite which is our production model
+    model_name = "gemini-2.0-flash-lite"
     print(f"Testing with model: {model_name}")
     
     model = genai.GenerativeModel(model_name)

@@ -14,6 +14,7 @@ import os
 from dotenv import load_dotenv
 from utils.firebase_utils import find_firebase_credentials
 import sys
+import logging
 
 # Add the backend-service directory to the Python path
 backend_service_dir = Path(__file__).resolve().parent.parent
@@ -21,6 +22,9 @@ sys.path.append(str(backend_service_dir))
 
 # Now you can import from src
 from src.utils.firebase_utils import find_firebase_credentials
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 async def process_file(github_service, gemini_service, repo_full_name: str, file_info: Dict) -> Dict:
     """Process a single file with rate limiting and retries"""
@@ -67,10 +71,10 @@ async def process_file(github_service, gemini_service, repo_full_name: str, file
             
         except Exception as e:
             if attempt < max_retries - 1:
-                print(f"Error processing {file_info['path']} (attempt {attempt + 1}): {str(e)}")
+                logger.info(f"Error processing {file_info['path']} (attempt {attempt + 1}): {str(e)}")
                 time.sleep(retry_delay)
             else:
-                print(f"Failed to process {file_info['path']} after {max_retries} attempts: {str(e)}")
+                logger.info(f"Failed to process {file_info['path']} after {max_retries} attempts: {str(e)}")
                 file_info['ai_analysis'] = {'error': str(e)}
                 return file_info
 
@@ -102,7 +106,7 @@ async def process_repository(
     skip_types: set = None
 ):
     """
-    Process repository files and generate AI analysis
+    Process repository files and generate AI analysis using Gemini 2.0 Flash Lite
     
     Args:
         repo_full_name: Full repository name (owner/repo)
@@ -113,7 +117,7 @@ async def process_repository(
         skip_types: Optional set of file extensions to skip
     """
     try:
-        print(f"Processing repository: {repo_full_name}")
+        logger.info(f"Processing repository: {repo_full_name}")
         
         # Find Firebase credentials
         cred_path = find_firebase_credentials()
@@ -128,9 +132,17 @@ async def process_repository(
                 # Initialize with default credentials
                 firebase_admin.initialize_app()
         
-        # Initialize services
+        # Initialize services with optimized configuration
         github_service = GitHubService.create_from_account_id(account_id)
         firestore_service = FirestoreService(config['firebase_project_id'])
+        
+        # Configure Gemini service with 2.0 Flash Lite model
+        gemini_config = {
+            'model': 'gemini-2.0-flash-lite',
+            'temperature': 0.3,
+            'top_k': 40,
+            'top_p': 0.8
+        }
         gemini_service = GeminiService(config['gemini_api_key'])
         
         # Get repository metadata and store it
@@ -140,24 +152,25 @@ async def process_repository(
         
         # Get existing files from Firestore
         existing_files = firestore_service.get_repository_files(repo_ref)
-        existing_files_map = {f['path']: f for f in existing_files}
+        existing_files_map = {f['path'].rstrip('/'): f for f in existing_files}
         
         # Get current files from GitHub
-        print("Fetching repository files...")
+        logger.info("Fetching repository files...")
         current_files = github_service.get_repository_files(repo_full_name, skip_types=skip_types, max_files=max_files)
-        current_files_paths = {f['path'] for f in current_files}
+        current_files_paths = {f['path'].rstrip('/') for f in current_files}
         
         # Determine which files need processing
         files_to_process = []
         unchanged_files = []
         
         for file in current_files:
-            existing_file = existing_files_map.get(file['path'])
+            normalized_path = file['path'].rstrip('/')
+            existing_file = existing_files_map.get(normalized_path)
             should_process = False
             
             if existing_file is None:
                 # New file
-                print(f"New file found: {file['path']}")
+                logger.info(f"New file found: {file['path']}")
                 file['status'] = 'new'
                 should_process = True
             else:
@@ -168,7 +181,7 @@ async def process_repository(
                 if existing_sha and current_sha:
                     # We have SHAs to compare
                     if existing_sha != current_sha:
-                        print(f"SHA changed for file: {file['path']}")
+                        logger.info(f"SHA changed for file: {file['path']}")
                         file['status'] = 'modified'
                         should_process = True
                     else:
@@ -177,7 +190,7 @@ async def process_repository(
                         unchanged_files.append(file)
                 else:
                     # No SHA, process to be safe
-                    print(f"No SHA available, processing: {file['path']}")
+                    logger.info(f"No SHA available, processing: {file['path']}")
                     file['status'] = 'unknown'
                     should_process = True
             
@@ -187,15 +200,27 @@ async def process_repository(
         # Mark files that no longer exist as deleted
         deleted_files = []
         for path, existing_file in existing_files_map.items():
+            # Path is already normalized in the map keys
             if path not in current_files_paths:
-                print(f"File no longer exists: {path}")
-                existing_file['status'] = 'deleted'
+                logger.info(f"File no longer exists: {existing_file['path']}")
+                # Preserve existing analysis and metadata
+                existing_file.update({
+                    'status': 'deleted',
+                    'deleted_at': datetime.utcnow().isoformat(),
+                    'metadata': {
+                        **existing_file.get('metadata', {}),
+                        'last_seen': existing_file.get('metadata', {}).get('last_modified'),
+                        'deletion_type': 'removed',  # or 'renamed' if we detect a rename
+                        'original_path': existing_file['path']  # preserve the original path
+                    }
+                })
                 deleted_files.append(existing_file)
+                logger.info(f"Marked as deleted with timestamp {existing_file['deleted_at']}")
         
         total_files = len(files_to_process)
-        print(f"Found {total_files} files that need processing out of {len(current_files)} total files")
-        print(f"Found {len(unchanged_files)} unchanged files")
-        print(f"Found {len(deleted_files)} deleted files")
+        logger.info(f"Found {total_files} files that need processing out of {len(current_files)} total files")
+        logger.info(f"Found {len(unchanged_files)} unchanged files")
+        logger.info(f"Found {len(deleted_files)} deleted files")
         
         # Update initial progress
         firestore_service.update_sync_status(
@@ -230,9 +255,9 @@ async def process_repository(
                                 }
                             )
                         except Exception as e:
-                            print(f"Warning: Failed to update progress: {str(e)}")
+                            logger.info(f"Warning: Failed to update progress: {str(e)}")
                 except Exception as e:
-                    print(f"Error processing file {file['path']}: {str(e)}")
+                    logger.info(f"Error processing file {file['path']}: {str(e)}")
                     # Add file with error information
                     file['ai_analysis'] = {'error': str(e)}
                     processed_files.append(file)
@@ -244,11 +269,16 @@ async def process_repository(
         processed_files.extend(deleted_files)
         
         # Store all files (processed, unchanged, and deleted)
-        print("\nStoring results in Firestore...")
+        logger.info("\nStoring results in Firestore...")
+        logger.info(f"Total files to store: {len(processed_files)} (including {len(deleted_files)} deleted files)")
+        # Log some deleted files for verification
+        for file in deleted_files[:5]:  # Show first 5 deleted files
+            logger.info(f"Deleted file being stored: {file['path']} with status {file['status']}")
+        
         firestore_service.store_repository_files(repo_ref, processed_files)
         firestore_service.update_sync_status(repo_ref, 'completed')
         
-        print(f"\nCompleted processing {total_files} files")
+        logger.info(f"\nCompleted processing {total_files} files")
         return {
             'status': 'success',
             'repository': repo_metadata,
@@ -259,7 +289,7 @@ async def process_repository(
     except Exception as e:
         import traceback
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
-        print(f"\nError: {error_msg}")
+        logger.info(f"\nError: {error_msg}")
         if 'repo_ref' in locals() and 'firestore_service' in locals():
             firestore_service.update_sync_status(repo_ref, 'error', error=error_msg)
         return {

@@ -30,8 +30,8 @@ if not api_key:
 else:
     try:
         genai.configure(api_key=api_key)
-        # Test the API key with a simple request
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # Test the API connection with our primary model
+        model = genai.GenerativeModel("gemini-2.0-flash-lite")
         _ = model.generate_content("Hello")
         print("Gemini API key validated successfully")
     except Exception as e:
@@ -40,12 +40,12 @@ else:
 # GitHub API token (optional but recommended to avoid rate limits)
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 
-# Available Gemini models - updated with working models
+# Available models for testing, ordered by preference
 MODELS = [
-    {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash"},
-    {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro"},
-    {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash"},
-    {"id": "gemini-2.0-flash-lite", "name": "Gemini 2.0 Flash Lite"}
+    {"id": "gemini-2.0-flash-lite", "name": "Gemini 2.0 Flash Lite", "cost": "0.0001/1K chars"},
+    {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "cost": "0.0005/1K chars"},
+    {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "cost": "0.0025/1K chars"},
+    {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "cost": "0.0005/1K chars"}
 ]
 
 @app.route('/')
@@ -151,7 +151,7 @@ def generate_summary():
     data = request.json
     repo_id = data.get('repo_id')
     file_id = data.get('file_id')
-    model_id = data.get('model_id', 'gemini-1.5-flash')  # Default to the model we know works
+    model_id = data.get('model_id', 'gemini-2.0-flash-lite')  # Default to our primary model
     
     # Get file metadata
     file_ref = db.collection('repositories').document(repo_id).collection('files').document(file_id)
