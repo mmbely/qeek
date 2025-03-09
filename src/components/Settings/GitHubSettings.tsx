@@ -18,9 +18,13 @@ import { Button } from '../ui/button';
 import { Progress } from '../ui/progress';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Account } from '../../types/account';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { BACKEND_URL } from '../../config/constants';
+import { User } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 
 export default function GitHubSettings() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const { selectedRepository, setSelectedRepository } = useCodebase();
   const { currentAccount } = useAccount();
   const [token, setToken] = useState('');
@@ -187,6 +191,15 @@ export default function GitHubSettings() {
     }
   };
 
+  const getIdToken = async () => {
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('No user found');
+    }
+    return await currentUser.getIdToken();
+  };
+
   const handleRepositorySelect = async (repo: GitHubRepo) => {
     if (!user?.uid || !currentAccount) {
       console.error('No user or account found:', { user, currentAccount });
@@ -199,13 +212,30 @@ export default function GitHubSettings() {
       setSelectedRepository(repo.full_name);
       setSyncStatus({ status: 'pending' });
       
-      // Start repository sync
-      await syncRepository(repo.full_name, currentAccount.id);
-      
-      // Update account settings
+      // Update account settings first
       await updateAccountSettings({
         githubRepository: repo.full_name
       });
+
+      // Call the backend service instead of Firebase Function
+      const response = await fetch(`${BACKEND_URL}/repositories/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await getIdToken()}`
+        },
+        body: JSON.stringify({
+          repositoryName: repo.full_name,
+          accountId: currentAccount.id
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('Sync result:', result);
       
       setShowSavedMessage(true);
       setTimeout(() => setShowSavedMessage(false), 2000);
@@ -215,7 +245,10 @@ export default function GitHubSettings() {
     } catch (error: unknown) {
       console.error('Failed to select repository:', error);
       setError('Failed to select repository. Please try again.');
-      setSyncStatus({ status: 'failed', error: error instanceof Error ? error.message : 'Unknown error occurred' });
+      setSyncStatus({ 
+        status: 'failed', 
+        error: error instanceof Error ? error.message : 'Unknown error occurred' 
+      });
     }
   };
 
@@ -256,13 +289,25 @@ export default function GitHubSettings() {
     try {
       setSyncStatus({ status: 'pending' });
 
-      // Update account settings first
-      await updateAccountSettings({
-        githubRepository: repo.full_name
+      // Call the backend service instead of Firebase Function
+      const response = await fetch(`${BACKEND_URL}/repositories/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await getIdToken()}`
+        },
+        body: JSON.stringify({
+          repositoryName: repo.full_name,
+          accountId: currentAccount.id
+        })
       });
-
-      // Then trigger the sync
-      await syncRepository(repo.full_name, currentAccount.id);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('Sync result:', result);
       
     } catch (err) {
       console.error('Failed to retrieve repository:', err);
@@ -293,15 +338,17 @@ export default function GitHubSettings() {
     return (
       <div className="mt-4 space-y-2">
         {syncStatus.status === 'pending' && (
-          <Alert>
-            <AlertDescription>Initializing repository sync...</AlertDescription>
+          <Alert className="bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+            <AlertDescription className="text-gray-800 dark:text-gray-200">
+              Initializing repository sync...
+            </AlertDescription>
           </Alert>
         )}
         
         {syncStatus.status === 'syncing' && syncStatus.progress && (
           <div className="space-y-2">
-            <Alert>
-              <AlertDescription>
+            <Alert className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+              <AlertDescription className="text-blue-800 dark:text-blue-200">
                 Syncing repository... 
                 {syncStatus.progress.filesProcessed} / {syncStatus.progress.totalFiles} files
               </AlertDescription>
@@ -309,6 +356,7 @@ export default function GitHubSettings() {
             <Progress 
               value={(syncStatus.progress.filesProcessed / syncStatus.progress.totalFiles) * 100} 
               max={100}
+              className="bg-gray-200 dark:bg-gray-700"
             />
             <div className="text-sm text-gray-500 dark:text-gray-400">
               New: {syncStatus.progress.newFiles} | 
@@ -320,14 +368,18 @@ export default function GitHubSettings() {
         )}
         
         {syncStatus.status === 'completed' && (
-          <Alert variant="success">
-            <AlertDescription>Repository sync completed successfully!</AlertDescription>
+          <Alert className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+            <AlertDescription className="text-green-800 dark:text-green-200">
+              Repository sync completed successfully!
+            </AlertDescription>
           </Alert>
         )}
         
         {syncStatus.status === 'failed' && (
-          <Alert variant="error">
-            <AlertDescription>{syncStatus.error || 'Failed to sync repository'}</AlertDescription>
+          <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+            <AlertDescription className="text-red-800 dark:text-red-200">
+              {syncStatus.error || 'Failed to sync repository'}
+            </AlertDescription>
           </Alert>
         )}
       </div>

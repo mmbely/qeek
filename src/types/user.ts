@@ -2,9 +2,10 @@ import { User as FirebaseUser } from 'firebase/auth';
 
 export interface CustomUser {
   uid: string;
-  email: string;
-  displayName?: string;
-  photoURL?: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  getIdToken: () => Promise<string>;
   accountIds?: string[];
   companyId?: string;
 }
@@ -34,4 +35,16 @@ export interface UserInvitation extends InvitationData {
   id: string;
   accountName?: string;
   inviterName?: string;
+}
+
+// Helper function to convert Firebase User to CustomUser
+export function toCustomUser(firebaseUser: FirebaseUser): CustomUser {
+  return {
+    uid: firebaseUser.uid,
+    email: firebaseUser.email,
+    displayName: firebaseUser.displayName,
+    photoURL: firebaseUser.photoURL,
+    getIdToken: () => firebaseUser.getIdToken(),
+    // Map other properties
+  };
 }

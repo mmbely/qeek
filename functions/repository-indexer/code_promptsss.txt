@@ -1,0 +1,1429 @@
+
+
+--- File: ./code-prompt.py ---
+
+import os
+import fnmatch
+
+# Specify the directory of your GitHub repository
+repository_dir = '.'
+output_file = 'code_prompt.txt'
+
+# List of common code file extensions, including .sql, .js, .html, .css, and .mjs
+code_extensions = ['.js', '.py', '.ts', '.html', '.css', '.mjs', '.sql']
+
+# Function to parse the .gitignore pyfile and return the list of patterns to ignore
+def parse_gitignore(gitignore_path):
+    ignore_patterns = []
+    if os.path.exists(gitignore_path):
+        with open(gitignore_path, 'r') as gitignore_file:
+            for line in gitignore_file:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    # Ensure directories end with a slash and normalize the pattern
+                    if line.endswith('/'):
+                        ignore_patterns.append(line.rstrip('/'))
+                    else:
+                        ignore_patterns.append(line)
+    return ignore_patterns
+
+# Check if a file or directory should be ignored based on the .gitignore patterns
+def should_ignore(file_path, ignore_patterns):
+    relative_path = os.path.relpath(file_path, repository_dir)
+
+    for pattern in ignore_patterns:
+        # Handle patterns without leading slashes by allowing them to match anywhere
+        if pattern.startswith('/'):
+            pattern = pattern[1:]
+
+        # Match directories
+        if pattern.endswith('/'):
+            if relative_path.startswith(pattern):
+                print(f"Ignoring directory: {relative_path}")
+                return True
+        # Match files and wildcards
+        elif fnmatch.fnmatch(relative_path, pattern):
+            print(f"Ignoring file: {relative_path}")
+            return True
+    return False
+
+# Function to check if a file is a binary file
+def is_binary(file_path):
+    try:
+        with open(file_path, 'rb') as file:
+            chunk = file.read(1024)
+            if b'\x00' in chunk:  # Binary files often contain NULL bytes
+                return True
+    except:
+        return True  # Treat as binary if there is any error reading the file
+    return False
+
+# Get the ignore patterns from the .gitignore file
+gitignore_file_path = os.path.join(repository_dir, '.gitignore')
+ignore_patterns = parse_gitignore(gitignore_file_path)
+
+# Open the output file in write mode
+with open(output_file, 'w') as outfile:
+    # Walk through all the files in the directory
+    for root, dirs, files in os.walk(repository_dir):
+        # Filter out directories that should be ignored
+        dirs_to_remove = []
+        for d in dirs:
+            dir_path = os.path.join(root, d)
+            if should_ignore(dir_path, ignore_patterns):
+                dirs_to_remove.append(d)
+
+        # Remove the directories that should be ignored
+        for d in dirs_to_remove:
+            print(f"Removing directory from traversal: {os.path.join(root, d)}")
+            dirs.remove(d)
+
+        # Check files in the current directory
+        for file in files:
+            file_path = os.path.join(root, file)
+
+            # Check if the file has a code extension, is not binary, and is not ignored
+            if (
+                not any(file.endswith(ext) for ext in code_extensions) or
+                should_ignore(file_path, ignore_patterns) or
+                is_binary(file_path)
+            ):
+                continue
+
+            try:
+                # Write a separator indicating the file path
+                outfile.write(f'\n\n--- File: {file_path} ---\n\n')
+
+                # Append the contents of the file to the output file
+                with open(file_path, 'r', encoding='utf-8') as infile:
+                    outfile.write(infile.read())
+            except UnicodeDecodeError:
+                print(f"Skipping non-UTF-8 file: {file_path}")
+
+print(f"All code files have been merged into {output_file}")
+
+
+--- File: ./tests/test_gemini_service.py ---
+
+"""
+Tests for the GeminiService class which provides AI-powered code analysis.
+
+This test suite verifies that the GeminiService can:
+1. Create appropriate analysis prompts
+2. Generate structured summaries for different file types
+3. Handle various programming languages and frameworks
+4. Process both simple and complex code files
+"""
+
+import pytest
+from src.services.gemini_service import GeminiService
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+
+@pytest.fixture
+def gemini_service():
+    """
+    Fixture that provides a configured GeminiService instance.
+    
+    Requires a valid Gemini API key in .env.test file.
+    Skips tests if no API key is found.
+    """
+    root_dir = Path(__file__).parent.parent
+    env_path = root_dir / '.env.test'
+    load_dotenv(env_path)
+    api_key = os.getenv('GEMINI_API_KEY')
+    if not api_key:
+        pytest.skip("GEMINI_API_KEY not found in .env.test")
+    return GeminiService(api_key)
+
+def test_create_analysis_prompt(gemini_service):
+    """Test that analysis prompts are created correctly with file path and content."""
+    file_path = "test.py"
+    content = """
+def hello_world():
+    print("Hello, World!")
+    """
+    prompt = gemini_service.create_analysis_prompt(file_path, content)
+    assert "FILE PATH: test.py" in prompt
+    assert "CODE CONTENT:" in prompt
+    assert "Hello, World!" in prompt
+
+def test_generate_file_summary_python(gemini_service):
+    """Test analysis of a simple Python file with a basic function."""
+    content = """
+def calculate_sum(a: int, b: int) -> int:
+    '''Returns the sum of two integers'''
+    return a + b
+    """
+    result = gemini_service.generate_file_summary(content, "math_utils.py")
+    
+    assert 'error' not in result
+    analysis = result['analysis']
+    
+    # Check basic structure
+    assert 'summary' in analysis
+    assert 'searchMetadata' in analysis
+    assert 'functions' in analysis
+    
+    # Check function analysis
+    functions = analysis['functions']
+    assert len(functions) > 0
+    calc_sum = next((f for f in functions if f['name'] == 'calculate_sum'), None)
+    assert calc_sum is not None
+    assert 'params' in calc_sum
+    assert 'returns' in calc_sum
+
+def test_generate_file_summary_typescript(gemini_service):
+    """Test analysis of a TypeScript interface and type definitions."""
+    content = """
+interface User {
+    id: string;
+    name: string;
+    email: string;
+}
+
+type UserRole = 'admin' | 'user' | 'guest';
+
+export function isAdmin(user: User, role: UserRole): boolean {
+    return role === 'admin';
+}
+    """
+    result = gemini_service.generate_file_summary(content, "types.ts")
+    
+    assert 'error' not in result
+    analysis = result['analysis']
+    
+    # Debug print to see actual values
+    print("\nDebug - Primary Features:", analysis['searchMetadata']['primaryFeatures'])
+    print("Debug - Data Types:", analysis['searchMetadata']['dataTypes'])
+    
+    # Check TypeScript-specific elements - more flexible checks
+    assert any(
+        'typescript' in feature.lower() or 'type' in feature.lower() or 'interface' in feature.lower()
+        for feature in analysis['searchMetadata']['primaryFeatures']
+    )
+    
+    # Check for TypeScript types
+    data_types = [dt.lower() for dt in analysis['searchMetadata']['dataTypes']]
+    assert any('interface' in dt or 'type' in dt for dt in data_types)
+    
+    # Check exports
+    assert any(
+        func['name'] == 'isAdmin' 
+        for func in analysis['functions']
+    )
+
+def test_generate_file_summary_react_component(gemini_service):
+    """Test analysis of a React component with hooks and TypeScript."""
+    content = """
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
+
+interface Props {
+    userId: string;
+}
+
+export const UserProfile: React.FC<Props> = ({ userId }) => {
+    const [user, setUser] = useState(null);
+    const { getUser } = useAuth();
+    
+    useEffect(() => {
+        const loadUser = async () => {
+            const userData = await getUser(userId);
+            setUser(userData);
+        };
+        loadUser();
+    }, [userId]);
+    
+    return (
+        <div>
+            {user ? (
+                <h1>{user.name}</h1>
+            ) : (
+                <p>Loading...</p>
+            )}
+        </div>
+    );
+};
+    """
+    result = gemini_service.generate_file_summary(content, "UserProfile.tsx")
+    
+    assert 'error' not in result
+    analysis = result['analysis']
+    
+    # Debug print
+    print("\nDebug - State Management:", analysis['searchMetadata']['stateManagement'])
+    
+    # Check React-specific elements
+    assert 'react' in analysis['summary'].lower()
+    assert 'component' in analysis['summary'].lower()
+    
+    # More flexible state management checks
+    state_management = [sm.lower() for sm in analysis['searchMetadata']['stateManagement']]
+    assert any('usestate' in sm for sm in state_management)
+    
+    # Check dependencies
+    assert 'react' in analysis['searchMetadata']['dependencies']['external']
+    
+    # Check imports
+    imports = analysis['imports']
+    react_import = next((imp for imp in imports if imp['path'] == 'react'), None)
+    assert react_import is not None
+    assert 'useState' in react_import['items']
+    assert 'useEffect' in react_import['items']
+
+def test_generate_file_summary_javascript(gemini_service):
+    """Test analysis of a JavaScript module with ES6+ features."""
+    content = """
+import axios from 'axios';
+
+export class ApiClient {
+    constructor(baseURL) {
+        this.client = axios.create({ baseURL });
+    }
+
+    async fetchUsers() {
+        const response = await this.client.get('/users');
+        return response.data;
+    }
+
+    async createUser(userData) {
+        const response = await this.client.post('/users', userData);
+        return response.data;
+    }
+}
+
+export const API_VERSION = 'v1';
+    """
+    result = gemini_service.generate_file_summary(content, "api-client.js")
+    
+    assert 'error' not in result
+    analysis = result['analysis']
+    
+    # Debug print
+    print("\nDebug - Data Types:", analysis['searchMetadata']['dataTypes'])
+    print("Debug - Classes:", analysis['classes'])
+    
+    # Check JavaScript-specific elements
+    data_types = [dt.lower() for dt in analysis['searchMetadata']['dataTypes']]
+    assert any('class' in dt for dt in data_types)
+    
+    # Check dependencies
+    assert 'axios' in analysis['searchMetadata']['dependencies']['external']
+    
+    # Check API client class
+    api_client = next((c for c in analysis['classes'] if c['name'] == 'ApiClient'), None)
+    assert api_client is not None
+    assert 'fetchUsers' in api_client['methods']
+    assert 'createUser' in api_client['methods']
+
+# Add more test cases for other file types as needed
+
+--- File: ./tests/test_github_service.py ---
+
+import pytest
+from src.services.github_service import GitHubService
+from src.config import load_config
+
+@pytest.fixture
+def github_service():
+    config = load_config('../.env.test')
+    return GitHubService(config['github_token'])
+
+def test_get_repository_metadata(github_service):
+    metadata = github_service.get_repository_metadata('mmbely/qeek')
+    assert metadata['name'] == 'qeek'
+    assert 'description' in metadata
+    assert 'language' in metadata
+
+
+--- File: ./tests/__init__.py ---
+
+
+
+--- File: ./src/test_paths.py ---
+
+from pathlib import Path
+import os
+
+# Print current working directory
+print("Current working directory:", os.getcwd())
+
+# Print path to this file
+script_path = Path(__file__).resolve()
+print("Script path:", script_path)
+
+# Print path to root .env
+root_dir = script_path.parent.parent.parent.parent
+root_env_path = root_dir / '.env'
+print("Root .env path:", root_env_path)
+print("Root .env exists:", root_env_path.exists())
+
+# Print path to firebase credentials in root directory
+firebase_creds_path = root_dir / 'firebase-credentials.json'
+print("Firebase credentials path:", firebase_creds_path)
+print("Firebase credentials exist:", firebase_creds_path.exists())
+
+--- File: ./src/cli.py ---
+
+import argparse
+import firebase_admin
+from firebase_admin import credentials
+from main import process_repository
+from config import load_config
+from services.github_service import GitHubService
+from pathlib import Path
+
+def main():
+    parser = argparse.ArgumentParser(description='Repository Indexer CLI')
+    parser.add_argument('repo_name', help='Repository name (e.g., "owner/repo")')
+    parser.add_argument('--env-file', help='Path to .env file', default='.env')
+    parser.add_argument('--account-id', help='Account ID to use', required=True)
+    parser.add_argument('--test-mode', action='store_true', help='Use test mode with local token')
+    
+    args = parser.parse_args()
+    
+    # Load configuration
+    config = load_config(args.env_file)
+    
+    # Initialize Firebase
+    if not firebase_admin._apps:
+        root_dir = Path(__file__).resolve().parent.parent.parent.parent
+        cred_path = root_dir / 'firebase-credentials.json'
+        print(f"Initializing Firebase with credentials from: {cred_path}")
+        cred = credentials.Certificate(str(cred_path))
+        firebase_admin.initialize_app(cred, {
+            'projectId': config['firebase_project_id']
+        })
+    
+    # Process repository
+    result = process_repository(
+        repo_full_name=args.repo_name,
+        user_id='test_user',  # Only used for logging
+        account_id=args.account_id,
+        config=config
+    )
+    
+    print(result)
+
+if __name__ == '__main__':
+    main()
+
+
+--- File: ./src/config.py ---
+
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+
+def load_config(env_path=None):
+    """Load configuration from .env file or environment variables"""
+    is_cloud_function = os.getenv('FUNCTION_TARGET') is not None
+    root_dir = Path(__file__).resolve().parent.parent.parent.parent
+    
+    if is_cloud_function:
+        # Running in Cloud Functions
+        return {
+            'firebase_project_id': 'qap-ai',
+            'environment': 'production',
+            'gemini_api_key': os.getenv('GEMINI_API_KEY')
+        }
+    else:
+        # Local development
+        if env_path:
+            load_dotenv(env_path)
+        else:
+            root_env_path = root_dir / '.env'
+            
+            if root_env_path.exists():
+                print(f"Loading config from root .env: {root_env_path}")
+                load_dotenv(root_env_path)
+            else:
+                print(f"Warning: No .env file found at {root_env_path}")
+                load_dotenv()
+
+        firebase_creds_path = root_dir / 'firebase-credentials.json'
+        
+        # Print environment variables for debugging
+        print("Environment variables:")
+        print(f"GITHUB_TOKEN exists: {'GITHUB_TOKEN' in os.environ}")
+        print(f"REACT_APP_GITHUB_TOKEN exists: {'REACT_APP_GITHUB_TOKEN' in os.environ}")
+        
+        return {
+            'firebase_project_id': os.getenv('REACT_APP_FIREBASE_PROJECT_ID', 'qap-ai'),
+            'firebase_credentials_path': str(firebase_creds_path),
+            'environment': os.getenv('ENVIRONMENT', 'development'),
+            'gemini_api_key': os.getenv('GEMINI_API_KEY')
+        }
+
+
+--- File: ./src/firestore_service.py ---
+
+from firebase_admin import credentials, firestore, initialize_app
+from datetime import datetime
+from typing import Dict, List
+
+class FirestoreService:
+    def __init__(self, project_id: str):
+        cred = credentials.ApplicationDefault()
+        initialize_app(cred, {
+            'projectId': project_id,
+        })
+        self.db = firestore.client()
+
+    def store_repository_metadata(self, repo_id: str, metadata: Dict):
+        """
+        Store repository metadata in Firestore
+        """
+        repo_ref = self.db.collection('repositories').document(repo_id)
+        repo_ref.set({
+            'metadata': {
+                **metadata,
+                'last_synced': datetime.now(),
+                'sync_status': 'syncing',
+                'files_processed': 0,
+                'total_files': 0,
+                'error': None
+            }
+        }, merge=True)
+
+    def store_repository_files(self, repo_id: str, files: List[Dict]):
+        """
+        Store repository files metadata in Firestore
+        """
+        repo_ref = self.db.collection('repositories').document(repo_id)
+        batch = self.db.batch()
+        files_processed = 0
+        
+        # Update total file count
+        repo_ref.set({
+            'metadata': {
+                'total_files': len(files)
+            }
+        }, merge=True)
+        
+        for file in files:
+            file_ref = repo_ref.collection('files').document(file['path'])
+            batch.set(file_ref, {
+                **file,
+                'indexed_at': datetime.now()
+            })
+            
+            files_processed += 1
+            
+            # Update progress every 100 files
+            if files_processed % 100 == 0:
+                repo_ref.set({
+                    'metadata': {
+                        'files_processed': files_processed
+                    }
+                }, merge=True)
+            
+            # Commit every 500 files (Firestore batch limit)
+            if len(batch._writes) >= 500:
+                batch.commit()
+                batch = self.db.batch()
+        
+        # Commit any remaining files
+        if len(batch._writes) > 0:
+            batch.commit()
+        
+        # Update final file count
+        repo_ref.set({
+            'metadata': {
+                'files_processed': files_processed
+            }
+        }, merge=True)
+
+    def update_sync_status(self, repo_id: str, status: str, error: str = None):
+        """
+        Update repository sync status
+        """
+        repo_ref = self.db.collection('repositories').document(repo_id)
+        repo_ref.set({
+            'metadata': {
+                'sync_status': status,
+                'last_synced': datetime.now(),
+                'error': error
+            }
+        }, merge=True)
+
+--- File: ./src/cleanup.py ---
+
+import firebase_admin
+from firebase_admin import credentials, firestore
+from pathlib import Path
+
+def cleanup_repository(repo_name: str):
+    """Clean up repository files in Firestore"""
+    try:
+        # Initialize Firebase
+        root_dir = Path(__file__).resolve().parent.parent.parent.parent
+        cred_path = root_dir / 'firebase-credentials.json'
+        cred = credentials.Certificate(str(cred_path))
+        firebase_admin.initialize_app(cred)
+        
+        db = firestore.client()
+        
+        # Get repository reference
+        repo_id = repo_name.replace('/', '_')
+        repo_ref = db.collection('repositories').document(repo_id)
+        
+        # Delete all files in the files collection
+        files_ref = repo_ref.collection('files')
+        docs = files_ref.list_documents()
+        for doc in docs:
+            doc.delete()
+            
+        print(f"Cleaned up files for repository: {repo_name}")
+        
+    except Exception as e:
+        print(f"Error cleaning up repository: {str(e)}")
+    finally:
+        if firebase_admin._apps:
+            firebase_admin.delete_app(firebase_admin.get_app())
+
+if __name__ == '__main__':
+    cleanup_repository('mmbely/qeek')
+
+--- File: ./src/github_service.py ---
+
+from github import Github
+from typing import List, Dict
+from firebase_admin import firestore
+
+class GitHubService:
+    @staticmethod
+    def create_from_account_id(account_id: str) -> 'GitHubService':
+        """Factory method to create GitHubService using account's token from Firebase"""
+        db = firestore.client()
+        account_doc = db.collection('accounts').document(account_id).get()
+        
+        if not account_doc.exists:
+            raise ValueError(f"Account {account_id} not found")
+            
+        account_data = account_doc.to_dict()
+        github_token = account_data.get('settings', {}).get('githubToken')
+        
+        if not github_token:
+            raise ValueError(f"GitHub token not found for account {account_id}")
+            
+        return GitHubService(github_token)
+
+    @staticmethod
+    def create_for_testing(token: str) -> 'GitHubService':
+        """Create GitHubService instance for testing"""
+        return GitHubService(token)
+
+    def __init__(self, token: str):
+        self.github = Github(token)
+
+    def get_repository_files(self, repo_full_name: str) -> List[Dict]:
+        """
+        Fetch all files from a GitHub repository
+        """
+        try:
+            repo = self.github.get_repo(repo_full_name)
+            contents = []
+            total_files = 0
+            
+            def process_contents(path=''):
+                items = repo.get_contents(path)
+                for item in items:
+                    if item.type == 'dir':
+                        process_contents(item.path)
+                    else:
+                        contents.append({
+                            'name': item.name,
+                            'path': item.path,
+                            'size': item.size,
+                            'last_updated': repo.get_commits(path=item.path)[0].commit.author.date,
+                            'type': item.type,
+                            'language': item.name.split('.')[-1] if '.' in item.name else None,
+                            'sha': item.sha  # Add SHA for version tracking
+                        })
+            
+            process_contents()
+            return contents
+            
+        except Exception as e:
+            print(f"Error fetching repository contents: {str(e)}")
+            raise
+
+    def get_repository_metadata(self, repo_full_name: str) -> Dict:
+        """Get basic repository metadata"""
+        try:
+            repo = self.github.get_repo(repo_full_name)
+            return {
+                'name': repo.name,
+                'full_name': repo.full_name,
+                'description': repo.description,
+                'default_branch': repo.default_branch,
+                'language': repo.language,
+                'created_at': repo.created_at.isoformat() if repo.created_at else None,
+                'updated_at': repo.updated_at.isoformat() if repo.updated_at else None,
+                'size': repo.size,
+                'stars': repo.stargazers_count,
+                'forks': repo.forks_count
+            }
+        except Exception as e:
+            print(f"Error fetching repository metadata: {str(e)}")
+            raise
+
+--- File: ./src/main.py ---
+
+import json
+import firebase_admin
+from firebase_admin import credentials
+from services.github_service import GitHubService
+from services.firestore_service import FirestoreService
+from services.gemini_service import GeminiService
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+
+async def process_contents(github_service, gemini_service, repo_full_name: str, contents: list):
+    """Process repository contents recursively and generate AI summaries"""
+    try:
+        files = github_service.get_repository_files(repo_full_name)
+        
+        # Generate AI summaries for each file
+        for file_info in files:
+            if isinstance(file_info, dict) and 'path' in file_info:
+                if file_info.get('type') != 'dir':
+                    try:
+                        content = github_service.get_file_content(repo_full_name, file_info['path'])
+                        
+                        # Generate enhanced analysis
+                        analysis_result = await gemini_service.generate_file_summary(content, file_info['path'])
+                        
+                        # Add the analysis to file metadata
+                        file_info['ai_analysis'] = analysis_result['analysis']
+                        file_info['analysis_metadata'] = {
+                            'generated_at': analysis_result['generated_at'],
+                            'model_version': analysis_result['model_version']
+                        }
+                        
+                        # Add searchable fields at root level for better query performance
+                        if 'analysis' in analysis_result:
+                            analysis = analysis_result['analysis']
+                            file_info['summary'] = analysis.get('summary', '')
+                            file_info['primary_features'] = analysis.get('searchMetadata', {}).get('primaryFeatures', [])
+                            file_info['state_management'] = analysis.get('searchMetadata', {}).get('stateManagement', [])
+                            file_info['modification_points'] = [
+                                point
+                                for func in analysis.get('functions', [])
+                                for point in func.get('modificationPoints', [])
+                            ]
+                            
+                    except Exception as e:
+                        print(f"Error processing file {file_info['path']}: {str(e)}")
+                        file_info['ai_analysis'] = {'error': str(e)}
+                
+                contents.append(file_info)
+            else:
+                print(f"Skipping invalid file info: {file_info}")
+        
+        return contents
+    except Exception as e:
+        print(f"Error processing contents: {str(e)}")
+        raise
+
+def process_repository(repo_full_name: str, user_id: str, account_id: str, config: dict):
+    """Main repository processing logic"""
+    try:
+        print(f"Processing repository: {repo_full_name}")
+        print(f"Environment: {config['environment']}")
+        
+        # Initialize services based on environment
+        if config['environment'] == 'development':
+            print("Using development environment")
+            github_service = GitHubService.create_from_account_id(account_id)  # Use Firebase token even in dev
+        else:
+            print("Using production environment")
+            github_service = GitHubService.create_from_account_id(account_id)
+        
+        firestore_service = init_firestore_dev(config) if config['environment'] == 'development' else init_firestore_prod(config)
+        
+        # Initialize Gemini service
+        gemini_service = GeminiService(config['gemini_api_key'])
+        
+        # Get repository metadata
+        repo_metadata = github_service.get_repository_metadata(repo_full_name)
+        
+        # Initialize repository document
+        repo_ref = firestore_service.store_repository_metadata(
+            repo_full_name.replace('/', '_'),
+            repo_metadata
+        )
+        
+        # Process repository contents with AI summaries
+        contents = []
+        await process_contents(github_service, gemini_service, repo_full_name, contents)
+        
+        # Store files metadata with AI summaries
+        firestore_service.store_repository_files(repo_ref, contents)
+        
+        # Update final status
+        firestore_service.update_sync_status(repo_ref, 'completed')
+        
+        return {
+            'status': 'success',
+            'repository': repo_metadata,
+            'file_count': len(contents)
+        }
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Error: {error_msg}")
+        return {
+            'status': 'error',
+            'error': error_msg
+        }
+
+def init_firestore_dev(config):
+    """Initialize Firestore for development"""
+    if not firebase_admin._apps:
+        cred = credentials.Certificate(config['firebase_credentials_path'])
+        firebase_admin.initialize_app(cred, {
+            'projectId': config['firebase_project_id']
+        })
+    return FirestoreService(config['firebase_project_id'])
+
+def init_firestore_prod(config):
+    """Initialize Firestore for production"""
+    if not firebase_admin._apps:
+        # In Cloud Functions, use default credentials
+        firebase_admin.initialize_app()
+    return FirestoreService(config['firebase_project_id'])
+
+def get_github_token_from_firebase(account_id):
+    """Get GitHub token from Firebase in production"""
+    db = firebase_admin.firestore.client()
+    account_doc = db.collection('accounts').document(account_id).get()
+    if not account_doc.exists:
+        raise Exception("Account document not found")
+        
+    account_data = account_doc.to_dict()
+    github_token = account_data.get('settings', {}).get('githubToken')
+    if not github_token:
+        raise Exception("GitHub token not found in account settings")
+    
+    return github_token
+
+def load_env():
+    """Load environment variables from root .env file"""
+    env_path = Path(__file__).parents[3] / '.env'  # Go up 3 levels to reach root
+    load_dotenv(env_path)
+
+def get_secret(secret_id: str) -> str:
+    """Retrieve secret from environment variables"""
+    load_env()
+    return os.getenv(secret_id)
+
+# This is what the Cloud Function will call
+def cloud_function_handler(repo_full_name: str, user_id: str, account_id: str):
+    config = {
+        'environment': os.getenv('ENVIRONMENT', 'development'),
+        'firebase_project_id': 'qap-ai',
+        'gemini_api_key': get_secret('GEMINI_API_KEY')
+    }
+    return process_repository(repo_full_name, user_id, account_id, config)
+
+
+--- File: ./src/__init__.py ---
+
+
+
+--- File: ./src/services/firestore_service.py ---
+
+from firebase_admin import firestore
+from datetime import datetime
+from typing import Dict, List
+
+class FirestoreService:
+    def __init__(self, project_id: str):
+        if not project_id:
+            raise ValueError("Project ID is required")
+        self.db = firestore.client()
+
+    def store_repository_metadata(self, repo_id: str, metadata: Dict) -> firestore.DocumentReference:
+        """Store repository metadata in Firestore"""
+        print(f"Storing metadata for repository: {repo_id}")
+        repo_ref = self.db.collection('repositories').document(repo_id)
+        
+        # Get existing document
+        doc = repo_ref.get()
+        first_indexed_at = None
+        if doc.exists:
+            doc_data = doc.to_dict()
+            first_indexed_at = doc_data.get('metadata', {}).get('first_indexed_at')
+        
+        update_data = {
+            'metadata': {
+                **metadata,
+                'sync_status': 'in_progress',
+                'last_synced': firestore.SERVER_TIMESTAMP,
+                'first_indexed_at': first_indexed_at or firestore.SERVER_TIMESTAMP
+            }
+        }
+        
+        repo_ref.set(update_data, merge=True)
+        return repo_ref
+
+    def store_repository_files(self, repo_ref: firestore.DocumentReference, files: List[Dict]):
+        """Store repository files metadata in Firestore with metrics"""
+        print(f"Processing {len(files)} files for repository")
+        
+        files_collection = repo_ref.collection('files')
+        metrics_collection = repo_ref.collection('metrics')
+        
+        # Initialize batch
+        batch = self.db.batch()
+        batch_size = 0
+        max_batch_size = 500
+        
+        # Initialize stats
+        stats = {
+            'new': 0,
+            'updated': 0,
+            'unchanged': 0,
+            'deleted': 0,
+            'restored': 0
+        }
+
+        # Get existing files for comparison
+        existing_files = {}
+        for doc in files_collection.stream():
+            existing_files[doc.id] = doc.to_dict()
+
+        # Track which files still exist
+        processed_files = set()
+        
+        for file in files:
+            # Create document ID from path
+            doc_id = file['path'].replace('/', '_')
+            processed_files.add(doc_id)
+            
+            file_ref = files_collection.document(doc_id)
+            
+            # Check if file exists and has changed
+            if doc_id in existing_files:
+                existing_file = existing_files[doc_id]
+                
+                # Check if file was previously deleted
+                if existing_file.get('status') == 'deleted':
+                    stats['restored'] += 1
+                else:
+                    # Compare relevant fields to detect changes
+                    has_changed = (
+                        file.get('metadata', {}).get('sha') != existing_file.get('metadata', {}).get('sha') or
+                        file.get('size') != existing_file.get('size') or
+                        file.get('last_updated') != existing_file.get('last_updated')
+                    )
+                    
+                    if not has_changed:
+                        stats['unchanged'] += 1
+                        continue
+                    
+                    stats['updated'] += 1
+            else:
+                stats['new'] += 1
+            
+            # Store data optimized for querying
+            batch.set(file_ref, {
+                'name': file['name'],
+                'path': file['path'],
+                'language': file['language'],
+                'size': file['size'],
+                'last_updated': file['last_updated'],
+                'last_commit_message': file['last_commit_message'],
+                
+                # Original code metadata
+                'imports': file.get('imports', []),
+                'functions': file.get('functions', []),
+                'classes': file.get('classes', []),
+                'exports': file.get('exports', []),
+                
+                # New AI analysis fields
+                'summary': file.get('summary', ''),
+                'primary_features': file.get('primary_features', []),
+                'state_management': file.get('state_management', []),
+                'modification_points': file.get('modification_points', []),
+                
+                # Detailed analysis in a subcollection
+                'ai_analysis': file.get('ai_analysis', {}),
+                'analysis_metadata': file.get('analysis_metadata', {}),
+                
+                'status': 'active',
+                'updated_at': firestore.SERVER_TIMESTAMP,
+                'first_indexed_at': existing_files.get(doc_id, {}).get('first_indexed_at') or firestore.SERVER_TIMESTAMP
+            })
+            
+            batch_size += 1
+            if batch_size >= max_batch_size:
+                batch.commit()
+                batch = self.db.batch()
+                batch_size = 0
+
+        # Handle deleted files
+        for doc_id in existing_files:
+            if doc_id not in processed_files:
+                stats['deleted'] += 1
+                files_collection.document(doc_id).set({
+                    'status': 'deleted',
+                    'deleted_at': firestore.SERVER_TIMESTAMP
+                }, merge=True)
+
+        # Commit any remaining changes
+        if batch_size > 0:
+            batch.commit()
+            
+        # Store sync metrics
+        metrics_ref = metrics_collection.document()
+        metrics_ref.set({
+            'timestamp': firestore.SERVER_TIMESTAMP,
+            'stats': stats,
+            'totals': {
+                'active_files': len(processed_files),
+                'deleted_files': stats['deleted'],
+                'total_files': len(processed_files) + stats['deleted']
+            }
+        })
+        
+        # Update repository metadata
+        repo_ref.set({
+            'metadata': {
+                'last_sync_stats': stats,
+                'last_synced': firestore.SERVER_TIMESTAMP,
+                'sync_status': 'completed',
+                'file_counts': {
+                    'active': len(processed_files),
+                    'deleted': stats['deleted'],
+                    'total': len(processed_files) + stats['deleted']
+                }
+            }
+        }, merge=True)
+        
+        print(f"Sync completed: {stats['new']} new, {stats['updated']} updated, "
+              f"{stats['unchanged']} unchanged, {stats['deleted']} deleted, "
+              f"{stats['restored']} restored")
+
+    def update_sync_status(self, repo_ref: firestore.DocumentReference, status: str, error: str = None):
+        """Update repository sync status"""
+        print(f"Updating sync status to: {status}")
+        update_data = {
+            'metadata': {
+                'sync_status': status,
+                'last_synced': firestore.SERVER_TIMESTAMP
+            }
+        }
+        
+        if error:
+            update_data['metadata']['error'] = error
+            
+        repo_ref.set(update_data, merge=True)
+
+
+--- File: ./src/services/gemini_service.py ---
+
+import google.generativeai as genai
+from datetime import datetime, UTC
+from typing import TypedDict, List, Optional, Dict
+
+class StateInteractions(TypedDict):
+    reads: List[str]
+    writes: List[str]
+
+class FunctionAnalysis(TypedDict):
+    name: str
+    purpose: str
+    params: List[str]
+    returns: str
+    dependencies: List[str]
+    modificationPoints: Optional[List[str]]
+    stateInteractions: Optional[StateInteractions]
+
+class ClassAnalysis(TypedDict):
+    name: str
+    purpose: str
+    methods: List[str]
+    properties: List[str]
+    dependencies: List[str]
+
+class Import(TypedDict):
+    path: str
+    items: List[str]
+    purpose: str
+
+class Dependencies(TypedDict):
+    external: List[str]
+    internal: List[str]
+
+class SearchMetadata(TypedDict):
+    primaryFeatures: List[str]
+    dataTypes: List[str]
+    stateManagement: List[str]
+    commonModifications: List[str]
+    dependencies: Dependencies
+
+class IntegrationPoint(TypedDict):
+    type: str  # 'API' | 'Service' | 'Component' | 'Store'
+    name: str
+    purpose: str
+
+class CodeAnalysis(TypedDict):
+    summary: str
+    searchMetadata: SearchMetadata
+    functions: List[FunctionAnalysis]
+    classes: List[ClassAnalysis]
+    imports: List[Import]
+    integrationPoints: List[IntegrationPoint]
+
+class GeminiService:
+    def __init__(self, api_key: str):
+        if not api_key:
+            raise ValueError("Gemini API key is required")
+            
+        print(f"\nDebug: Initializing GeminiService")
+        print(f"Debug: API key length: {len(api_key)}")
+        print(f"Debug: API key first/last 4 chars: {api_key[:4]}...{api_key[-4:]}")
+        
+        try:
+            genai.configure(api_key=api_key)
+            # Test the configuration with a simple generation
+            model = genai.GenerativeModel('gemini-1.5-pro')
+            response = model.generate_content("Test connection")
+            print("Debug: Successfully tested Gemini API connection")
+        except Exception as e:
+            print(f"Debug: Error configuring Gemini: {str(e)}")
+            raise
+            
+        self.model = genai.GenerativeModel('gemini-1.5-pro')
+
+    def create_analysis_prompt(self, file_path: str, content: str) -> str:
+        """
+        Creates a prompt for code analysis that matches the UI prompt structure.
+        
+        Args:
+            file_path: Path to the file being analyzed
+            content: Source code content
+            
+        Returns:
+            Formatted prompt string for Gemini API
+        """
+        return f'''You are a code analysis expert. Analyze this code file and return a JSON object with this structure:
+
+{{
+  "summary": "Brief, development-focused summary",
+  "searchMetadata": {{
+    "primaryFeatures": ["key features and patterns"],
+    "dataTypes": ["data structures and types used"],
+    "stateManagement": ["state management approaches"],
+    "dependencies": {{
+      "external": ["external package dependencies"],
+      "internal": ["internal module dependencies"]
+    }}
+  }},
+  "imports": [
+    {{
+      "path": "import path",
+      "items": ["imported items"],
+      "purpose": "why these imports are needed"
+    }}
+  ],
+  "functions": [
+    {{
+      "name": "function name",
+      "purpose": "what it does",
+      "params": ["parameters"],
+      "returns": "return value description",
+      "dependencies": ["what it depends on"],
+      "stateInteractions": {{
+        "reads": ["state it reads"],
+        "writes": ["state it modifies"]
+      }}
+    }}
+  ],
+  "classes": [
+    {{
+      "name": "class name",
+      "purpose": "what it does",
+      "methods": ["method names"],
+      "properties": ["property names"],
+      "dependencies": ["what it depends on"]
+    }}
+  ],
+  "integrationPoints": [
+    {{
+      "type": "API/Component/Hook/etc",
+      "name": "name of integration point",
+      "purpose": "how it's used"
+    }}
+  ]
+}}
+
+Focus on:
+1. Development-relevant details
+2. Integration points
+3. State management
+4. Dependencies and data flow
+5. Common modification patterns
+
+FILE PATH: {file_path}
+
+CODE CONTENT:
+{content}
+
+Return only valid JSON matching the structure exactly.'''
+
+    def generate_file_summary(self, content: str, file_path: str) -> Dict:
+        """Generate structured summary for a file using Gemini"""
+        try:
+            print(f"\nDebug: Generating summary for {file_path}")
+            prompt = self.create_analysis_prompt(file_path, content)
+            print("Debug: Created prompt")
+            
+            response = self.model.generate_content(prompt)
+            print("Debug: Received response from Gemini")
+            print("Debug: Raw response text:")
+            print(response.text)  # Add this line to see the raw response
+            
+            # Parse the response as JSON
+            analysis = response.text
+            if isinstance(analysis, str):
+                import json
+                # Try to clean the response before parsing
+                analysis = analysis.strip()
+                if analysis.startswith('```json'):
+                    analysis = analysis.split('```json')[1]
+                if analysis.endswith('```'):
+                    analysis = analysis.rsplit('```', 1)[0]
+                analysis = analysis.strip()
+                
+                print("Debug: Cleaned response:")
+                print(analysis)
+                
+                analysis = json.loads(analysis)
+                print("Debug: Successfully parsed JSON response")
+            
+            return {
+                'analysis': analysis,
+                'generated_at': datetime.now(UTC).isoformat(),
+                'model_version': 'gemini-1.5-pro'
+            }
+            
+        except Exception as e:
+            print(f"Debug: Error in generate_file_summary: {str(e)}")
+            print(f"Debug: Response type: {type(response.text)}")
+            print(f"Debug: Response content:")
+            print(response.text)
+            return {
+                'error': str(e),
+                'generated_at': datetime.now(UTC).isoformat()
+            }
+
+--- File: ./src/services/github_service.py ---
+
+from github import Github
+from typing import List, Dict
+from firebase_admin import firestore
+from datetime import datetime
+import re
+from pathlib import Path
+
+class GitHubService:
+    @staticmethod
+    def create_from_account_id(account_id: str) -> 'GitHubService':
+        """Factory method to create GitHubService using account's token from Firebase"""
+        print(f"Getting GitHub token for account: {account_id}")
+        db = firestore.client()
+        
+        # Look in secure_tokens collection
+        token_doc = db.collection('secure_tokens').document(account_id).get()
+        
+        if not token_doc.exists:
+            raise ValueError(f"Token document not found for account {account_id}")
+            
+        token_data = token_doc.to_dict()
+        github_token = token_data.get('githubToken')
+        
+        if not github_token:
+            raise ValueError(f"GitHub token not found in secure_tokens for account {account_id}")
+            
+        print("Successfully retrieved GitHub token")
+        return GitHubService(github_token)
+
+    def __init__(self, token: str):
+        if not token:
+            raise ValueError("GitHub token is required")
+        print("Initializing GitHub client with token")
+        self.github = Github(token)
+        
+        # Verify authentication
+        try:
+            user = self.github.get_user()
+            print(f"Authenticated as GitHub user: {user.login}")
+        except Exception as e:
+            print(f"Failed to authenticate with GitHub: {str(e)}")
+            raise
+
+    def extract_code_metadata(self, content: str, file_extension: str) -> Dict:
+        """Extract code metadata like imports, functions, classes etc."""
+        metadata = {
+            'imports': [],
+            'functions': [],
+            'classes': [],
+            'exports': []
+        }
+        
+        # TypeScript/JavaScript patterns
+        if file_extension in ['.ts', '.tsx', '.js', '.jsx']:
+            # Find imports
+            import_pattern = r'import\s+(?:{[^}]+}|\*\s+as\s+\w+|\w+)\s+from\s+[\'"]([^\'"]+)[\'"]'
+            metadata['imports'] = re.findall(import_pattern, content)
+            
+            # Find functions
+            function_pattern = r'(?:export\s+)?(?:async\s+)?function\s+(\w+)'
+            metadata['functions'].extend(re.findall(function_pattern, content))
+            
+            # Find arrow functions
+            arrow_pattern = r'const\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>'
+            metadata['functions'].extend(re.findall(arrow_pattern, content))
+            
+            # Find classes
+            class_pattern = r'(?:export\s+)?class\s+(\w+)'
+            metadata['classes'] = re.findall(class_pattern, content)
+            
+            # Find exports
+            export_pattern = r'export\s+(?:const|let|var|function|class)\s+(\w+)'
+            metadata['exports'] = re.findall(export_pattern, content)
+
+        # Python patterns
+        elif file_extension == '.py':
+            # Find imports
+            import_pattern = r'(?:from\s+(\w+(?:\.\w+)*)\s+import|import\s+(\w+(?:\.\w+)*))'
+            imports = re.findall(import_pattern, content)
+            metadata['imports'] = [imp[0] or imp[1] for imp in imports]
+            
+            # Find functions
+            function_pattern = r'def\s+(\w+)\s*\('
+            metadata['functions'] = re.findall(function_pattern, content)
+            
+            # Find classes
+            class_pattern = r'class\s+(\w+)'
+            metadata['classes'] = re.findall(class_pattern, content)
+
+        return metadata
+
+    def get_repository_files(self, repo_full_name: str) -> List[Dict]:
+        """Fetch all files from a GitHub repository with code metadata"""
+        try:
+            repo = self.github.get_repo(repo_full_name)
+            contents = []
+            
+            def process_contents(path=''):
+                items = repo.get_contents(path)
+                for item in items:
+                    if item.type == 'dir':
+                        process_contents(item.path)
+                    else:
+                        # Get the last commit for this file
+                        commits = repo.get_commits(path=item.path)
+                        last_commit = commits[0].commit if commits else None
+                        
+                        # Get file extension
+                        file_extension = Path(item.path).suffix.lower()
+                        
+                        # Get code metadata if it's a supported file type
+                        code_metadata = {}
+                        if file_extension in ['.ts', '.tsx', '.js', '.jsx', '.py']:
+                            try:
+                                content = repo.get_contents(item.path).decoded_content.decode('utf-8')
+                                code_metadata = self.extract_code_metadata(content, file_extension)
+                            except Exception as e:
+                                print(f"Error extracting code metadata for {item.path}: {str(e)}")
+                        
+                        # Store searchable fields at root level for better query performance
+                        file_data = {
+                            'name': item.name,
+                            'path': item.path,
+                            'language': file_extension.lstrip('.') if file_extension else None,
+                            'size': item.size,
+                            'last_updated': last_commit.author.date.isoformat() if last_commit else None,
+                            'last_commit_message': last_commit.message if last_commit else None,
+                            
+                            # Searchable metadata at root level
+                            'imports': code_metadata.get('imports', []),
+                            'functions': code_metadata.get('functions', []),
+                            'classes': code_metadata.get('classes', []),
+                            'exports': code_metadata.get('exports', []),
+                            
+                            # Additional metadata that doesn't need to be searched
+                            'metadata': {
+                                'sha': item.sha,
+                                'type': item.type,
+                                'content_type': 'code' if file_extension in ['.ts', '.tsx', '.js', '.jsx', '.py'] else 'other'
+                            }
+                        }
+                        
+                        contents.append(file_data)
+            
+            process_contents()
+            return contents
+            
+        except Exception as e:
+            print(f"Error fetching repository contents: {str(e)}")
+            raise
+
+    def get_repository_metadata(self, repo_full_name: str) -> Dict:
+        """Get basic repository metadata"""
+        try:
+            repo = self.github.get_repo(repo_full_name)
+            return {
+                'name': repo.name,
+                'full_name': repo.full_name,
+                'description': repo.description,
+                'default_branch': repo.default_branch,
+                'language': repo.language,
+                'created_at': repo.created_at.isoformat() if repo.created_at else None,
+                'updated_at': repo.updated_at.isoformat() if repo.updated_at else None,
+                'size': repo.size,
+                'stars': repo.stargazers_count,
+                'forks': repo.forks_count
+            }
+        except Exception as e:
+            print(f"Error fetching repository metadata: {str(e)}")
+            raise
+
+    def get_file_content(self, repo_full_name: str, file_path: str) -> str:
+        """Fetch content of a specific file - useful for AI analysis later"""
+        try:
+            repo = self.github.get_repo(repo_full_name)
+            file_content = repo.get_contents(file_path)
+            return file_content.decoded_content.decode('utf-8')
+        except Exception as e:
+            print(f"Error fetching file content: {str(e)}")
+            raise
+
+
+--- File: ./src/services/api.ts ---
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
+export const syncRepository = async (repositoryName: string, userId: string) => {
+  const response = await fetch(`${API_BASE_URL}/api/repository/sync`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ repositoryName, userId }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to start repository sync');
+  }
+
+  return response.json();
+};

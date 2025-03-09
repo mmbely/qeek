@@ -1,0 +1,18 @@
+version: '3'
+
+services:
+  backend-service:
+    build: .
+    volumes:
+      - .:/app
+      - ~/.config/gcloud:/root/.config/gcloud  # For Firebase credentials
+    environment:
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/firebase-credentials.json
+    ports:
+      - "8081:8080"
+    # Default command runs the web service
+    command: main.py
+    # Uncomment to run the repository indexer instead
+    # command: src/cli.py mmbely/qeek --account-id RnInDl1twWVwyWWMcEkB1sETtoq1 --skip-types jpg,png,gif,json

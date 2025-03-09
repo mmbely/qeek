@@ -9,6 +9,7 @@ import { deleteMessage } from '../../services/chat';
 import { updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { doc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 
 export interface MessageListProps {
   messages: Message[];
@@ -17,45 +18,6 @@ export interface MessageListProps {
   users: { [key: string]: CustomUser };
   className?: string;
 }
-
-const UserAvatar = ({ userData, size = "small" }: { 
-  userData: { displayName?: string; email?: string; photoURL?: string; }; 
-  size?: "small" | "medium" 
-}) => {
-  const [imageError, setImageError] = useState(false);
-  const initials = userData?.displayName 
-    ? userData.displayName.split(' ').map(n => n[0]).join('').toUpperCase()
-    : userData?.email?.charAt(0).toUpperCase() || '?';
-
-  const sizeClasses = size === "small" ? "w-8 h-8" : "w-10 h-10";
-
-  if (!userData || imageError) {
-    return (
-      <div className={`${sizeClasses} rounded-full flex items-center justify-center
-                    bg-gray-600 text-gray-300`}>
-        <span className="text-sm font-medium">{initials}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`${sizeClasses} rounded-full flex items-center justify-center overflow-hidden
-                  bg-gray-600`}>
-      {userData.photoURL ? (
-        <img 
-          src={userData.photoURL} 
-          alt={userData.displayName || userData.email || ''}
-          className="w-full h-full object-cover"
-          onError={() => setImageError(true)}
-        />
-      ) : (
-        <span className="text-sm font-medium text-gray-300">
-          {initials}
-        </span>
-      )}
-    </div>
-  );
-};
 
 const DateSeparator = ({ date }: { date: Date }) => {
   const formatDate = (date: Date) => {

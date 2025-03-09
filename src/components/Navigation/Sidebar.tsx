@@ -13,6 +13,7 @@ import { useAccount } from '../../context/AccountContext'
 import { useAuth } from '../../context/AuthContext'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../../config/firebase'
+import { UserAvatar } from '../../components/ui/UserAvatar'
 
 interface SidebarProps {
   user: CustomUser | null;
@@ -29,46 +30,6 @@ interface SidebarProps {
   handleLogout: () => void;
   handleStartDirectMessage: (userId: string) => void;
 }
-
-// Add UserAvatar component
-const UserAvatar = ({ userData, size = "small" }: { 
-  userData: { displayName?: string; email?: string; photoURL?: string; }; 
-  size?: "small" | "medium" 
-}) => {
-  const [imageError, setImageError] = useState(false);
-  const initials = userData?.displayName 
-    ? userData.displayName.split(' ').map(n => n[0]).join('').toUpperCase()
-    : userData?.email?.charAt(0).toUpperCase() || '?';
-
-  const sizeClasses = size === "small" ? "w-5 h-5" : "w-8 h-8";
-
-  if (!userData || imageError) {
-    return (
-      <div className={`${sizeClasses} rounded-full flex items-center justify-center
-                    bg-gray-600 text-gray-300`}>
-        <span className="text-sm font-medium">{initials}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`${sizeClasses} rounded-full flex items-center justify-center overflow-hidden
-                  bg-gray-600`}>
-      {userData.photoURL ? (
-        <img 
-          src={userData.photoURL} 
-          alt={userData.displayName || userData.email || ''}
-          className="w-full h-full object-cover"
-          onError={() => setImageError(true)}
-        />
-      ) : (
-        <span className="text-sm font-medium text-gray-300">
-          {initials}
-        </span>
-      )}
-    </div>
-  );
-};
 
 export function Sidebar({
   user,

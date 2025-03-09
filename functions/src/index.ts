@@ -4,6 +4,8 @@ import { Octokit } from '@octokit/rest';
 import * as nodemailer from 'nodemailer';
 import * as functions from 'firebase-functions';
 import { spawn } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
 
 // Initialize nodemailer transporter
 const createTransporter = async () => {
@@ -540,54 +542,126 @@ export const triggerRepositorySync = onCall(
     region: 'us-central1'
   }, 
   async (request) => {
-    if (!request.auth) {
-      throw new Error('Must be authenticated to sync repository');
-    }
-
     const { repositoryName, accountId } = request.data;
-    if (!repositoryName || !accountId) {
-      throw new Error('Repository name and account ID are required');
-    }
+    console.log('Starting repository sync:', { repositoryName, accountId });
 
     try {
-      console.log('Starting repository sync:', { repositoryName, accountId });
-      
-      // Execute the Python script
-      const process = spawn('python', [
-        'repository-indexer/src/cli.py',
+      if (!repositoryName || !accountId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Repository name and account ID are required');
+      }
+
+      // Path to Python script - try multiple possible locations
+      let scriptPath = '';
+      const possiblePaths = [
+        path.join(__dirname, '../repository-indexer/src/cli.py'),
+        path.join(__dirname, '../../repository-indexer/src/cli.py'),
+        '/app/repository-indexer/src/cli.py',
+        '/workspace/repository-indexer/src/cli.py'
+      ];
+
+      for (const testPath of possiblePaths) {
+        console.log(`Checking for Python script at: ${testPath}`);
+        if (fs.existsSync(testPath)) {
+          scriptPath = testPath;
+          console.log(`Found Python script at: ${scriptPath}`);
+          break;
+        }
+      }
+
+      if (!scriptPath) {
+        throw new Error(`Python script not found. Checked paths: ${possiblePaths.join(', ')}`);
+      }
+
+      // Set up environment for Python with more debugging
+      const processEnv = {
+        ...process.env,
+        PYTHONPATH: path.dirname(path.dirname(scriptPath)),
+        PYTHONUNBUFFERED: '1',
+        GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS || '/workspace/firebase-credentials.json'
+      };
+
+      console.log('Executing Python script with env:', {
+        PYTHONPATH: processEnv.PYTHONPATH,
+        scriptPath,
+        GOOGLE_APPLICATION_CREDENTIALS: processEnv.GOOGLE_APPLICATION_CREDENTIALS
+      });
+
+      // First run a test script to check Python environment
+      const testScriptPath = path.join(path.dirname(scriptPath), 'test_env.py');
+      if (fs.existsSync(testScriptPath)) {
+        console.log('Running Python environment test script...');
+        const testProcess = spawn('python3', [testScriptPath], { 
+          env: processEnv,
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+        
+        await new Promise((resolve) => {
+          testProcess.stdout?.on('data', (data) => {
+            console.log('Test script stdout:', data.toString());
+          });
+          
+          testProcess.stderr?.on('data', (data) => {
+            console.error('Test script stderr:', data.toString());
+          });
+          
+          testProcess.on('close', (code) => {
+            console.log(`Test script exited with code ${code}`);
+            resolve(null);
+          });
+        });
+      }
+
+      // Execute Python script
+      const pythonProcess = spawn('python3', [
+        scriptPath,
         repositoryName,
         '--account-id', accountId,
-        '--skip-types', 'jpg,png,gif,json'
-      ]);
+        '--skip-types', 'jpg,png,gif,json',
+        '--debug'
+      ], { 
+        env: processEnv,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
 
       return new Promise((resolve, reject) => {
-        let output = '';
+        let stdout = '';
+        let stderr = '';
         
-        process.stdout.on('data', (data) => {
-          console.log(`stdout: ${data}`);
-          output += data;
+        pythonProcess.stdout?.on('data', (data) => {
+          const output = data.toString();
+          console.log('Python stdout:', output);
+          stdout += output;
         });
 
-        process.stderr.on('data', (data) => {
-          console.error(`stderr: ${data}`);
+        pythonProcess.stderr?.on('data', (data) => {
+          const error = data.toString();
+          console.error('Python stderr:', error);
+          stderr += error;
         });
 
-        process.on('close', (code) => {
-          console.log(`Process exited with code ${code}`);
+        pythonProcess.on('close', (code) => {
+          console.log(`Python process exited with code ${code}`);
+          console.log('Full stdout:', stdout);
+          console.log('Full stderr:', stderr);
+          
           if (code === 0) {
-            resolve({ 
-              success: true, 
-              output,
-              message: 'Repository sync completed successfully'
-            });
+            resolve({ success: true, output: stdout });
           } else {
-            reject(new Error(`Process exited with code ${code}`));
+            reject(new functions.https.HttpsError(
+              'internal',
+              `Repository sync failed with code ${code}. Error: ${stderr}`,
+              { stdout, stderr }
+            ));
           }
         });
       });
     } catch (error) {
       console.error('Sync error:', error);
-      throw error instanceof Error ? error : new Error('Failed to sync repository');
+      throw new functions.https.HttpsError(
+        'internal',
+        error instanceof Error ? error.message : 'Failed to sync repository',
+        { error: error instanceof Error ? error.stack : undefined }
+      );
     }
   }
 );

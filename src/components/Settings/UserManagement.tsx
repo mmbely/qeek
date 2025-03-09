@@ -6,6 +6,7 @@ import { db } from '../../config/firebase';
 import { InvitationRole, InvitationStatus } from '../../types/user';
 import { sendInvitation, getInvitations } from '../../services/github';
 import { UserInvitation } from '../../types/user';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 
 interface UserData {
   displayName: string;
@@ -458,41 +459,6 @@ export default function UserManagement() {
             ))}
           </tbody>
         </table>
-      </div>
-    );
-  };
-
-  // User Avatar Component
-  const UserAvatar = ({ userData }: { userData?: UserData }) => {
-    const [imageError, setImageError] = useState(false);
-    const initials = userData?.displayName 
-      ? userData.displayName.split(' ').map(n => n[0]).join('').toUpperCase()
-      : '?';
-
-    if (!userData || imageError) {
-      return (
-        <div className="w-8 h-8 rounded-full flex items-center justify-center
-                      bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-          <span className="text-sm font-medium">{initials}</span>
-        </div>
-      );
-    }
-
-    return (
-      <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden
-                    bg-gray-200 dark:bg-gray-700">
-        {userData.photoURL ? (
-          <img 
-            src={userData.photoURL} 
-            alt={userData.displayName || ''}
-            className="w-full h-full object-cover"
-            onError={() => setImageError(true)}
-          />
-        ) : (
-          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-            {initials}
-          </span>
-        )}
       </div>
     );
   };
